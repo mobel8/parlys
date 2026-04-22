@@ -7,12 +7,19 @@
  * Pure Astro + a tiny inline script; no React needed.
  */
 
+import LangToggle from './LangToggle.astro';
+
+/**
+ * Each nav link ships a bilingual label. We render the active one via
+ * `<T>` below. Keeping the array shape flat (instead of nested
+ * {en,fr}) keeps the template readable.
+ */
 const links = [
-  { href: '#features',   label: 'Features'   },
-  { href: '#how',        label: 'How it works' },
-  { href: '#pricing',    label: 'Pricing'    },
-  { href: '#roadmap',    label: 'Roadmap'    },
-  { href: '#faq',        label: 'FAQ'        },
+  { href: '#features',  en: 'Features',    fr: 'Fonctionnalités' },
+  { href: '#how',       en: 'How it works', fr: 'Fonctionnement'  },
+  { href: '#pricing',   en: 'Pricing',     fr: 'Tarifs'          },
+  { href: '#roadmap',   en: 'Roadmap',     fr: 'Roadmap'         },
+  { href: '#faq',       en: 'FAQ',         fr: 'FAQ'             },
 ];
 ---
 
@@ -36,24 +43,30 @@ const links = [
       </a>
 
       <ul class="hidden items-center gap-1 md:flex">
-        {links.map(({ href, label }) => (
+        {links.map(({ href, en, fr }) => (
           <li>
             <a
               href={href}
               class="focus-ring rounded-xl px-3 py-1.5 text-sm text-ink-200 transition-colors hover:text-white"
             >
-              {label}
+              <span data-i18n-lang="en">{en}</span>
+              <span data-i18n-lang="fr">{fr}</span>
             </a>
           </li>
         ))}
       </ul>
 
       <div class="flex items-center gap-2">
-        <a href="https://github.com/mobel8/voiceink" class="focus-ring hidden rounded-xl px-3 py-1.5 text-sm text-ink-200 transition-colors hover:text-white md:inline-block">
+        <LangToggle />
+        <a
+          href="https://github.com/mobel8/voiceink"
+          class="focus-ring hidden rounded-xl px-3 py-1.5 text-sm text-ink-200 transition-colors hover:text-white lg:inline-block"
+        >
           GitHub
         </a>
-        <a href="#download" class="btn-primary btn-sm">
-          Download Free
+        <a href="#download" class="btn-primary btn-sm whitespace-nowrap">
+          <span data-i18n-lang="en">Download Free</span>
+          <span data-i18n-lang="fr">Télécharger</span>
         </a>
       </div>
     </nav>

@@ -21,29 +21,37 @@ import { Rocket, Sparkles, Cpu, Globe2, Headphones, ShieldCheck } from 'lucide-r
 const shipped = [
   {
     date: '2026-04-18',
-    title: 'Voice cloning in 30 languages',
-    blurb: 'Clone your voice once, speak any language with it — native intonation preserved.',
+    titleEn: 'Voice cloning in 30 languages',
+    titleFr: 'Clonage vocal en 30 langues',
+    blurbEn: 'Clone your voice once, speak any language with it — native intonation preserved.',
+    blurbFr: 'Clonez votre voix une fois, parlez n\u2019importe quelle langue avec \u2014 intonation native préservée.',
     icon: Globe2,
     tint: 'purple',
   },
   {
     date: '2026-04-02',
-    title: 'Pill mode v2 — always on top',
-    blurb: 'A tiny floating pill you can pin above Slack, Figma, VS Code. Keyboard-first.',
+    titleEn: 'Pill mode v2 — always on top',
+    titleFr: 'Mode pill v2 \u2014 toujours au-dessus',
+    blurbEn: 'A tiny floating pill you can pin above Slack, Figma, VS Code. Keyboard-first.',
+    blurbFr: 'Une minuscule pill flottante à épingler au-dessus de Slack, Figma, VS Code. Clavier-first.',
     icon: Sparkles,
     tint: 'cyan',
   },
   {
     date: '2026-03-10',
-    title: 'Sub-400 ms interpreter',
-    blurb: 'End-to-end pipeline rewritten: voice-in to voice-out in under 400 ms over VOIP.',
+    titleEn: 'Sub-400 ms interpreter',
+    titleFr: 'Interprète sous les 400 ms',
+    blurbEn: 'End-to-end pipeline rewritten: voice-in to voice-out in under 400 ms over VOIP.',
+    blurbFr: 'Pipeline end-to-end réécrit : voix-in à voix-out en moins de 400 ms via VOIP.',
     icon: Rocket,
     tint: 'pink',
   },
   {
     date: '2026-02-22',
-    title: 'Offline dictation mode',
-    blurb: 'Local Whisper.cpp build runs on your GPU — zero bytes leave your machine.',
+    titleEn: 'Offline dictation mode',
+    titleFr: 'Mode dictée hors-ligne',
+    blurbEn: 'Local Whisper.cpp build runs on your GPU — zero bytes leave your machine.',
+    blurbFr: 'Build local Whisper.cpp tourne sur votre GPU \u2014 aucun octet ne quitte votre machine.',
     icon: ShieldCheck,
     tint: 'amber',
   },
@@ -52,24 +60,30 @@ const shipped = [
 const lab = [
   {
     eta: 'Q2 2026',
-    title: 'Meeting sidekick',
-    blurb: 'Drop VoiceInk into Zoom or Meet and get bilingual live subtitles + summary.',
+    titleEn: 'Meeting sidekick',
+    titleFr: 'Assistant de réunion',
+    blurbEn: 'Drop VoiceInk into Zoom or Meet and get bilingual live subtitles + summary.',
+    blurbFr: 'Branchez VoiceInk dans Zoom ou Meet et obtenez sous-titres bilingues live + résumé.',
     icon: Headphones,
     progress: 68,
     tint: 'cyan',
   },
   {
     eta: 'Q2 2026',
-    title: 'Terminal voice mode',
-    blurb: 'Dictate shell commands with syntax grammar — no more typos in `ssh --` flags.',
+    titleEn: 'Terminal voice mode',
+    titleFr: 'Mode vocal terminal',
+    blurbEn: 'Dictate shell commands with syntax grammar — no more typos in `ssh --` flags.',
+    blurbFr: 'Dictez vos commandes shell avec grammaire syntaxique \u2014 fini les typos sur les flags `ssh --`.',
     icon: Cpu,
     progress: 42,
     tint: 'purple',
   },
   {
     eta: 'Q3 2026',
-    title: 'VoiceInk for Mac',
-    blurb: 'Native Silicon build — same sub-400 ms pipeline, Apple-grade polish.',
+    titleEn: 'VoiceInk for Mac',
+    titleFr: 'VoiceInk pour Mac',
+    blurbEn: 'Native Silicon build — same sub-400 ms pipeline, Apple-grade polish.',
+    blurbFr: 'Build natif Silicon \u2014 même pipeline sous les 400 ms, finitions Apple.',
     icon: Rocket,
     progress: 18,
     tint: 'pink',
@@ -99,18 +113,23 @@ function formatDate(iso: string): string {
     <div class="mx-auto max-w-3xl text-center">
       <div class="pill mx-auto">
         <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]"></span>
-        Shipping every week
+        <span data-i18n-lang="en">Shipping every week</span>
+        <span data-i18n-lang="fr">Livraison chaque semaine</span>
       </div>
       <h2
         id="roadmap-title"
         class="mt-4 text-display font-semibold text-white"
       >
-        We ship <span class="text-gradient">fast</span> — and in public.
+        <span data-i18n-lang="en">We ship <span class="text-gradient">fast</span> — and in public.</span>
+        <span data-i18n-lang="fr">On livre <span class="text-gradient">vite</span> — et en public.</span>
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
-        Here's what landed recently and what's cooking in the lab.
+        <span data-i18n-lang="en">Here's what landed recently and what's cooking in the lab.
         Full changelog lives inside the app under
-        <code class="text-aurora-cyan">⌘ ?</code>.
+        <code class="text-aurora-cyan">⌘ ?</code>.</span>
+        <span data-i18n-lang="fr">Voici ce qui a atterri récemment et ce qui mijote au labo.
+        Le changelog complet vit dans l'app sous
+        <code class="text-aurora-cyan">⌘ ?</code>.</span>
       </p>
     </div>
 
@@ -121,7 +140,10 @@ function formatDate(iso: string): string {
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-400/30">
             <Rocket size={16} className="text-emerald-300" />
           </span>
-          <h3 class="text-lg font-semibold text-white">Recently shipped</h3>
+          <h3 class="text-lg font-semibold text-white">
+            <span data-i18n-lang="en">Recently shipped</span>
+            <span data-i18n-lang="fr">Récemment livré</span>
+          </h3>
         </div>
         <ol class="relative border-l border-white/10 pl-6">
           {shipped.map((item) => {
@@ -150,9 +172,13 @@ function formatDate(iso: string): string {
                   {/* Lucide icons are React components — `style` must be
                       an object, not a CSS string. */}
                   <Icon size={16} style={{ color: `rgb(${color})` }} />
-                  {item.title}
+                  <span data-i18n-lang="en">{item.titleEn}</span>
+                  <span data-i18n-lang="fr">{item.titleFr}</span>
                 </h4>
-                <p class="mt-1 text-sm text-ink-300">{item.blurb}</p>
+                <p class="mt-1 text-sm text-ink-300">
+                  <span data-i18n-lang="en">{item.blurbEn}</span>
+                  <span data-i18n-lang="fr">{item.blurbFr}</span>
+                </p>
               </li>
             );
           })}
@@ -165,7 +191,10 @@ function formatDate(iso: string): string {
           <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-aurora-purple/15 ring-1 ring-aurora-purple/30">
             <Sparkles size={16} className="text-aurora-purple" />
           </span>
-          <h3 class="text-lg font-semibold text-white">In the lab</h3>
+          <h3 class="text-lg font-semibold text-white">
+            <span data-i18n-lang="en">In the lab</span>
+            <span data-i18n-lang="fr">Au labo</span>
+          </h3>
         </div>
         <ul class="space-y-4">
           {lab.map((item) => {
@@ -192,12 +221,18 @@ function formatDate(iso: string): string {
                   </span>
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
-                      <h4 class="text-base font-semibold text-white">{item.title}</h4>
+                      <h4 class="text-base font-semibold text-white">
+                        <span data-i18n-lang="en">{item.titleEn}</span>
+                        <span data-i18n-lang="fr">{item.titleFr}</span>
+                      </h4>
                       <span class="pill text-[10px] uppercase tracking-wider">
                         ETA {item.eta}
                       </span>
                     </div>
-                    <p class="mt-1 text-sm text-ink-300">{item.blurb}</p>
+                    <p class="mt-1 text-sm text-ink-300">
+                      <span data-i18n-lang="en">{item.blurbEn}</span>
+                      <span data-i18n-lang="fr">{item.blurbFr}</span>
+                    </p>
 
                     {/* Progress bar — visual cue of how close the feature is. */}
                     <div class="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/5">
@@ -211,7 +246,8 @@ function formatDate(iso: string): string {
                       ></div>
                     </div>
                     <div class="mt-1 text-right font-mono text-[11px] text-ink-400">
-                      {item.progress}% complete
+                      <span data-i18n-lang="en">{item.progress}% complete</span>
+                      <span data-i18n-lang="fr">{item.progress}% terminé</span>
                     </div>
                   </div>
                 </div>
@@ -225,7 +261,8 @@ function formatDate(iso: string): string {
           class="focus-ring mt-6 inline-flex items-center gap-2 text-sm text-ink-300 hover:text-white"
         >
           <Sparkles size={14} aria-hidden="true" />
-          Vote for the next feature on GitHub
+          <span data-i18n-lang="en">Vote for the next feature on GitHub</span>
+          <span data-i18n-lang="fr">Votez pour la prochaine fonctionnalité sur GitHub</span>
           <span aria-hidden="true">→</span>
         </a>
       </div>

@@ -54,50 +54,84 @@ import { Mic, Play, Download, ArrowRight, Zap, Globe, Sparkles } from 'lucide-re
   <div class="container-page px-4 md:px-6">
     <div class="grid items-center gap-10 md:grid-cols-[1.1fr_1fr] md:gap-12 lg:gap-20">
       <div class="text-center md:text-left">
-        {/* Announcement pill */}
+        {/* Announcement pill — bilingual */}
         <a
           href="#features"
           class="animate-fade-up pill-glow focus-ring inline-flex gap-2 px-3.5 py-1.5 transition-transform hover:scale-[1.02]"
         >
           <Sparkles size={12} aria-hidden="true" className="text-fuchsia-300" />
-          <span>New: voice cloning in 30 languages</span>
+          <span data-i18n-lang="en">New: voice cloning in 30 languages</span>
+          <span data-i18n-lang="fr">Nouveau : clonage vocal en 30 langues</span>
           <ArrowRight size={12} aria-hidden="true" className="opacity-70" />
         </a>
 
+        {/* H1 — duplicated per locale to preserve the gradient accent
+            on the key noun, which differs grammatically between
+            languages ("the world understands" vs "le monde comprend"). */}
         <h1
           id="hero-title"
           class="animate-fade-up delay-100 mt-5 text-balance font-display text-hero font-semibold text-white"
         >
-          Speak once.
-          <span class="text-gradient"> The world understands. </span>
-          <span class="block text-ink-100">Instantly.</span>
+          <span data-i18n-lang="en">
+            Speak once.
+            <span class="text-gradient"> The world understands. </span>
+            <span class="block text-ink-100">Instantly.</span>
+          </span>
+          <span data-i18n-lang="fr">
+            Parlez une fois.
+            <span class="text-gradient"> Le monde comprend. </span>
+            <span class="block text-ink-100">Instantanément.</span>
+          </span>
         </h1>
 
         <p class="animate-fade-up delay-200 mt-5 max-w-xl text-base text-ink-300 md:text-lg mx-auto md:mx-0">
-          VoiceInk is a desktop app that transcribes, translates and speaks back
-          in <strong class="text-white">under 400&nbsp;ms</strong>. Dictate with a
-          tap, interpret live conversations, or double your videos in 30&nbsp;languages
-          with your own voice.
+          <span data-i18n-lang="en">
+            VoiceInk is a desktop app that transcribes, translates and speaks back
+            in <strong class="text-white">under 400&nbsp;ms</strong>. Dictate with a
+            tap, interpret live conversations, or dub your videos in 30&nbsp;languages
+            with your own voice.
+          </span>
+          <span data-i18n-lang="fr">
+            VoiceInk est une application de bureau qui transcrit, traduit et répond
+            vocalement en <strong class="text-white">moins de 400&nbsp;ms</strong>. Dictez
+            d'un clic, interprétez vos conversations en direct, ou doublez vos vidéos
+            en 30&nbsp;langues avec votre propre voix.
+          </span>
         </p>
 
         <div class="animate-fade-up delay-300 mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row md:justify-start">
           <a href="#download" class="btn-primary focus-ring">
             <Download size={18} aria-hidden="true" />
-            Download for Windows
+            <span data-i18n-lang="en">Download for Windows</span>
+            <span data-i18n-lang="fr">Télécharger pour Windows</span>
             <span class="ml-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] font-semibold">
-              Free
+              <span data-i18n-lang="en">Free</span>
+              <span data-i18n-lang="fr">Gratuit</span>
             </span>
           </a>
           <a href="#demo" class="btn-secondary focus-ring">
             <Play size={16} aria-hidden="true" />
-            Watch 60s demo
+            <span data-i18n-lang="en">Watch 60s demo</span>
+            <span data-i18n-lang="fr">Voir la démo 60s</span>
           </a>
         </div>
 
         <div class="animate-fade-up delay-400 mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-ink-400 md:justify-start">
-          <span class="inline-flex items-center gap-1.5"><Zap size={12} className="text-aurora-cyan" />&lt;400 ms voice-to-voice</span>
-          <span class="inline-flex items-center gap-1.5"><Globe size={12} className="text-aurora-purple" />30+ languages</span>
-          <span class="inline-flex items-center gap-1.5"><Mic size={12} className="text-aurora-pink" />Works offline with your own keys</span>
+          <span class="inline-flex items-center gap-1.5">
+            <Zap size={12} className="text-aurora-cyan" />
+            <span data-i18n-lang="en">&lt;400 ms voice-to-voice</span>
+            <span data-i18n-lang="fr">&lt;400&nbsp;ms voix-à-voix</span>
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Globe size={12} className="text-aurora-purple" />
+            <span data-i18n-lang="en">30+ languages</span>
+            <span data-i18n-lang="fr">30+ langues</span>
+          </span>
+          <span class="inline-flex items-center gap-1.5">
+            <Mic size={12} className="text-aurora-pink" />
+            <span data-i18n-lang="en">Works offline with your own keys</span>
+            <span data-i18n-lang="fr">Fonctionne hors-ligne avec vos clés</span>
+          </span>
         </div>
       </div>
 

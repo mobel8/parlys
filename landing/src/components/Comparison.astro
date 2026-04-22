@@ -13,7 +13,8 @@
  */
 
 interface Row {
-  feature: string;
+  featureEn: string;
+  featureFr: string;
   voiceink: string | boolean;
   dragon:   string | boolean;
   otter:    string | boolean;
@@ -21,15 +22,15 @@ interface Row {
 }
 
 const rows: Row[] = [
-  { feature: 'Voice-to-voice latency',        voiceink: '< 400 ms',   dragon: 'N/A',         otter: 'N/A',          gtrans: '~ 1.8 s' },
-  { feature: 'Dictation (speech-to-text)',    voiceink: true,         dragon: true,          otter: true,           gtrans: true      },
-  { feature: 'Live translation + speak',      voiceink: true,         dragon: false,         otter: false,          gtrans: true      },
-  { feature: 'Voice cloning',                 voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
-  { feature: 'Works offline (BYOK mode)',     voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
-  { feature: 'Virtual mic for Zoom/Discord',  voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
-  { feature: 'Custom vocabulary',             voiceink: true,         dragon: true,          otter: true,           gtrans: false     },
-  { feature: 'Starting price (pro)',          voiceink: '9.90 €/mo',  dragon: '~ 699 $/yr',  otter: '17 $/mo',      gtrans: 'Free'    },
-  { feature: 'Desktop-native app',            voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
+  { featureEn: 'Voice-to-voice latency',        featureFr: 'Latence voix-à-voix',           voiceink: '< 400 ms',   dragon: 'N/A',         otter: 'N/A',          gtrans: '~ 1.8 s' },
+  { featureEn: 'Dictation (speech-to-text)',    featureFr: 'Dictée (parole vers texte)',     voiceink: true,         dragon: true,          otter: true,           gtrans: true      },
+  { featureEn: 'Live translation + speak',      featureFr: 'Traduction live + voix',         voiceink: true,         dragon: false,         otter: false,          gtrans: true      },
+  { featureEn: 'Voice cloning',                 featureFr: 'Clonage vocal',                  voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
+  { featureEn: 'Works offline (BYOK mode)',     featureFr: 'Hors-ligne (mode BYOK)',         voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
+  { featureEn: 'Virtual mic for Zoom/Discord',  featureFr: 'Micro virtuel Zoom/Discord',     voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
+  { featureEn: 'Custom vocabulary',             featureFr: 'Vocabulaire personnalisé',       voiceink: true,         dragon: true,          otter: true,           gtrans: false     },
+  { featureEn: 'Starting price (pro)',          featureFr: 'Prix de départ (pro)',           voiceink: '9.90 €/mo',  dragon: '~ 699 $/yr',  otter: '17 $/mo',      gtrans: 'Free'    },
+  { featureEn: 'Desktop-native app',            featureFr: 'App bureau native',              voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
 ];
 
 const badge = (v: string | boolean) => {
@@ -42,14 +43,21 @@ const badge = (v: string | boolean) => {
 <section class="relative py-20 md:py-32" aria-labelledby="compare-title">
   <div class="container-page px-4 md:px-6">
     <div class="mx-auto max-w-2xl text-center">
-      <div class="pill mx-auto">Straight talk</div>
+      <div class="pill mx-auto">
+        <span data-i18n-lang="en">Straight talk</span>
+        <span data-i18n-lang="fr">Parler vrai</span>
+      </div>
       <h2 id="compare-title" class="mt-4 text-display font-semibold text-white">
-        How we stack up.
+        <span data-i18n-lang="en">How we stack up.</span>
+        <span data-i18n-lang="fr">Comment on se compare.</span>
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
-        We didn\u2019t cherry-pick — these are the checkboxes the category
-        cares about. Some of these we don\u2019t (yet) do. Most we do
-        faster, cheaper, or both.
+        <span data-i18n-lang="en">We didn't cherry-pick — these are the checkboxes the category
+        cares about. Some of these we don't (yet) do. Most we do
+        faster, cheaper, or both.</span>
+        <span data-i18n-lang="fr">On n'a pas triché — ce sont les cases qui comptent dans la catégorie.
+        Certaines qu'on ne coche pas (encore). La plupart, on les coche plus vite,
+        moins cher, ou les deux.</span>
       </p>
     </div>
 
@@ -58,7 +66,10 @@ const badge = (v: string | boolean) => {
         <table class="w-full border-collapse text-left">
           <thead>
             <tr class="border-b border-white/5 bg-white/[0.02] text-xs uppercase tracking-wider text-ink-400">
-              <th class="px-5 py-4 font-medium">Feature</th>
+              <th class="px-5 py-4 font-medium">
+                <span data-i18n-lang="en">Feature</span>
+                <span data-i18n-lang="fr">Fonctionnalité</span>
+              </th>
               <th class="px-5 py-4 font-medium text-aurora-purple">
                 <div class="flex items-center gap-2">
                   <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-aurora-purple via-aurora-pink to-aurora-cyan text-[10px] font-bold text-white">V</span>
@@ -73,7 +84,10 @@ const badge = (v: string | boolean) => {
           <tbody>
             {rows.map((row) => (
               <tr class="border-b border-white/5 last:border-0 transition-colors hover:bg-white/[0.02]">
-                <th scope="row" class="px-5 py-4 text-sm font-medium text-ink-100">{row.feature}</th>
+                <th scope="row" class="px-5 py-4 text-sm font-medium text-ink-100">
+                  <span data-i18n-lang="en">{row.featureEn}</span>
+                  <span data-i18n-lang="fr">{row.featureFr}</span>
+                </th>
                 {(['voiceink', 'dragon', 'otter', 'gtrans'] as const).map((col) => {
                   const b = badge(row[col]);
                   const own = col === 'voiceink';
@@ -107,8 +121,10 @@ const badge = (v: string | boolean) => {
     </div>
 
     <p class="mx-auto mt-6 max-w-xl text-center text-xs text-ink-400">
-      Dragon and Otter are trademarks of their respective owners. Feature
-      comparison reflects public documentation as of Q2 2026.
+      <span data-i18n-lang="en">Dragon and Otter are trademarks of their respective owners. Feature
+      comparison reflects public documentation as of Q2 2026.</span>
+      <span data-i18n-lang="fr">Dragon et Otter sont des marques déposées de leurs propriétaires respectifs.
+      La comparaison reflète la documentation publique au Q2 2026.</span>
     </p>
   </div>
 </section>

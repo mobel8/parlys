@@ -260,6 +260,15 @@
                 box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
   }
+
+  /* ─── Bilingual visibility — paired with <html data-lang>.
+   *    The <T> Astro component emits BOTH locales as siblings; CSS
+   *    hides the one that doesn't match the active language. We use
+   *    `!important` to survive any inline display overrides on the
+   *    tag type (e.g. flex, grid, inline-block set by Tailwind
+   *    arbitrary values). */
+  html[data-lang="fr"] [data-i18n-lang="en"] { display: none !important; }
+  html[data-lang="en"] [data-i18n-lang="fr"] { display: none !important; }
 }
 
 /* Honor the OS-level reduced-motion preference — legally required in

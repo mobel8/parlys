@@ -1,0 +1,50 @@
+---
+/**
+ * T — translation primitive for the landing.
+ *
+ * Emits BOTH language variants side-by-side as sibling elements,
+ * each marked with `data-i18n-lang="en"` or `data-i18n-lang="fr"`.
+ * The globally-scoped CSS in `src/styles/global.css` hides the
+ * variant that doesn't match `<html data-lang>`.
+ *
+ * Two usage patterns:
+ *   1. Simple string with `en` + `fr` props:
+ *        <T en="Download" fr="Télécharger" />
+ *      Renders inline as two <span>s.
+ *
+ *   2. Block-level element:
+ *        <T tag="h2" class="text-display" en="Hello" fr="Bonjour" />
+ *      Renders the tag twice (once per locale).
+ *
+ *   3. Rich content via slots — for strings that embed markup:
+ *        <T tag="p"><Fragment slot="en">I'm <strong>fast</strong>.</Fragment><Fragment slot="fr">Je suis <strong>rapide</strong>.</Fragment></T>
+ *      Useful when you need embedded <strong>, <a>, icons, etc.
+ *
+ * Accessibility: the inactive variant is display:none, which removes
+ * it from the accessibility tree — screen readers only announce the
+ * active language. No aria-hidden needed.
+ */
+type Props = {
+  en?: string;
+  fr?: string;
+  tag?: string;
+  class?: string;
+};
+
+const { en, fr, tag = 'span', class: className } = Astro.props as Props;
+const Tag = tag as any;
+const hasEnSlot = Astro.slots.has('en');
+const hasFrSlot = Astro.slots.has('fr');
+---
+<Fragment>
+  {(en !== undefined || hasEnSlot) && (
+    <Tag data-i18n-lang="en" class={className}>
+      {hasEnSlot ? <slot name="en" /> : <Fragment set:html={en} />}
+    </Tag>
+  )}
+  {(fr !== undefined || hasFrSlot) && (
+    <Tag data-i18n-lang="fr" class={className}>
+      {hasFrSlot ? <slot name="fr" /> : <Fragment set:html={fr} />}
+    </Tag>
+  )}
+</Fragment>

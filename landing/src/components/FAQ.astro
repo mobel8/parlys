@@ -12,48 +12,70 @@
  * render rich-results snippets in search.
  */
 
+/**
+ * FAQ entries — each question + answer ships in both locales. We use
+ * the EN variant in the JSON-LD schema to keep Google's rich-result
+ * parsing consistent (schema.org FAQPage supports a single language
+ * per document; for a hreflang'd per-language page we'd split later).
+ */
 const faqs = [
   {
-    q: 'How fast is "under 400 ms" really?',
-    a: 'We measured tap-to-first-audio-byte on a 50 Mbps fiber connection in Paris. Whisper Turbo on Groq returns the first token in ~170 ms, Cartesia TTS streams the first MP3 chunk in ~180 ms, and our routing adds ~30 ms. You hear the first syllable of the translation before most apps have even reacted to your keypress.',
+    qEn: 'How fast is "under 400 ms" really?',
+    qFr: 'À quel point "moins de 400 ms" est-il réel ?',
+    aEn: 'We measured tap-to-first-audio-byte on a 50 Mbps fiber connection in Paris. Whisper Turbo on Groq returns the first token in ~170 ms, Cartesia TTS streams the first MP3 chunk in ~180 ms, and our routing adds ~30 ms. You hear the first syllable of the translation before most apps have even reacted to your keypress.',
+    aFr: 'Nous avons mesuré le délai entre le tap et le premier octet audio sur une fibre 50 Mbps à Paris. Whisper Turbo sur Groq renvoie le premier token en ~170 ms, Cartesia TTS stream le premier chunk MP3 en ~180 ms, et notre routage ajoute ~30 ms. Vous entendez la première syllabe avant que la plupart des apps aient réagi à votre touche.',
   },
   {
-    q: 'Does VoiceInk work offline?',
-    a: 'Not the cloud mode — transcription and TTS need Groq / Cartesia. But with BYOK (Bring Your Own Key) turned on, you can point VoiceInk at your own Whisper running locally via llama.cpp. The pipeline is modular: we\u2019ll ship a local-only mode in v2.0 with whisper.cpp + Piper TTS.',
+    qEn: 'Does VoiceInk work offline?',
+    qFr: 'VoiceInk fonctionne-t-il hors-ligne ?',
+    aEn: 'Not the cloud mode — transcription and TTS need Groq / Cartesia. But with BYOK (Bring Your Own Key) turned on, you can point VoiceInk at your own Whisper running locally via llama.cpp. The pipeline is modular: we\u2019ll ship a local-only mode in v2.0 with whisper.cpp + Piper TTS.',
+    aFr: 'Pas en mode cloud \u2014 la transcription et le TTS ont besoin de Groq / Cartesia. Mais avec le mode BYOK (Bring Your Own Key) activé, vous pouvez pointer VoiceInk vers votre propre Whisper local via llama.cpp. Le pipeline est modulaire : un mode 100% local arrive en v2.0 avec whisper.cpp + Piper TTS.',
   },
   {
-    q: 'Is my voice recorded and used for training?',
-    a: 'No. Audio is transcribed and immediately discarded — we never persist audio to disk on our servers. The Groq and Cartesia providers have the same no-training contract (per their DPA). The transcript itself is kept only for your history and is end-to-end encrypted at rest with keys derived from your account password.',
+    qEn: 'Is my voice recorded and used for training?',
+    qFr: 'Ma voix est-elle enregistrée et utilisée pour entraîner des modèles ?',
+    aEn: 'No. Audio is transcribed and immediately discarded — we never persist audio to disk on our servers. The Groq and Cartesia providers have the same no-training contract (per their DPA). The transcript itself is kept only for your history and is end-to-end encrypted at rest with keys derived from your account password.',
+    aFr: 'Non. L\u2019audio est transcrit puis immédiatement jeté \u2014 nous ne persistons jamais d\u2019audio sur nos serveurs. Groq et Cartesia ont le même contrat de non-entraînement (via leurs DPA). La transcription est conservée uniquement pour votre historique et chiffrée au repos avec des clés dérivées de votre mot de passe.',
   },
   {
-    q: 'Does it run on Mac / Linux?',
-    a: 'Windows ships first (v1.7 today). Mac builds are in QA — we\u2019re waiting on Apple Developer notarization. Linux AppImage + .deb are available in Early Access; full support before Q3 2026.',
+    qEn: 'Does it run on Mac / Linux?',
+    qFr: 'Ça tourne sur Mac / Linux ?',
+    aEn: 'Windows ships first (v1.7 today). Mac builds are in QA — we\u2019re waiting on Apple Developer notarization. Linux AppImage + .deb are available in Early Access; full support before Q3 2026.',
+    aFr: 'Windows en premier (v1.7 aujourd\u2019hui). Les builds Mac sont en QA \u2014 en attente de la notarisation Apple Developer. Linux AppImage + .deb disponibles en Early Access ; support complet avant le Q3 2026.',
   },
   {
-    q: 'What happens if I go over my plan limit?',
-    a: 'Free users hit a hard stop with a friendly message telling them how many minutes they have left this month. Pro users get soft-warned at 80% and 100%, with the option to enable overage at 0.02 €/min. You\u2019ll never be charged without consenting to the overage first.',
+    qEn: 'What happens if I go over my plan limit?',
+    qFr: 'Que se passe-t-il si je dépasse la limite de mon plan ?',
+    aEn: 'Free users hit a hard stop with a friendly message telling them how many minutes they have left this month. Pro users get soft-warned at 80% and 100%, with the option to enable overage at 0.02 €/min. You\u2019ll never be charged without consenting to the overage first.',
+    aFr: 'Les utilisateurs Free sont bloqués net avec un message amical indiquant combien de minutes il leur reste ce mois. Les Pro reçoivent un avertissement soft à 80% et 100%, avec option de dépassement à 0,02 €/min. Vous ne serez jamais débité sans avoir consenti au dépassement.',
   },
   {
-    q: 'Can I cancel anytime?',
-    a: 'Yes, right from the app (Settings → Billing → Cancel). Your subscription stays active until the end of your billing period, and we don\u2019t require a phone call or retention chat. No dark patterns, ever.',
+    qEn: 'Can I cancel anytime?',
+    qFr: 'Je peux annuler à tout moment ?',
+    aEn: 'Yes, right from the app (Settings → Billing → Cancel). Your subscription stays active until the end of your billing period, and we don\u2019t require a phone call or retention chat. No dark patterns, ever.',
+    aFr: 'Oui, directement depuis l\u2019app (Réglages → Facturation → Annuler). Votre abonnement reste actif jusqu\u2019à la fin de votre période de facturation, et nous n\u2019exigeons aucun appel ni chat de rétention. Zéro dark pattern, jamais.',
   },
   {
-    q: 'Do you have an API?',
-    a: 'Not publicly — yet. The same endpoints that serve the desktop app can be exposed to third-party developers on the Enterprise plan. Reach out if you want early API access.',
+    qEn: 'Do you have an API?',
+    qFr: 'Avez-vous une API ?',
+    aEn: 'Not publicly — yet. The same endpoints that serve the desktop app can be exposed to third-party developers on the Enterprise plan. Reach out if you want early API access.',
+    aFr: 'Pas publique \u2014 pour l\u2019instant. Les mêmes endpoints qui servent l\u2019app bureau peuvent être exposés aux développeurs tiers sur le plan Entreprise. Contactez-nous pour un accès API anticipé.',
   },
   {
-    q: 'How does VoiceInk compare to Otter / Dragon?',
-    a: 'Otter is a great meeting transcriber but doesn\u2019t translate or speak. Dragon Medical is accurate but costs 500+ €/yr and hasn\u2019t updated its UI since 2014. VoiceInk is the only one that does dictation + live translation + voice cloning in a single tiny app, for a fraction of the price.',
+    qEn: 'How does VoiceInk compare to Otter / Dragon?',
+    qFr: 'Comment VoiceInk se compare à Otter / Dragon ?',
+    aEn: 'Otter is a great meeting transcriber but doesn\u2019t translate or speak. Dragon Medical is accurate but costs 500+ €/yr and hasn\u2019t updated its UI since 2014. VoiceInk is the only one that does dictation + live translation + voice cloning in a single tiny app, for a fraction of the price.',
+    aFr: 'Otter est un excellent transcripteur de réunions mais ne traduit pas et ne parle pas. Dragon Medical est précis mais coûte 500+ €/an et n\u2019a pas mis à jour son UI depuis 2014. VoiceInk est le seul qui fait dictée + traduction live + clonage vocal dans une seule petite app, pour une fraction du prix.',
   },
 ];
 
 const schema = {
   '@context': 'https://schema.org',
   '@type': 'FAQPage',
-  mainEntity: faqs.map(({ q, a }) => ({
+  mainEntity: faqs.map(({ qEn, aEn }) => ({
     '@type': 'Question',
-    name: q,
-    acceptedAnswer: { '@type': 'Answer', text: a },
+    name: qEn,
+    acceptedAnswer: { '@type': 'Answer', text: aEn },
   })),
 };
 ---
@@ -63,14 +85,16 @@ const schema = {
     <div class="mx-auto max-w-2xl text-center">
       <div class="pill mx-auto">FAQ</div>
       <h2 class="mt-4 text-display font-semibold text-white">
-        Answers, no fluff.
+        <span data-i18n-lang="en">Answers, no fluff.</span>
+        <span data-i18n-lang="fr">Des réponses, sans blabla.</span>
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
-        Can\u2019t find what you\u2019re looking for?{' '}
-        <a href="mailto:hi@voiceink.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">
-          Ask us anything
-        </a>
-        .
+        <span data-i18n-lang="en">Can't find what you're looking for?{' '}
+          <a href="mailto:hi@voiceink.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Ask us anything</a>.
+        </span>
+        <span data-i18n-lang="fr">Vous ne trouvez pas votre bonheur ?{' '}
+          <a href="mailto:hi@voiceink.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Posez-nous n'importe quoi</a>.
+        </span>
       </p>
     </div>
 
@@ -78,7 +102,10 @@ const schema = {
       {faqs.map((f) => (
         <details class="glass group rounded-2xl px-5 py-4 transition-colors [&[open]]:bg-white/[0.04]">
           <summary class="focus-ring flex cursor-pointer list-none items-center justify-between gap-4">
-            <span class="text-sm font-semibold text-white md:text-base">{f.q}</span>
+            <span class="text-sm font-semibold text-white md:text-base">
+              <span data-i18n-lang="en">{f.qEn}</span>
+              <span data-i18n-lang="fr">{f.qFr}</span>
+            </span>
             <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full border border-white/10 bg-white/5 transition-transform duration-300 group-open:rotate-45">
               <svg viewBox="0 0 24 24" class="h-3.5 w-3.5 text-ink-200" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
                 <path d="M12 5v14M5 12h14" />
@@ -86,7 +113,8 @@ const schema = {
             </span>
           </summary>
           <div class="grid grid-rows-[1fr] pt-3 text-sm leading-relaxed text-ink-300">
-            {f.a}
+            <span data-i18n-lang="en">{f.aEn}</span>
+            <span data-i18n-lang="fr">{f.aFr}</span>
           </div>
         </details>
       ))}

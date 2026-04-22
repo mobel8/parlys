@@ -11,37 +11,55 @@
  */
 import { Mic, Languages, Volume2, Clipboard } from 'lucide-react';
 
+/**
+ * Step data — every copy-string ships both locales. The component
+ * below reads the `en`/`fr` variants and emits them as sibling spans
+ * with `data-i18n-lang`, letting the global CSS rule hide the one
+ * that doesn't match `<html data-lang>`.
+ */
 const steps = [
   {
     icon: Mic,
     color: 'cyan',
-    title: 'Tap, hold, speak',
-    body: 'Press your global shortcut anywhere — Word, Slack, a game chat, whatever. VoiceInk shows a tiny pill and starts recording.',
-    latency: 'Tap response',
+    titleEn: 'Tap, hold, speak',
+    titleFr: 'Tapez, maintenez, parlez',
+    bodyEn:  'Press your global shortcut anywhere — Word, Slack, a game chat, whatever. VoiceInk shows a tiny pill and starts recording.',
+    bodyFr:  'Pressez votre raccourci global n\u2019importe o\u00f9 \u2014 Word, Slack, un chat de jeu, peu importe. VoiceInk affiche une petite pill et lance l\u2019enregistrement.',
+    latencyEn: 'Tap response',
+    latencyFr: 'R\u00e9ponse au tap',
     latencyValue: '< 50 ms',
   },
   {
     icon: Languages,
     color: 'purple',
-    title: 'Whisper on Groq — 200 ms',
-    body: 'Audio streams to Whisper Turbo on Groq\u2019s LPU. The transcript arrives in the time it takes you to finish exhaling.',
-    latency: 'Transcribe',
+    titleEn: 'Whisper on Groq \u2014 200 ms',
+    titleFr: 'Whisper sur Groq \u2014 200 ms',
+    bodyEn:  'Audio streams to Whisper Turbo on Groq\u2019s LPU. The transcript arrives in the time it takes you to finish exhaling.',
+    bodyFr:  'L\u2019audio est stream\u00e9 vers Whisper Turbo sur le LPU Groq. La transcription arrive le temps que vous finissiez d\u2019expirer.',
+    latencyEn: 'Transcribe',
+    latencyFr: 'Transcription',
     latencyValue: '~ 200 ms',
   },
   {
     icon: Volume2,
     color: 'pink',
-    title: 'Translate + speak — 170 ms',
-    body: 'Llama 3.1 translates, Cartesia Sonic clones your voice, and the MP3 streams back. You hear the first syllable in under 170 ms.',
-    latency: 'Voice-to-voice',
+    titleEn: 'Translate + speak \u2014 170 ms',
+    titleFr: 'Traduire + parler \u2014 170 ms',
+    bodyEn:  'Llama 3.1 translates, Cartesia Sonic clones your voice, and the MP3 streams back. You hear the first syllable in under 170 ms.',
+    bodyFr:  'Llama 3.1 traduit, Cartesia Sonic clone votre voix, et le MP3 est stream\u00e9 en retour. Vous entendez la premi\u00e8re syllabe en moins de 170 ms.',
+    latencyEn: 'Voice-to-voice',
+    latencyFr: 'Voix-\u00e0-voix',
     latencyValue: '< 400 ms total',
   },
   {
     icon: Clipboard,
     color: 'amber',
-    title: 'Paste. Send. Done.',
-    body: 'The translated text lands in your clipboard or is injected directly into the focused field. The spoken audio pipes to your virtual mic.',
-    latency: 'Release',
+    titleEn: 'Paste. Send. Done.',
+    titleFr: 'Collez. Envoyez. Termin\u00e9.',
+    bodyEn:  'The translated text lands in your clipboard or is injected directly into the focused field. The spoken audio pipes to your virtual mic.',
+    bodyFr:  'Le texte traduit arrive dans votre presse-papiers ou est inject\u00e9 directement dans le champ focalis\u00e9. L\u2019audio pass\u00e9 passe dans votre micro virtuel.',
+    latencyEn: 'Release',
+    latencyFr: 'Rel\u00e2chement',
     latencyValue: 'instant',
   },
 ];
@@ -52,14 +70,18 @@ const steps = [
     <div class="mx-auto max-w-2xl text-center">
       <div class="pill mx-auto">
         <span class="h-1.5 w-1.5 rounded-full bg-aurora-purple shadow-glow-violet"></span>
-        Four steps, under half a second
+        <span data-i18n-lang="en">Four steps, under half a second</span>
+        <span data-i18n-lang="fr">Quatre étapes, en moins d'une demi-seconde</span>
       </div>
       <h2 class="mt-4 text-display font-semibold text-white">
-        The fastest path from <span class="text-gradient">your voice</span> to their ears.
+        <span data-i18n-lang="en">The fastest path from <span class="text-gradient">your voice</span> to their ears.</span>
+        <span data-i18n-lang="fr">Le chemin le plus court entre <span class="text-gradient">votre voix</span> et leurs oreilles.</span>
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
-        No servers we host, no proprietary models. Just three best-in-class
-        providers stitched together so tightly you\u2019d swear it was magic.
+        <span data-i18n-lang="en">No servers we host, no proprietary models. Just three best-in-class
+        providers stitched together so tightly you'd swear it was magic.</span>
+        <span data-i18n-lang="fr">Aucun serveur chez nous, aucun modèle propriétaire. Juste trois
+        fournisseurs best-in-class cousus si finement qu'on jurerait que c'est de la magie.</span>
       </p>
     </div>
 
@@ -86,14 +108,24 @@ const steps = [
                     </span>
                     <div>
                       <div class="text-[11px] font-medium uppercase tracking-wider text-ink-400">
-                        Step {String(i + 1).padStart(2, '0')}
+                        <span data-i18n-lang="en">Step {String(i + 1).padStart(2, '0')}</span>
+                        <span data-i18n-lang="fr">Étape {String(i + 1).padStart(2, '0')}</span>
                       </div>
-                      <h3 class="text-lg font-semibold text-white">{step.title}</h3>
+                      <h3 class="text-lg font-semibold text-white">
+                        <span data-i18n-lang="en">{step.titleEn}</span>
+                        <span data-i18n-lang="fr">{step.titleFr}</span>
+                      </h3>
                     </div>
                   </div>
-                  <p class="mt-3 max-w-md text-sm text-ink-300">{step.body}</p>
+                  <p class="mt-3 max-w-md text-sm text-ink-300">
+                    <span data-i18n-lang="en">{step.bodyEn}</span>
+                    <span data-i18n-lang="fr">{step.bodyFr}</span>
+                  </p>
                   <div class={`mt-4 inline-flex items-center gap-2 rounded-full border border-white/5 bg-white/[0.03] px-3 py-1 text-xs`}>
-                    <span class="text-ink-400">{step.latency}</span>
+                    <span class="text-ink-400">
+                      <span data-i18n-lang="en">{step.latencyEn}</span>
+                      <span data-i18n-lang="fr">{step.latencyFr}</span>
+                    </span>
                     <span class={`font-mono text-aurora-${step.color}`}>{step.latencyValue}</span>
                   </div>
                 </div>

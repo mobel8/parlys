@@ -1,40 +1,49 @@
 ---
 const year = new Date().getUTCFullYear();
+/**
+ * Footer link columns — each column title and every link label ships
+ * in both locales. The template below renders the right one via
+ * `data-i18n-lang` siblings.
+ */
 const cols = [
   {
-    title: 'Product',
+    titleEn: 'Product',
+    titleFr: 'Produit',
     links: [
-      { href: '#features', label: 'Features' },
-      { href: '#pricing',  label: 'Pricing'  },
-      { href: '#download', label: 'Download' },
-      { href: '/changelog', label: 'Changelog' },
+      { href: '#features',  en: 'Features',  fr: 'Fonctionnalités' },
+      { href: '#pricing',   en: 'Pricing',   fr: 'Tarifs'          },
+      { href: '#download',  en: 'Download',  fr: 'Télécharger'     },
+      { href: '/changelog', en: 'Changelog', fr: 'Changelog'       },
     ],
   },
   {
-    title: 'Use cases',
+    titleEn: 'Use cases',
+    titleFr: 'Cas d\u2019usage',
     links: [
-      { href: '/for/creators',  label: 'Creators' },
-      { href: '/for/doctors',   label: 'Doctors'  },
-      { href: '/for/lawyers',   label: 'Lawyers'  },
-      { href: '/for/managers',  label: 'Managers' },
+      { href: '/for/creators', en: 'Creators', fr: 'Créateurs' },
+      { href: '/for/doctors',  en: 'Doctors',  fr: 'Médecins'  },
+      { href: '/for/lawyers',  en: 'Lawyers',  fr: 'Avocats'   },
+      { href: '/for/managers', en: 'Managers', fr: 'Managers'  },
     ],
   },
   {
-    title: 'Company',
+    titleEn: 'Company',
+    titleFr: 'Entreprise',
     links: [
-      { href: '/about',   label: 'About'   },
-      { href: '/blog',    label: 'Blog'    },
-      { href: '/contact', label: 'Contact' },
-      { href: 'mailto:hi@voiceink.app', label: 'hi@voiceink.app' },
+      { href: '/about',                 en: 'About',             fr: 'À propos'         },
+      { href: '/blog',                  en: 'Blog',              fr: 'Blog'             },
+      { href: '/contact',               en: 'Contact',           fr: 'Contact'          },
+      { href: 'mailto:hi@voiceink.app', en: 'hi@voiceink.app',   fr: 'hi@voiceink.app'  },
     ],
   },
   {
-    title: 'Legal',
+    titleEn: 'Legal',
+    titleFr: 'Mentions légales',
     links: [
-      { href: '/privacy',  label: 'Privacy'   },
-      { href: '/terms',    label: 'Terms'     },
-      { href: '/security', label: 'Security'  },
-      { href: '/dpa',      label: 'DPA'       },
+      { href: '/privacy',  en: 'Privacy',  fr: 'Confidentialité' },
+      { href: '/terms',    en: 'Terms',    fr: 'CGU'             },
+      { href: '/security', en: 'Security', fr: 'Sécurité'        },
+      { href: '/dpa',      en: 'DPA',      fr: 'DPA'             },
     ],
   },
 ];
@@ -52,8 +61,8 @@ const cols = [
           <span class="text-lg font-semibold tracking-tight">VoiceInk</span>
         </a>
         <p class="mt-4 max-w-xs text-sm text-ink-300">
-          The fastest voice-to-voice translator on your desktop. Built in
-          Paris, crafted for speed.
+          <span data-i18n-lang="en">The fastest voice-to-voice translator on your desktop. Built in Paris, crafted for speed.</span>
+          <span data-i18n-lang="fr">Le traducteur voix-à-voix le plus rapide sur votre bureau. Fabriqué à Paris, pensé pour la vitesse.</span>
         </p>
         <div class="mt-5 flex items-center gap-3">
           <a href="https://twitter.com/voiceinkapp" class="focus-ring rounded-lg p-2 text-ink-300 transition-colors hover:text-white" aria-label="Twitter">
@@ -66,12 +75,16 @@ const cols = [
       </div>
       {cols.map((col) => (
         <div>
-          <h4 class="mb-3 text-sm font-semibold text-white">{col.title}</h4>
+          <h4 class="mb-3 text-sm font-semibold text-white">
+            <span data-i18n-lang="en">{col.titleEn}</span>
+            <span data-i18n-lang="fr">{col.titleFr}</span>
+          </h4>
           <ul class="space-y-2">
             {col.links.map((l) => (
               <li>
                 <a href={l.href} class="focus-ring rounded text-sm text-ink-300 transition-colors hover:text-white">
-                  {l.label}
+                  <span data-i18n-lang="en">{l.en}</span>
+                  <span data-i18n-lang="fr">{l.fr}</span>
                 </a>
               </li>
             ))}
@@ -80,9 +93,13 @@ const cols = [
       ))}
     </div>
     <div class="mt-12 flex flex-col items-start justify-between gap-4 border-t border-white/5 pt-6 md:flex-row md:items-center">
-      <p class="text-xs text-ink-400">© {year} VoiceInk. Built in Paris with care.</p>
       <p class="text-xs text-ink-400">
-        &lt;400 ms voice-to-voice — on commodity hardware.
+        <span data-i18n-lang="en">© {year} VoiceInk. Built in Paris with care.</span>
+        <span data-i18n-lang="fr">© {year} VoiceInk. Fabriqué à Paris avec soin.</span>
+      </p>
+      <p class="text-xs text-ink-400">
+        <span data-i18n-lang="en">&lt;400 ms voice-to-voice — on commodity hardware.</span>
+        <span data-i18n-lang="fr">&lt;400 ms voix-à-voix — sur du matériel standard.</span>
       </p>
     </div>
   </div>

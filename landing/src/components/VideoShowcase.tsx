@@ -2,48 +2,47 @@
  * VideoShowcase — the hero-adjacent marquee component that plays
  * the 60-second motion-design reel we rendered with Remotion.
  *
+ * Language: sourced from the global `<html data-lang>` via the
+ * `useLang()` hook. When the user flips the global `LangToggle` in
+ * the Nav, this component automatically swaps the video source AND
+ * preserves the current playback time so the viewer doesn't lose
+ * their place in the demo.
+ *
  * Interactive behaviour:
- *   - Language toggle (EN/FR) in the top-right corner. Clicking it
- *     swaps the <source> AND resets the current playback time so the
- *     viewer watches the same moment in the new language.
- *   - A large glowing play/pause overlay fades in when the video is
- *     paused and fades away on play.
- *   - A progress bar at the bottom shows current position.
- *   - We respect prefers-reduced-motion: if set, the video does NOT
- *     autoplay but the user can still click play.
+ *   - Large glowing play/pause overlay that fades on state change.
+ *   - Progress bar at the bottom doubles as a scrubber.
+ *   - Respects prefers-reduced-motion: no autoplay, manual play only.
  *
  * Accessibility:
- *   - Video has explicit `aria-label`.
- *   - Play/pause button is a real <button>, focusable and keyboard
- *     activatable.
- *   - Progress bar is a progressbar with aria-valuenow.
+ *   - <video> has explicit `aria-label` that reflects the language.
+ *   - Play/pause and scrubber are real focusable controls.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
+import { useLang } from '../i18n/useLang';
+import type { Lang } from '../i18n/lang';
 
-type Lang = 'en' | 'fr';
-
-const VIDEOS: Record<Lang, { src: string; poster?: string; label: string }> = {
-  en: {
-    src: '/videos/voiceink-promo-en.mp4',
-    label: 'English — 60 s',
-  },
-  fr: {
-    src: '/videos/voiceink-promo-fr.mp4',
-    label: 'Français — 60 s',
-  },
+const VIDEOS: Record<Lang, { src: string; label: string }> = {
+  en: { src: '/videos/voiceink-promo-en.mp4', label: 'English — 60 s' },
+  fr: { src: '/videos/voiceink-promo-fr.mp4', label: 'Français — 60 s' },
 };
 
 export default function VideoShowcase() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const [lang, setLang] = useState<Lang>('en');
+  const lang = useLang();
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
   const [progress, setProgress] = useState(0);
   const [time, setTime] = useState('00:00');
   const [duration, setDuration] = useState('01:00');
   const [visible, setVisible] = useState(false);
+
+  // Preserve playback position across language flips. When `lang`
+  // changes we remount the <video> (via key), then on mount we
+  // restore the timestamp so the viewer stays at the same moment.
+  const lastTimeRef = useRef(0);
+  const lastPausedRef = useRef(true);
 
   // Autoplay when the component scrolls into view, pause when it leaves.
   useEffect(() => {
@@ -71,18 +70,29 @@ export default function VideoShowcase() {
     return () => io.disconnect();
   }, []);
 
-  // Progress tracking
+  // Progress tracking + preserve position across language remounts.
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
+
+    // Restore playback position captured right before the source swap.
+    if (lastTimeRef.current > 0) {
+      vid.currentTime = lastTimeRef.current;
+      if (!lastPausedRef.current) {
+        vid.play().catch(() => { /* autoplay blocked */ });
+      }
+    }
+
     const onTime = () => {
       const p = (vid.currentTime / (vid.duration || 1)) * 100;
       setProgress(Number.isFinite(p) ? p : 0);
       setTime(fmt(vid.currentTime));
       if (Number.isFinite(vid.duration) && vid.duration > 0) setDuration(fmt(vid.duration));
+      // Stash in refs so the next language swap can restore.
+      lastTimeRef.current = vid.currentTime;
     };
-    const onPlay  = () => setPlaying(true);
-    const onPause = () => setPlaying(false);
+    const onPlay  = () => { setPlaying(true);  lastPausedRef.current = false; };
+    const onPause = () => { setPlaying(false); lastPausedRef.current = true;  };
 
     vid.addEventListener('timeupdate', onTime);
     vid.addEventListener('play', onPlay);
@@ -95,21 +105,6 @@ export default function VideoShowcase() {
       vid.removeEventListener('loadedmetadata', onTime);
     };
   }, [lang]);
-
-  // Handle lang switch — preserve current time
-  const switchLang = (next: Lang) => {
-    if (next === lang) return;
-    const vid = videoRef.current;
-    const keepTime = vid?.currentTime ?? 0;
-    const wasPlaying = vid ? !vid.paused : false;
-    setLang(next);
-    setTimeout(() => {
-      if (videoRef.current) {
-        videoRef.current.currentTime = keepTime;
-        if (wasPlaying) videoRef.current.play().catch(() => {});
-      }
-    }, 30);
-  };
 
   const togglePlay = () => {
     const vid = videoRef.current;
@@ -151,18 +146,32 @@ export default function VideoShowcase() {
       </div>
 
       <div className="container-page px-4 md:px-6">
-        {/* Section header */}
+        {/* Section header — bilingual via <T> sibling pattern */}
         <div className="mx-auto mb-10 max-w-3xl text-center md:mb-14">
           <span className="pill pill-glow">
-            <span className="text-fuchsia-300">●</span> Watch a 60-second demo
+            <span className="text-fuchsia-300">●</span>{' '}
+            <span data-i18n-lang="en">Watch a 60-second demo</span>
+            <span data-i18n-lang="fr">Regardez la démo de 60 secondes</span>
           </span>
           <h2 id="demo-title" className="mt-4 font-display text-display font-semibold text-white">
-            Not a mockup.{' '}
-            <span className="text-gradient">A recording of how it actually feels.</span>
+            <span data-i18n-lang="en">
+              Not a mockup.{' '}
+              <span className="text-gradient">A recording of how it actually feels.</span>
+            </span>
+            <span data-i18n-lang="fr">
+              Pas une maquette.{' '}
+              <span className="text-gradient">Un enregistrement du ressenti réel.</span>
+            </span>
           </h2>
           <p className="mt-3 text-base text-ink-300 md:text-lg">
-            Every frame below was rendered from real product footage and the same aurora
-            motion system powering the app. No pitch deck magic.
+            <span data-i18n-lang="en">
+              Every frame below was rendered from real product footage and the same aurora
+              motion system powering the app. No pitch deck magic.
+            </span>
+            <span data-i18n-lang="fr">
+              Chaque image ci-dessous est rendue à partir de captures produit réelles et
+              du même système de motion aurora que l'app. Aucune magie de pitch deck.
+            </span>
           </p>
         </div>
 
@@ -182,22 +191,12 @@ export default function VideoShowcase() {
             }}
           />
 
-          {/* Lang toggle */}
-          <div className="absolute right-4 top-4 z-20 flex items-center gap-1 rounded-full border border-white/10 bg-ink-900/70 p-1 backdrop-blur-xl">
-            {(['en', 'fr'] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => switchLang(l)}
-                className={`focus-ring rounded-full px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                  l === lang
-                    ? 'bg-gradient-to-br from-aurora-purple to-aurora-pink text-white shadow-[0_4px_16px_rgba(167,139,250,0.5)]'
-                    : 'text-ink-300 hover:text-white'
-                }`}
-                aria-pressed={l === lang}
-              >
-                {l === 'en' ? '🇬🇧 EN' : '🇫🇷 FR'}
-              </button>
-            ))}
+          {/* Language indicator (read-only) — reflects the global
+              lang picked in the Nav. The actual toggle lives there so
+              users change UI + video language in one click. */}
+          <div className="absolute right-4 top-4 z-20 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-ink-900/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-white/90 backdrop-blur-xl">
+            <span aria-hidden="true">{lang === 'fr' ? '��' : '��'}</span>
+            <span>{lang === 'fr' ? 'FR' : 'EN'}</span>
           </div>
 
           {/* Video */}
@@ -290,17 +289,36 @@ export default function VideoShowcase() {
 
         {/* Mini-stats row underneath the video */}
         <div className="mx-auto mt-10 grid max-w-5xl grid-cols-2 gap-4 md:grid-cols-4 md:gap-6">
-          <Stat label="Voice-to-voice" value="380 ms" tint="from-aurora-purple to-aurora-cyan" />
-          <Stat label="Languages" value="30+" tint="from-aurora-cyan to-aurora-blue" />
-          <Stat label="Render length" value="60 s" tint="from-aurora-pink to-aurora-amber" />
-          <Stat label="Free forever" value="0 €" tint="from-aurora-amber to-aurora-pink" />
+          <Stat
+            labelEn="Voice-to-voice"  labelFr="Voix-à-voix"
+            value="380 ms" tint="from-aurora-purple to-aurora-cyan"
+          />
+          <Stat
+            labelEn="Languages"       labelFr="Langues"
+            value="30+" tint="from-aurora-cyan to-aurora-blue"
+          />
+          <Stat
+            labelEn="Render length"   labelFr="Durée du rendu"
+            value="60 s" tint="from-aurora-pink to-aurora-amber"
+          />
+          <Stat
+            labelEn="Free forever"    labelFr="Gratuit à vie"
+            value="0 €" tint="from-aurora-amber to-aurora-pink"
+          />
         </div>
       </div>
     </section>
   );
 }
 
-function Stat({ label, value, tint }: { label: string; value: string; tint: string }) {
+function Stat({
+  labelEn, labelFr, value, tint,
+}: {
+  labelEn: string;
+  labelFr: string;
+  value: string;
+  tint: string;
+}) {
   return (
     <div className="glass rounded-2xl p-5 text-center transition-transform duration-200 hover:-translate-y-0.5">
       <div
@@ -308,7 +326,10 @@ function Stat({ label, value, tint }: { label: string; value: string; tint: stri
       >
         {value}
       </div>
-      <div className="mt-1 text-xs uppercase tracking-wider text-ink-300">{label}</div>
+      <div className="mt-1 text-xs uppercase tracking-wider text-ink-300">
+        <span data-i18n-lang="en">{labelEn}</span>
+        <span data-i18n-lang="fr">{labelFr}</span>
+      </div>
     </div>
   );
 }

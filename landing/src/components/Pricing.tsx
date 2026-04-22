@@ -15,82 +15,92 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, Sparkles, Zap, Shield, ArrowRight } from 'lucide-react';
+import { useLang } from '../i18n/useLang';
+import type { Lang } from '../i18n/lang';
 
 type Cycle = 'monthly' | 'yearly';
 
+/**
+ * Bilingual plan definition. Every user-facing string ships as a
+ * `{ en, fr }` object so the React tree swaps instantly when the
+ * global lang toggle fires — no remount, no layout jank.
+ */
 interface Plan {
   key: 'free' | 'pro' | 'team';
-  name: string;
-  tagline: string;
+  name: { en: string; fr: string };
+  tagline: { en: string; fr: string };
   priceMonthly: number;
   priceYearly: number | null; // null = monthly-only plan (Team)
-  ctaLabel: string;
+  ctaLabel: { en: string; fr: string };
   ctaHref: string;
   highlighted?: boolean;
-  features: string[];
-  limits: string[];
+  features: { en: string; fr: string }[];
+  limits: { en: string; fr: string }[];
   icon: typeof Sparkles;
 }
+
+/** Tiny helper to pick the right locale variant from a `{en,fr}`. */
+const t = (lang: Lang, v: { en: string; fr: string }): string => v[lang];
 
 const PLANS: Plan[] = [
   {
     key: 'free',
-    name: 'Free',
-    tagline: 'For trying things out.',
+    name:    { en: 'Free',                   fr: 'Gratuit'                    },
+    tagline: { en: 'For trying things out.', fr: 'Pour essayer tranquillement.' },
     priceMonthly: 0,
     priceYearly: 0,
-    ctaLabel: 'Download free',
+    ctaLabel: { en: 'Download free', fr: 'Télécharger gratuitement' },
     ctaHref: '#download',
     icon: Sparkles,
     features: [
-      '30 min dictation / day',
-      '15 min interpreter / month',
-      'All 4 dictation modes',
-      'Bring your own API keys',
+      { en: '30 min dictation / day',       fr: '30 min de dictée / jour'        },
+      { en: '15 min interpreter / month',   fr: '15 min d\u2019interprète / mois'  },
+      { en: 'All 4 dictation modes',        fr: 'Les 4 modes de dictée'           },
+      { en: 'Bring your own API keys',      fr: 'Vos propres clés API'            },
     ],
     limits: [
-      'No listener mode',
-      'No history export',
-      '7-day history retention',
+      { en: 'No listener mode',             fr: 'Pas de mode écoute'              },
+      { en: 'No history export',            fr: 'Pas d\u2019export d\u2019historique' },
+      { en: '7-day history retention',      fr: 'Historique conservé 7 jours'     },
     ],
   },
   {
     key: 'pro',
-    name: 'Pro',
-    tagline: 'Everything unlocked.',
+    name:    { en: 'Pro',                    fr: 'Pro'                    },
+    tagline: { en: 'Everything unlocked.',    fr: 'Tout débloqué.'         },
     priceMonthly: 9.90,
     priceYearly: 99,
-    ctaLabel: 'Start free trial',
+    ctaLabel: { en: 'Start free trial', fr: 'Essai gratuit' },
     ctaHref: '#checkout-pro',
     highlighted: true,
     icon: Zap,
     features: [
-      'Unlimited dictation (fair use)',
-      '10 h interpreter / month',
-      '10 h voice synthesis / month',
-      'Voice cloning (coming soon)',
-      'Full history + export (JSON / MD / CSV)',
-      'Custom vocabulary',
-      'Priority routing (Groq first)',
+      { en: 'Unlimited dictation (fair use)',             fr: 'Dictée illimitée (fair use)'                  },
+      { en: '10 h interpreter / month',                   fr: '10 h d\u2019interprète / mois'                  },
+      { en: '10 h voice synthesis / month',               fr: '10 h de synthèse vocale / mois'               },
+      { en: 'Voice cloning (coming soon)',                fr: 'Clonage vocal (bientôt)'                       },
+      { en: 'Full history + export (JSON / MD / CSV)',    fr: 'Historique complet + export (JSON / MD / CSV)' },
+      { en: 'Custom vocabulary',                          fr: 'Vocabulaire personnalisé'                      },
+      { en: 'Priority routing (Groq first)',              fr: 'Routage prioritaire (Groq d\u2019abord)'        },
     ],
     limits: [],
   },
   {
     key: 'team',
-    name: 'Team',
-    tagline: 'For small teams & studios.',
+    name:    { en: 'Team',                        fr: 'Équipe'                    },
+    tagline: { en: 'For small teams & studios.',  fr: 'Pour petites équipes & studios.' },
     priceMonthly: 19,
     priceYearly: null,
-    ctaLabel: 'Start a team',
+    ctaLabel: { en: 'Start a team', fr: 'Créer une équipe' },
     ctaHref: '#checkout-team',
     icon: Shield,
     features: [
-      'Everything in Pro',
-      'Team workspace & shared dictionary',
-      '30 h interpreter / month',
-      'SSO (Google / Microsoft)',
-      'Priority email support',
-      'Seat-based pricing from 3 seats',
+      { en: 'Everything in Pro',                    fr: 'Tout du plan Pro'                    },
+      { en: 'Team workspace & shared dictionary',   fr: 'Espace équipe & dictionnaire partagé' },
+      { en: '30 h interpreter / month',             fr: '30 h d\u2019interprète / mois'         },
+      { en: 'SSO (Google / Microsoft)',             fr: 'SSO (Google / Microsoft)'             },
+      { en: 'Priority email support',               fr: 'Support email prioritaire'            },
+      { en: 'Seat-based pricing from 3 seats',      fr: 'Tarif par siège dès 3 sièges'         },
     ],
     limits: [],
   },
@@ -98,6 +108,7 @@ const PLANS: Plan[] = [
 
 export default function Pricing() {
   const [cycle, setCycle] = useState<Cycle>('monthly');
+  const lang = useLang();
 
   const roiSavings = useMemo(() => {
     // Assume an Otter Pro user ($17/mo ≈ 16 €) and compare to our Pro.
@@ -107,44 +118,59 @@ export default function Pricing() {
     return Math.round((otter - ours) * 12);
   }, [cycle]);
 
+  const copy = {
+    pill:    { en: 'Simple, honest pricing',                                           fr: 'Tarifs simples et honnêtes' },
+    h2a:     { en: 'One price. ',                                                      fr: 'Un prix. ' },
+    h2b:     { en: 'No surprises.',                                                    fr: 'Sans surprise.' },
+    body:    {
+      en: 'Start free, upgrade when the Free cap gets in your way. Cancel from the app in two clicks — no retention hotline, we promise.',
+      fr: 'Commencez gratuitement, passez Pro quand la limite Free vous gêne. Annulez depuis l\u2019app en deux clics — aucun numéro de rétention, promis.',
+    },
+    toggleMonthly: { en: 'Monthly',       fr: 'Mensuel'         },
+    toggleYearly:  { en: 'Yearly',        fr: 'Annuel'          },
+    yearlyHint:    { en: '2 months free', fr: '2 mois offerts'  },
+    savings1: { en: 'Switching from Otter? You save',                 fr: 'Vous venez d\u2019Otter ? Vous économisez' },
+    savings2: { en: '€ / year per seat on Pro.',                       fr: '€ / an par siège sur Pro.'                 },
+    seeCompare: { en: 'See the full comparison',                       fr: 'Voir la comparaison complète'              },
+  };
+
   return (
     <section id="pricing" className="relative py-20 md:py-32" aria-labelledby="pricing-title">
       <div className="container-page px-4 md:px-6">
         <div className="mx-auto max-w-2xl text-center">
           <div className="pill mx-auto">
             <span className="h-1.5 w-1.5 rounded-full bg-aurora-pink shadow-[0_0_18px_rgba(244,114,182,0.7)]" />
-            Simple, honest pricing
+            {t(lang, copy.pill)}
           </div>
           <h2 id="pricing-title" className="mt-4 text-display font-semibold text-white">
-            One price. <span className="text-gradient">No surprises.</span>
+            {t(lang, copy.h2a)}<span className="text-gradient">{t(lang, copy.h2b)}</span>
           </h2>
           <p className="mt-4 text-ink-300 md:text-lg">
-            Start free, upgrade when the Free cap gets in your way. Cancel
-            from the app in two clicks — no retention hotline, we promise.
+            {t(lang, copy.body)}
           </p>
 
           {/* Billing cycle toggle */}
           <div
             role="tablist"
-            aria-label="Billing cycle"
+            aria-label={lang === 'fr' ? 'Cycle de facturation' : 'Billing cycle'}
             className="glass mx-auto mt-8 inline-flex items-center gap-1 rounded-full border border-white/10 p-1"
           >
-            <ToggleButton active={cycle === 'monthly'} onClick={() => setCycle('monthly')} label="Monthly" />
-            <ToggleButton active={cycle === 'yearly'}  onClick={() => setCycle('yearly')}  label="Yearly" hint="2 months free" />
+            <ToggleButton active={cycle === 'monthly'} onClick={() => setCycle('monthly')} label={t(lang, copy.toggleMonthly)} />
+            <ToggleButton active={cycle === 'yearly'}  onClick={() => setCycle('yearly')}  label={t(lang, copy.toggleYearly)}  hint={t(lang, copy.yearlyHint)} />
           </div>
         </div>
 
         <div className="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-3">
           {PLANS.map((plan) => (
-            <PlanCard key={plan.key} plan={plan} cycle={cycle} />
+            <PlanCard key={plan.key} plan={plan} cycle={cycle} lang={lang} />
           ))}
         </div>
 
         <p className="mt-10 text-center text-sm text-ink-400">
-          Switching from Otter? You save{' '}
-          <span className="text-white font-semibold">{roiSavings} € / year</span> per seat on Pro.{' '}
+          {t(lang, copy.savings1)}{' '}
+          <span className="text-white font-semibold">{roiSavings} {t(lang, copy.savings2)}</span>{' '}
           <a href="/compare" className="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">
-            See the full comparison
+            {t(lang, copy.seeCompare)}
           </a>
           .
         </p>
@@ -174,17 +200,23 @@ function ToggleButton({ active, onClick, label, hint }: { active: boolean; onCli
   );
 }
 
-function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
+function PlanCard({ plan, cycle, lang }: { plan: Plan; cycle: Cycle; lang: Lang }) {
   const Icon = plan.icon;
   const isYearly = cycle === 'yearly' && plan.priceYearly != null;
+  const freeLabel = lang === 'fr' ? 'Gratuit' : 'Free';
   const displayPrice =
     plan.priceMonthly === 0
-      ? 'Free'
+      ? freeLabel
       : isYearly
       ? `${(plan.priceYearly! / 12).toFixed(2)} €`
       : `${plan.priceMonthly.toFixed(2)} €`;
   const displayUnit =
-    plan.priceMonthly === 0 ? 'forever' : isYearly ? '/mo billed yearly' : '/mo';
+    plan.priceMonthly === 0
+      ? (lang === 'fr' ? 'à vie' : 'forever')
+      : isYearly
+      ? (lang === 'fr' ? '/mois facturé annuel' : '/mo billed yearly')
+      : (lang === 'fr' ? '/mois' : '/mo');
+  const mostPopular = lang === 'fr' ? 'Le plus choisi' : 'Most popular';
 
   return (
     <motion.article
@@ -201,7 +233,7 @@ function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
       {plan.highlighted && (
         <span className="pill-glow absolute -top-3 left-1/2 -translate-x-1/2">
           <Sparkles size={12} />
-          Most popular
+          {mostPopular}
         </span>
       )}
 
@@ -216,8 +248,8 @@ function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
           <Icon size={18} className={plan.highlighted ? 'text-aurora-purple' : 'text-ink-200'} />
         </span>
         <div>
-          <h3 className="text-lg font-semibold text-white">{plan.name}</h3>
-          <p className="text-xs text-ink-400">{plan.tagline}</p>
+          <h3 className="text-lg font-semibold text-white">{t(lang, plan.name)}</h3>
+          <p className="text-xs text-ink-400">{t(lang, plan.tagline)}</p>
         </div>
       </div>
 
@@ -243,21 +275,21 @@ function PlanCard({ plan, cycle }: { plan: Plan; cycle: Cycle }) {
           plan.highlighted ? 'btn-primary' : 'btn-secondary'
         }`}
       >
-        {plan.ctaLabel}
+        {t(lang, plan.ctaLabel)}
         <ArrowRight size={16} />
       </a>
 
       <ul className="mt-6 space-y-2.5 text-sm">
         {plan.features.map((f) => (
-          <li key={f} className="flex items-start gap-2">
+          <li key={f.en} className="flex items-start gap-2">
             <Check size={14} className="mt-0.5 flex-none text-aurora-cyan" />
-            <span className="text-ink-200">{f}</span>
+            <span className="text-ink-200">{t(lang, f)}</span>
           </li>
         ))}
         {plan.limits.map((f) => (
-          <li key={f} className="flex items-start gap-2 text-ink-400">
+          <li key={f.en} className="flex items-start gap-2 text-ink-400">
             <span className="mt-1.5 inline-block h-px w-3 flex-none bg-ink-500" />
-            <span>{f}</span>
+            <span>{t(lang, f)}</span>
           </li>
         ))}
       </ul>

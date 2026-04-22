@@ -22,6 +22,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, Languages, Volume2, Zap } from 'lucide-react';
+import { useLang } from '../i18n/useLang';
 
 const STORYBOARD = [
   {
@@ -154,7 +155,7 @@ export default function VoiceDemo() {
 
       {/* Transcript block */}
       <div className="mt-4 rounded-2xl border border-white/5 bg-white/[0.02] p-4">
-        <LabelRow flag={script.spokenFlag} lang={script.spokenLang} hint="Heard" />
+        <LabelRow flag={script.spokenFlag} lang={script.spokenLang} hintEn="Heard" hintFr="Entendu" />
         <AnimatePresence mode="wait">
           <motion.p
             key={`spoken-${script.id}`}
@@ -179,7 +180,7 @@ export default function VoiceDemo() {
       </div>
 
       <div className="rounded-2xl border border-aurora-purple/30 bg-aurora-purple/[0.06] p-4">
-        <LabelRow flag={script.targetFlag} lang={script.targetLang} hint="Spoken" />
+        <LabelRow flag={script.targetFlag} lang={script.targetLang} hintEn="Spoken" hintFr="Parlé" />
         <AnimatePresence mode="wait">
           <motion.p
             key={`translated-${script.id}`}
@@ -206,10 +207,14 @@ export default function VoiceDemo() {
 }
 
 function StageRow({ stage }: { stage: Stage }) {
+  const lang = useLang();
+  // Stage labels are tiny pills users glance at. We translate them
+  // via a lookup keyed on the active locale to avoid re-allocating
+  // the array on every render.
   const items: { key: Stage; label: string }[] = [
-    { key: 'listening',    label: 'Listen'   },
-    { key: 'interpreting', label: 'Translate' },
-    { key: 'speaking',     label: 'Speak'     },
+    { key: 'listening',    label: lang === 'fr' ? 'Écouter'   : 'Listen'    },
+    { key: 'interpreting', label: lang === 'fr' ? 'Traduire'  : 'Translate' },
+    { key: 'speaking',     label: lang === 'fr' ? 'Parler'    : 'Speak'     },
   ];
   return (
     <div className="flex items-center gap-1.5">
@@ -240,13 +245,21 @@ function StageRow({ stage }: { stage: Stage }) {
   );
 }
 
-function LabelRow({ flag, lang, hint }: { flag: string; lang: string; hint: string }) {
+function LabelRow({
+  flag, lang: spokenLang, hintEn, hintFr,
+}: {
+  flag: string;
+  lang: string;
+  hintEn: string;
+  hintFr: string;
+}) {
+  const uiLang = useLang();
   return (
     <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-ink-400">
       <span className="text-base leading-none">{flag}</span>
-      <span>{lang}</span>
+      <span>{spokenLang}</span>
       <span className="h-1 w-1 rounded-full bg-white/30" />
-      <span className="text-ink-400/80">{hint}</span>
+      <span className="text-ink-400/80">{uiLang === 'fr' ? hintFr : hintEn}</span>
     </div>
   );
 }

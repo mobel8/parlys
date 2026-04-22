@@ -30,15 +30,20 @@ import {
     <div class="mx-auto max-w-3xl text-center">
       <div class="pill mx-auto">
         <span class="h-1.5 w-1.5 rounded-full bg-aurora-cyan shadow-glow-cyan"></span>
-        Everything, in one tiny pill
+        <span data-i18n-lang="en">Everything, in one tiny pill</span>
+        <span data-i18n-lang="fr">Tout, dans une pill minuscule</span>
       </div>
       <h2 class="mt-4 text-display font-semibold text-white">
-        Built for people who <span class="text-gradient">talk faster than they type</span>.
+        <span data-i18n-lang="en">Built for people who <span class="text-gradient">talk faster than they type</span>.</span>
+        <span data-i18n-lang="fr">Pensé pour ceux qui <span class="text-gradient">parlent plus vite qu'ils tapent</span>.</span>
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
-        Seven flagship features, one beautiful interface, zero bloat.
+        <span data-i18n-lang="en">Seven flagship features, one beautiful interface, zero bloat.
         Every detail is tuned for speed — a dictation finishes in the time
-        a competitor is still asking for permissions.
+        a competitor is still asking for permissions.</span>
+        <span data-i18n-lang="fr">Sept fonctionnalités phares, une interface sublime, zéro bloat.
+        Chaque détail est tuné pour la vitesse — une dictée se termine le temps
+        qu'un concurrent vous demande encore les permissions.</span>
       </p>
     </div>
 
@@ -50,13 +55,18 @@ import {
             <Languages size={22} className="text-aurora-purple" />
           </span>
           <h3 class="mt-5 text-2xl font-semibold text-white">
-            Real-time voice interpreter
+            <span data-i18n-lang="en">Real-time voice interpreter</span>
+            <span data-i18n-lang="fr">Interprète vocal en temps réel</span>
           </h3>
           <p class="mt-2 max-w-md text-sm text-ink-300 md:text-base">
-            Speak French, be heard in English. Or Spanish. Or Japanese.
+            <span data-i18n-lang="en">Speak French, be heard in English. Or Spanish. Or Japanese.
             VoiceInk transcribes, translates and speaks back in under
             <span class="font-mono text-white"> 400 ms </span>
-            — that's faster than your neighbor's echo.
+            — that's faster than your neighbor's echo.</span>
+            <span data-i18n-lang="fr">Parlez français, soyez entendu en anglais. Ou en espagnol. Ou en japonais.
+            VoiceInk transcrit, traduit et répond vocalement en
+            <span class="font-mono text-white"> 400 ms </span>
+            — plus rapide que l'écho de votre voisin.</span>
           </p>
           {/* Decorative waveform bars */}
           <div class="mt-auto flex items-end gap-[3px] pt-8">
@@ -81,15 +91,25 @@ import {
         <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-pink/15 ring-1 ring-aurora-pink/30">
           <Wand2 size={22} className="text-aurora-pink" />
         </span>
-        <h3 class="mt-5 text-lg font-semibold text-white">Clone your voice. Dub everywhere.</h3>
+        <h3 class="mt-5 text-lg font-semibold text-white">
+          <span data-i18n-lang="en">Clone your voice. Dub everywhere.</span>
+          <span data-i18n-lang="fr">Clonez votre voix. Doublez partout.</span>
+        </h3>
         <p class="mt-2 text-sm text-ink-300">
-          Upload 30 seconds of your voice and VoiceInk produces flawless
-          dubs in 30 languages — still sounding like you.
+          <span data-i18n-lang="en">Upload 30 seconds of your voice and VoiceInk produces flawless
+          dubs in 30 languages — still sounding like you.</span>
+          <span data-i18n-lang="fr">Téléversez 30 secondes de votre voix et VoiceInk produit
+          des doublages impeccables en 30 langues — toujours avec votre voix.</span>
         </p>
         <div class="mt-6 space-y-2">
-          {['Your voice', 'In French', 'In Japanese', 'In Spanish'].map((label, i) => (
+          {[
+            { en: 'Your voice',   fr: 'Votre voix'     },
+            { en: 'In French',    fr: 'En français'    },
+            { en: 'In Japanese',  fr: 'En japonais'    },
+            { en: 'In Spanish',   fr: 'En espagnol'    },
+          ].map((label, i) => (
             <div class={`flex items-center justify-between rounded-xl border border-white/5 px-3 py-2 text-xs ${i === 0 ? 'bg-aurora-pink/10' : 'bg-white/[0.02]'}`}>
-              <span class="text-white">{label}</span>
+              <span class="text-white"><span data-i18n-lang="en">{label.en}</span><span data-i18n-lang="fr">{label.fr}</span></span>
               <span class="flex items-center gap-[2px]">
                 {Array.from({ length: 10 }).map((_, j) => (
                   <span class={`w-[2px] rounded-full ${i === 0 ? 'bg-aurora-pink/70' : 'bg-white/20'}`} style={`height: ${4 + ((j + i * 3) % 3) * 4}px;`}></span>
@@ -105,15 +125,25 @@ import {
         <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-cyan/15 ring-1 ring-aurora-cyan/30">
           <FileText size={22} className="text-aurora-cyan" />
         </span>
-        <h3 class="mt-4 text-lg font-semibold text-white">Four modes, one shortcut</h3>
+        <h3 class="mt-4 text-lg font-semibold text-white">
+          <span data-i18n-lang="en">Four modes, one shortcut</span>
+          <span data-i18n-lang="fr">Quatre modes, un raccourci</span>
+        </h3>
         <p class="mt-2 text-sm text-ink-300">
-          Raw, natural, formal or message — pick how polished your output
-          should be and VoiceInk rewrites on the fly.
+          <span data-i18n-lang="en">Raw, natural, formal or message — pick how polished your output
+          should be and VoiceInk rewrites on the fly.</span>
+          <span data-i18n-lang="fr">Brut, naturel, formel ou message — choisissez le niveau
+          de peaufinage et VoiceInk réécrit à la volée.</span>
         </p>
         <div class="mt-5 flex flex-wrap gap-1.5">
-          {['Raw', 'Natural', 'Formal', 'Message'].map((m, i) => (
+          {[
+            { en: 'Raw',     fr: 'Brut'    },
+            { en: 'Natural', fr: 'Naturel' },
+            { en: 'Formal',  fr: 'Formel'  },
+            { en: 'Message', fr: 'Message' },
+          ].map((m, i) => (
             <span class={`rounded-full px-2.5 py-1 text-xs ${i === 1 ? 'bg-aurora-cyan/20 text-aurora-cyan ring-1 ring-aurora-cyan/30' : 'bg-white/5 text-ink-300 ring-1 ring-white/5'}`}>
-              {m}
+              <span data-i18n-lang="en">{m.en}</span><span data-i18n-lang="fr">{m.fr}</span>
             </span>
           ))}
         </div>
@@ -124,10 +154,15 @@ import {
         <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-blue/15 ring-1 ring-aurora-blue/30">
           <Pin size={22} className="text-aurora-blue" />
         </span>
-        <h3 class="mt-4 text-lg font-semibold text-white">Pill mode — tiny, floating</h3>
+        <h3 class="mt-4 text-lg font-semibold text-white">
+          <span data-i18n-lang="en">Pill mode — tiny, floating</span>
+          <span data-i18n-lang="fr">Mode pill — minuscule, flottant</span>
+        </h3>
         <p class="mt-2 text-sm text-ink-300">
-          Shrink VoiceInk into a 176×52 px transparent pill. Always on top,
-          never in the way. Perfect for overlay dictation in any app.
+          <span data-i18n-lang="en">Shrink VoiceInk into a 176×52 px transparent pill. Always on top,
+          never in the way. Perfect for overlay dictation in any app.</span>
+          <span data-i18n-lang="fr">Réduisez VoiceInk en une pill transparente de 176×52 px. Toujours
+          au-dessus, jamais dans le chemin. Parfait pour dicter en surimpression partout.</span>
         </p>
         <div class="mt-5 flex justify-center rounded-2xl bg-ink-950/50 p-4 ring-1 ring-white/5">
           <div class="relative flex h-7 w-[176px] items-center gap-2 rounded-full bg-ink-900/80 px-3 ring-1 ring-white/10">
@@ -135,7 +170,10 @@ import {
               <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-aurora-pink opacity-75"></span>
               <span class="relative inline-flex h-2.5 w-2.5 rounded-full bg-aurora-pink"></span>
             </span>
-            <span class="text-[11px] font-medium text-white">Listening…</span>
+            <span class="text-[11px] font-medium text-white">
+              <span data-i18n-lang="en">Listening…</span>
+              <span data-i18n-lang="fr">À l'écoute…</span>
+            </span>
           </div>
         </div>
       </article>
@@ -145,11 +183,17 @@ import {
         <span class="flex h-11 w-11 items-center justify-center rounded-xl bg-aurora-amber/15 ring-1 ring-aurora-amber/30">
           <MonitorSpeaker size={22} className="text-aurora-amber" />
         </span>
-        <h3 class="mt-4 text-lg font-semibold text-white">Pipe into Zoom, Discord, Meet</h3>
+        <h3 class="mt-4 text-lg font-semibold text-white">
+          <span data-i18n-lang="en">Pipe into Zoom, Discord, Meet</span>
+          <span data-i18n-lang="fr">Branchez dans Zoom, Discord, Meet</span>
+        </h3>
         <p class="mt-2 text-sm text-ink-300">
-          Virtual-microphone output lets the translated voice flow straight
+          <span data-i18n-lang="en">Virtual-microphone output lets the translated voice flow straight
           into any conferencing app. Your teammates hear the translation in
-          real time — no bots required.
+          real time — no bots required.</span>
+          <span data-i18n-lang="fr">La sortie microphone virtuelle fait couler la voix traduite
+          directement dans n'importe quelle app de visio. Vos collègues
+          entendent la traduction en direct — sans bot.</span>
         </p>
       </article>
 
@@ -160,18 +204,25 @@ import {
             <Lock size={24} className="text-emerald-300" />
           </span>
           <div>
-            <h3 class="text-xl font-semibold text-white">Your voice stays yours.</h3>
+            <h3 class="text-xl font-semibold text-white">
+              <span data-i18n-lang="en">Your voice stays yours.</span>
+              <span data-i18n-lang="fr">Votre voix reste la vôtre.</span>
+            </h3>
             <p class="mt-2 max-w-2xl text-sm text-ink-300">
-              Audio is uploaded TLS-encrypted, transcribed, then thrown away.
+              <span data-i18n-lang="en">Audio is uploaded TLS-encrypted, transcribed, then thrown away.
               We never train models on your data. BYOK mode lets you bypass
               our broker entirely and use your own Groq / Cartesia keys —
-              zero bytes cross our servers.
+              zero bytes cross our servers.</span>
+              <span data-i18n-lang="fr">L'audio est téléversé en TLS, transcrit, puis supprimé.
+              Nous n'entraînons jamais de modèles sur vos données. Le mode BYOK vous laisse
+              contourner entièrement notre broker avec vos propres clés Groq / Cartesia —
+              zéro octet ne traverse nos serveurs.</span>
             </p>
           </div>
           <ul class="flex flex-wrap items-center gap-4 text-sm text-ink-200 md:justify-end">
-            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>TLS end-to-end</li>
-            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>No training on your data</li>
-            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span>BYOK supported</li>
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span><span data-i18n-lang="en">TLS end-to-end</span><span data-i18n-lang="fr">TLS de bout en bout</span></li>
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span><span data-i18n-lang="en">No training on your data</span><span data-i18n-lang="fr">Aucun entraînement sur vos données</span></li>
+            <li class="flex items-center gap-2"><span class="h-2 w-2 rounded-full bg-emerald-400"></span><span data-i18n-lang="en">BYOK supported</span><span data-i18n-lang="fr">Mode BYOK supporté</span></li>
           </ul>
         </div>
       </article>

@@ -42,8 +42,23 @@ const canonicalUrl = canonical ?? `${siteUrl}${Astro.url.pathname}`;
 ---
 
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="fr" data-lang="fr" class="dark">
   <head>
+    {/* ─── Pre-paint i18n boot ───────────────────────────────────────
+         Reads the saved language from localStorage and applies it to
+         <html data-lang> *before* first paint. Runs synchronously in
+         <head> to avoid a FOUC (flash of the wrong language). Default
+         is 'fr' — see src/i18n/lang.ts. */}
+    <script is:inline>
+      (function () {
+        try {
+          var saved = localStorage.getItem('voiceink_lang');
+          var lang = saved === 'en' ? 'en' : 'fr';
+          document.documentElement.setAttribute('lang', lang);
+          document.documentElement.setAttribute('data-lang', lang);
+        } catch (e) { /* localStorage blocked — stay on default 'fr' */ }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#05060f" />

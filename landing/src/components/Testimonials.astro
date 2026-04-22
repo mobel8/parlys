@@ -7,52 +7,62 @@
  * card layout is tolerant of missing photos (falls back to initials).
  */
 
+/**
+ * Quotes carry bilingual body + role strings. Author name and city
+ * are language-neutral so we keep them as plain strings.
+ */
 const quotes = [
   {
-    body:
-      "I dictate 10x more than I type now. The pill mode is genius — it's always there, never in the way.",
+    bodyEn: "I dictate 10x more than I type now. The pill mode is genius — it's always there, never in the way.",
+    bodyFr: "Je dicte 10x plus que je ne tape maintenant. Le mode pill est génial — toujours là, jamais dans le chemin.",
     author: 'A. M.',
-    role: 'Lead engineer, fintech',
+    roleEn: 'Lead engineer, fintech',
+    roleFr: 'Lead engineer, fintech',
     city: 'Paris, FR',
     tint: 'purple',
   },
   {
-    body:
-      "We use VoiceInk in our bilingual standups. Everyone speaks their best language, nobody sounds like Google Translate.",
+    bodyEn: "We use VoiceInk in our bilingual standups. Everyone speaks their best language, nobody sounds like Google Translate.",
+    bodyFr: "On utilise VoiceInk dans nos standups bilingues. Chacun parle sa meilleure langue, personne ne sonne comme Google Translate.",
     author: 'S. K.',
-    role: 'Head of product',
+    roleEn: 'Head of product',
+    roleFr: 'Head of product',
     city: 'Berlin, DE',
     tint: 'cyan',
   },
   {
-    body:
-      "I doubled my podcast output this month. Transcribe → edit → re-voice in my own voice in Spanish for the LATAM feed.",
+    bodyEn: "I doubled my podcast output this month. Transcribe → edit → re-voice in my own voice in Spanish for the LATAM feed.",
+    bodyFr: "J'ai doublé ma prod podcast ce mois-ci. Transcription → édition → re-voix dans ma propre voix en espagnol pour le flux LATAM.",
     author: 'R. D.',
-    role: 'Podcaster, 200k subs',
+    roleEn: 'Podcaster, 200k subs',
+    roleFr: 'Podcasteur, 200k abonnés',
     city: 'Barcelona, ES',
     tint: 'pink',
   },
   {
-    body:
-      "Patient notes take me 45 minutes instead of 2.5 hours. I'd pay 3x what they charge.",
+    bodyEn: "Patient notes take me 45 minutes instead of 2.5 hours. I'd pay 3x what they charge.",
+    bodyFr: "Mes comptes-rendus patients prennent 45 minutes au lieu de 2h30. Je paierais 3x le prix.",
     author: 'Dr. C. L.',
-    role: 'GP — libéral',
+    roleEn: 'GP — private practice',
+    roleFr: 'Médecin généraliste — libéral',
     city: 'Lyon, FR',
     tint: 'amber',
   },
   {
-    body:
-      "The 400 ms number is not marketing fluff. I benchmarked it. It's real.",
+    bodyEn: "The 400 ms number is not marketing fluff. I benchmarked it. It's real.",
+    bodyFr: "Le chiffre des 400 ms n'est pas du marketing. J'ai benchmarké. C'est réel.",
     author: 'H. J.',
-    role: 'ML engineer',
+    roleEn: 'ML engineer',
+    roleFr: 'Ingénieur ML',
     city: 'Tokyo, JP',
     tint: 'blue',
   },
   {
-    body:
-      "Finally a dictation app that doesn't feel like it's from 2008. The interface is beautiful.",
+    bodyEn: "Finally a dictation app that doesn't feel like it's from 2008. The interface is beautiful.",
+    bodyFr: "Enfin une app de dictée qui ne sent pas 2008. L'interface est sublime.",
     author: 'M. F.',
-    role: 'Freelance designer',
+    roleEn: 'Freelance designer',
+    roleFr: 'Designer freelance',
     city: 'New York, US',
     tint: 'purple',
   },
@@ -62,9 +72,13 @@ const quotes = [
 <section class="relative py-20 md:py-32" aria-labelledby="love-title">
   <div class="container-page px-4 md:px-6">
     <div class="mx-auto max-w-2xl text-center">
-      <div class="pill mx-auto">What people say</div>
+      <div class="pill mx-auto">
+        <span data-i18n-lang="en">What people say</span>
+        <span data-i18n-lang="fr">Ce qu'on dit de nous</span>
+      </div>
       <h2 id="love-title" class="mt-4 text-display font-semibold text-white">
-        Early adopters, already <span class="text-gradient">changed</span> for good.
+        <span data-i18n-lang="en">Early adopters, already <span class="text-gradient">changed</span> for good.</span>
+        <span data-i18n-lang="fr">Les premiers utilisateurs, déjà <span class="text-gradient">transformés</span> pour de bon.</span>
       </h2>
     </div>
     <div class="mx-auto mt-12 grid max-w-6xl gap-5 md:grid-cols-2 lg:grid-cols-3">
@@ -85,7 +99,8 @@ const quotes = [
             <path d="M12 8c-4 2-7 6-7 12v4h8v-8H8c0-3 2-6 6-8zm12 0c-4 2-7 6-7 12v4h8v-8h-5c0-3 2-6 6-8z"/>
           </svg>
           <blockquote class="mt-4 text-[15px] leading-relaxed text-ink-100">
-            "{q.body}"
+            <span data-i18n-lang="en">"{q.bodyEn}"</span>
+            <span data-i18n-lang="fr">« {q.bodyFr} »</span>
           </blockquote>
           <figcaption class="mt-5 flex items-center gap-3 border-t border-white/5 pt-4">
             <span class="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-aurora-purple via-aurora-pink to-aurora-cyan text-xs font-semibold text-white">
@@ -93,7 +108,10 @@ const quotes = [
             </span>
             <div class="min-w-0">
               <div class="text-sm font-semibold text-white">{q.author}</div>
-              <div class="text-xs text-ink-400">{q.role} · {q.city}</div>
+              <div class="text-xs text-ink-400">
+                <span data-i18n-lang="en">{q.roleEn} · {q.city}</span>
+                <span data-i18n-lang="fr">{q.roleFr} · {q.city}</span>
+              </div>
             </div>
           </figcaption>
         </figure>

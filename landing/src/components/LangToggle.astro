@@ -1,0 +1,107 @@
+---
+/**
+ * LangToggle — pill-style FR|EN switcher, lives in the top-right
+ * corner of the Nav.
+ *
+ * Contract:
+ *   - Reads the active language from `<html data-lang>` on boot and
+ *     reflects it in the button's `aria-pressed` + visual state.
+ *   - On click:
+ *       1. Sets `<html lang>` + `<html data-lang>`
+ *       2. Persists to localStorage under key 'voiceink_lang'
+ *       3. Dispatches the custom `voiceink:langchange` event on window
+ *         so React islands (VideoShowcase, Pricing, etc.) rerender.
+ *
+ * Accessibility: the two buttons form an ARIA toggle pair. The
+ * inactive one is still focusable and announces "pressed: false".
+ * Keyboard users can tab and press Enter/Space like any button.
+ *
+ * The script is intentionally tiny and inline — zero hydration cost,
+ * no framework required. It also boots defensively: if the active
+ * language attribute is missing, it reads localStorage once more and
+ * only then falls back to 'fr'.
+ */
+import { LANGS, LANG_LABELS, type Lang } from '../i18n/lang';
+---
+
+<div
+  id="lang-toggle"
+  role="group"
+  aria-label="Language / langue"
+  class="flex items-center gap-1 rounded-full border border-white/10 bg-ink-900/60 p-1 backdrop-blur-md"
+>
+  {LANGS.map((l: Lang) => (
+    <button
+      type="button"
+      data-lang-btn={l}
+      aria-label={`Switch to ${LANG_LABELS[l].long}`}
+      class="focus-ring relative flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-ink-300 transition-all duration-200 hover:text-white"
+      style="min-width: 52px;"
+    >
+      <span class="text-[13px] leading-none">{LANG_LABELS[l].flag}</span>
+      <span>{LANG_LABELS[l].short}</span>
+    </button>
+  ))}
+</div>
+
+<script is:inline>
+  /**
+   * Wire up the toggle. We run after the DOM is ready and after the
+   * pre-paint script has set `<html data-lang>`. The handler is
+   * delegated on the group so both buttons share one listener.
+   */
+  (function () {
+    var group = document.getElementById('lang-toggle');
+    if (!group) return;
+
+    /**
+     * Paint the pill in its active-state colors. We use inline classes
+     * rather than a CSS file so the visual state is guaranteed to be
+     * correct even if CSS loads slowly.
+     */
+    function paint() {
+      var current = document.documentElement.getAttribute('data-lang') || 'fr';
+      var btns = group.querySelectorAll('[data-lang-btn]');
+      btns.forEach(function (btn) {
+        var isActive = btn.getAttribute('data-lang-btn') === current;
+        btn.setAttribute('aria-pressed', String(isActive));
+        if (isActive) {
+          btn.style.background =
+            'linear-gradient(135deg, #a78bfa 0%, #d946ef 50%, #f472b6 100%)';
+          btn.style.color = '#ffffff';
+          btn.style.boxShadow = '0 4px 14px -2px rgba(167, 139, 250, 0.55)';
+        } else {
+          btn.style.background = '';
+          btn.style.color = '';
+          btn.style.boxShadow = '';
+        }
+      });
+    }
+
+    /**
+     * Commit a new language: update the DOM, persist the choice, and
+     * broadcast so React islands (VideoShowcase, Pricing, etc.) update
+     * their state. We dispatch on `window` because that's where every
+     * island listens.
+     */
+    function setLang(next) {
+      if (next !== 'en' && next !== 'fr') return;
+      document.documentElement.setAttribute('lang', next);
+      document.documentElement.setAttribute('data-lang', next);
+      try { localStorage.setItem('voiceink_lang', next); } catch (e) {}
+      window.dispatchEvent(new CustomEvent('voiceink:langchange', { detail: { lang: next } }));
+      paint();
+    }
+
+    group.addEventListener('click', function (ev) {
+      var target = ev.target;
+      while (target && target !== group) {
+        var lang = target.getAttribute && target.getAttribute('data-lang-btn');
+        if (lang) { setLang(lang); return; }
+        target = target.parentNode;
+      }
+    });
+
+    paint();
+  })();
+</script>
