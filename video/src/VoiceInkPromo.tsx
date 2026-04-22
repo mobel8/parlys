@@ -14,10 +14,11 @@
  * into `public/audio/bg.mp3` and uncomment the <Audio /> block.
  */
 import React from 'react';
-import { AbsoluteFill, Sequence /*, Audio, staticFile */ } from 'remotion';
+import { AbsoluteFill, Sequence } from 'remotion';
 import { SCENES } from './lib/theme';
 import { LangProvider } from './lib/i18n';
 import type { Lang } from './lib/strings';
+import { SfxLayer } from './components/SfxLayer';
 import { SceneIntroLogo }        from './scenes/SceneIntroLogo';
 import { SceneTagline }          from './scenes/SceneTagline';
 import { SceneProblem }          from './scenes/SceneProblem';
@@ -33,16 +34,12 @@ export const VoiceInkPromo: React.FC<{ lang?: Lang }> = ({ lang = 'en' }) => {
   return (
     <LangProvider lang={lang}>
     <AbsoluteFill style={{ backgroundColor: '#020410' }}>
-      {/* Uncomment once you drop an MP3 at public/audio/bg.mp3.
-          Remotion streams it and includes it in the rendered output
-          automatically. <Audio /> is preferred over <AudioBuffer /> for
-          regular background music. */}
-      {/*
-      <Audio
-        src={staticFile('audio/bg.mp3')}
-        volume={(f) => Math.min(1, Math.max(0, f / 60))}
-      />
-      */}
+      {/* ─── SFX bed ─────────────────────────────────────────────
+         Master audio timeline — renders the ambient pad + every
+         scene-scoped SFX hit from `src/lib/sfx.ts`. Decoupled from
+         the visual scenes so a sound-designer can iterate on the
+         mix without touching a single scene file. */}
+      <SfxLayer />
 
       <Sequence name="1 · Intro"        from={SCENES.intro.start}        durationInFrames={SCENES.intro.duration}>
         <SceneIntroLogo />
