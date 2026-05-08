@@ -284,9 +284,15 @@ export function MainView() {
         </div>
       )}
 
-      {/* Record area */}
-      <div className="flex-1 min-h-0 grid grid-rows-[1fr_auto] pb-5 gap-4" style={{ paddingLeft: 'clamp(1rem, 2.5vw, 1.5rem)', paddingRight: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
-        <div className="glass-strong rounded-2xl flex flex-col items-center justify-center p-6 relative overflow-hidden">
+      {/* Record area.
+          Grid template uses minmax to guarantee the big mic area never gets
+          crushed below 280px when the optional ListenerPanel renders as a
+          third row — without that minimum, 3 children + `1fr auto` squeezed
+          row 1 down to ~110px and the centered button + label + wave
+          overflowed visibly above the parent. main carries overflow-auto so
+          the ListenerPanel can scroll if the window is short. */}
+      <div className={`flex-1 min-h-0 grid pb-5 gap-4 ${settings.listenerEnabled ? 'grid-rows-[minmax(280px,1fr)_auto_auto]' : 'grid-rows-[1fr_auto]'}`} style={{ paddingLeft: 'clamp(1rem, 2.5vw, 1.5rem)', paddingRight: 'clamp(1rem, 2.5vw, 1.5rem)' }}>
+        <div className="glass-strong rounded-2xl flex flex-col items-center justify-center p-6 relative overflow-hidden min-h-[280px]">
           {/* Ambient dots */}
           <div className="absolute inset-0 opacity-[0.06]" style={{
             backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',

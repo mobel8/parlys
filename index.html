@@ -21,34 +21,172 @@
     />
     <title>VoiceInk</title>
     <script>
-      /* Read the density from the URL hash (set by the main process at window
-         creation time). Stamping `data-density` on <html> BEFORE any CSS rule
-         evaluates prevents the one-frame flash of the wrong chrome during a
-         density hot-swap. The window's backgroundColor (transparent for the
-         pill, #07070d for the main window) takes care of the paint before
-         the CSS bundle finishes loading.
-
-         We also stamp `is-entering` so the renderer's first frame starts
-         at opacity 0 (see `#root.is-entering` in index.css). Two rAFs
-         later we clear the class, which triggers the fade-in — the CSS
-         transition duration runs even inside a hidden BrowserWindow,
-         so by the time main's swapDensity() shows the window the fade
-         has either completed (steady state) or is already mid-flight. */
+      /* Pre-paint bootstrap.
+       *
+       * The main process loads the renderer with a hash of the form:
+       *   #<density>[;-sampler][;view=<v>];theme=<id>;palette=<urlenc-json>;effects=<urlenc-json>
+       *
+       * We do TWO time-critical things here, BEFORE any CSS rule
+       * evaluates and before React mounts:
+       *
+       *  1. Stamp `data-density` on <html> so the
+       *     `html[data-density="compact"] { background: transparent }`
+       *     rule lands on the very first frame. Without this the pill
+       *     window paints opaque dark for ~30-100 ms while React boots,
+       *     creating the visible "weird display" flash users saw.
+       *
+       *  2. Stamp the user's theme palette + effects directly onto :root
+       *     so the first paint is already in the correct colours. Without
+       *     this, index.css' midnight defaults paint first, then React
+       *     mounts and applyTheme() overwrites them → visible
+       *     violet→user-theme flash on every cold launch.
+       *
+       * Plus the existing `is-entering` choreography (fade-in over
+       * 180 ms via #root.is-entering in index.css). Two rAFs later we
+       * clear the class so the transition plays.
+       */
       (function () {
-        try {
-          var h = (location.hash || '').replace('#', '');
-          // Strip optional "-sampler" test suffix + smoke-test view suffix.
-          h = h.replace(/-sampler/, '').replace(/;view=\w+$/, '');
-          if (h === 'compact' || h === 'comfortable') {
-            document.documentElement.setAttribute('data-density', h);
+        var doc = document.documentElement;
+
+        // ---------- helpers ----------
+        function hexToRgbStr(hex) {
+          if (!hex || typeof hex !== 'string') return '139,92,246';
+          var h = hex.replace('#', '').trim();
+          if (h.length === 3) {
+            return parseInt(h[0] + h[0], 16) + ',' +
+                   parseInt(h[1] + h[1], 16) + ',' +
+                   parseInt(h[2] + h[2], 16);
           }
-          document.documentElement.classList.add('is-entering');
+          if (h.length === 6) {
+            return parseInt(h.slice(0, 2), 16) + ',' +
+                   parseInt(h.slice(2, 4), 16) + ',' +
+                   parseInt(h.slice(4, 6), 16);
+          }
+          return '139,92,246';
+        }
+        function mix(hex, amount, towards255) {
+          var p = hexToRgbStr(hex).split(',').map(Number);
+          var t = towards255 ? 255 : 0;
+          var r = Math.round(p[0] + (t - p[0]) * amount);
+          var g = Math.round(p[1] + (t - p[1]) * amount);
+          var b = Math.round(p[2] + (t - p[2]) * amount);
+          return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+        function luminance(hex) {
+          var p = hexToRgbStr(hex).split(',').map(Number);
+          return (0.2126 * p[0] + 0.7152 * p[1] + 0.0722 * p[2]) / 255;
+        }
+        function setVar(name, value) {
+          if (value !== undefined && value !== null) {
+            doc.style.setProperty(name, String(value));
+          }
+        }
+        function pickSegment(segments, key) {
+          for (var i = 0; i < segments.length; i++) {
+            if (segments[i].indexOf(key + '=') === 0) {
+              return segments[i].slice(key.length + 1);
+            }
+          }
+          return null;
+        }
+
+        // ---------- 1. density ----------
+        try {
+          var raw = (location.hash || '').replace('#', '');
+          var segments = raw.split(';');
+          // First segment is always the density (possibly with `-sampler`).
+          var head = (segments[0] || '').replace(/-sampler/, '');
+          if (head === 'compact' || head === 'comfortable') {
+            doc.setAttribute('data-density', head);
+          }
+
+          // ---------- 2. theme palette ----------
+          // `palette` is preferred (full resolved palette = single source
+          // of truth from main). `theme=<id>` is kept as a hint for
+          // data-theme but not required for rendering.
+          var themeId = pickSegment(segments, 'theme');
+          var paletteJson = pickSegment(segments, 'palette');
+          var effectsJson = pickSegment(segments, 'effects');
+
+          var palette = null;
+          if (paletteJson) {
+            try { palette = JSON.parse(decodeURIComponent(paletteJson)); }
+            catch (_) { palette = null; }
+          }
+
+          var effects = null;
+          if (effectsJson) {
+            try { effects = JSON.parse(decodeURIComponent(effectsJson)); }
+            catch (_) { effects = null; }
+          }
+
+          if (palette) {
+            // Base tokens
+            setVar('--bg-0', palette.bg0);
+            setVar('--bg-1', palette.bg1);
+            setVar('--bg-2', palette.bg2);
+            setVar('--line', palette.line);
+            setVar('--line-strong', palette.lineStrong);
+            setVar('--text', palette.text);
+            setVar('--text-dim', palette.textDim);
+            setVar('--text-mute', palette.textMute);
+            // Accents
+            setVar('--accent-1', palette.accent1);
+            setVar('--accent-2', palette.accent2);
+            setVar('--accent-3', palette.accent3);
+            setVar('--accent-1-rgb', hexToRgbStr(palette.accent1));
+            setVar('--accent-2-rgb', hexToRgbStr(palette.accent2));
+            setVar('--accent-3-rgb', hexToRgbStr(palette.accent3));
+            setVar('--accent-1-dim', mix(palette.accent1, 0.35, false));
+            setVar('--accent-1-light', mix(palette.accent1, 0.25, true));
+            // Foreground that reads on top of accent-1 (white on dark accents,
+            // near-black on light accents like Monochrome's pure-white).
+            setVar('--on-accent', luminance(palette.accent1) > 0.65 ? '#0a0a0a' : '#ffffff');
+            // Legacy aliases — components not yet refactored read these.
+            setVar('--violet', palette.accent1);
+            setVar('--fuchsia', palette.accent2);
+            setVar('--cyan', palette.accent3);
+            // Aurora blobs
+            setVar('--aura-1', palette.aura1);
+            setVar('--aura-2', palette.aura2);
+            setVar('--aura-3', palette.aura3);
+            // State colours
+            setVar('--danger', palette.danger);
+            setVar('--success', palette.success);
+            setVar('--warn', palette.warn);
+            setVar('--info', palette.info);
+            setVar('--danger-rgb', hexToRgbStr(palette.danger));
+            setVar('--success-rgb', hexToRgbStr(palette.success));
+          }
+
+          if (effects) {
+            if (typeof effects.glowIntensity === 'number') {
+              var glow = Math.max(0, Math.min(100, effects.glowIntensity)) / 100;
+              setVar('--glow-intensity', String(glow));
+            }
+            if (typeof effects.blurStrength === 'number') {
+              setVar('--blur-strength', Math.round(effects.blurStrength) + 'px');
+            }
+            doc.dataset.animateAura = effects.animateAura ? '1' : '0';
+            doc.dataset.auraEnabled = effects.auraEnabled ? '1' : '0';
+            doc.dataset.shimmer = effects.shimmer ? '1' : '0';
+            doc.dataset.grain = effects.grain ? '1' : '0';
+          }
+
+          if (themeId) {
+            doc.dataset.theme = themeId;
+            // Best-effort theme-mode hint (effects payload may include it).
+            if (effects && effects.mode) doc.dataset.themeMode = effects.mode;
+          }
+
+          // ---------- 3. fade-in choreography ----------
+          doc.classList.add('is-entering');
           requestAnimationFrame(function () {
             requestAnimationFrame(function () {
-              document.documentElement.classList.remove('is-entering');
+              doc.classList.remove('is-entering');
             });
           });
-        } catch (_) { /* no-op */ }
+        } catch (_) { /* no-op — never break boot */ }
       })();
     </script>
   </head>

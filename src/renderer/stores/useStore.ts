@@ -13,12 +13,16 @@ export type RecState = 'idle' | 'recording' | 'processing' | 'error';
  */
 function initialDensity(): Settings['density'] {
   if (typeof location === 'undefined') return DEFAULT_SETTINGS.density;
-  let h = (location.hash || '').replace('#', '');
-  // Strip the optional `-sampler` test suffix appended by main when
-  // VOICEINK_PILL_SAMPLER=1 is set, and any smoke-test `;view=…` suffix
-  // injected by `VOICEINK_START_VIEW`.
-  h = h.replace(/-sampler/, '').replace(/;view=\w+$/, '');
-  if (h === 'compact' || h === 'comfortable') return h as Settings['density'];
+  const raw = (location.hash || '').replace('#', '');
+  // The hash carries multiple `;`-separated segments — density is always
+  // the FIRST segment. Subsequent segments may be `;theme=…`, `;fx=…`,
+  // `;view=…`, `;palette=…`, `;effects=…` (added by main/loadRenderer).
+  // The previous parser only stripped `-sampler` and `;view=…$`, leaving
+  // any `;theme=…;fx=…` suffix intact — so the equality check below
+  // failed and pill windows fell back to 'comfortable', causing the
+  // CompactView to never mount in a 176×52 pill window.
+  const head = raw.split(';')[0].replace(/-sampler/, '');
+  if (head === 'compact' || head === 'comfortable') return head as Settings['density'];
   return DEFAULT_SETTINGS.density;
 }
 

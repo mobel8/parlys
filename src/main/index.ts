@@ -12,6 +12,7 @@ import {
 } from './services/focus';
 import { getSettings, setSettings } from './services/config';
 import { initUpdater } from './updater';
+import { getTheme, DEFAULT_EFFECTS } from '../shared/themes';
 
 // Force the app name BEFORE any userData-dependent API runs. Without this,
 // running the dev binary (node_modules/.bin/electron) uses the generic
@@ -294,7 +295,23 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   const viewSuffix = (startView === 'main' || startView === 'history' || startView === 'settings')
     ? `;view=${startView}`
     : '';
-  const hash = ctx.density + sampler + viewSuffix;
+  // Pre-paint theme: encode the user's resolved palette + effects into the
+  // URL hash so the inline bootstrap in index.html can stamp CSS variables
+  // on <html> BEFORE any CSS rule evaluates. Without this, the very first
+  // frame paints with the Midnight defaults baked into index.css, then
+  // React mounts ~10-50 ms later and overwrites them via applyTheme() —
+  // visible as a violet → user-theme flash on every cold launch. Sending
+  // the fully-resolved palette (rather than just the theme id) keeps the
+  // bootstrap dumb: it doesn't need to know the THEMES table, only how
+  // to apply tokens. shared/themes.ts stays the single source of truth.
+  const s = getSettings();
+  const theme = getTheme(s.themeId);
+  const effects = { ...DEFAULT_EFFECTS, ...(s.themeEffects || {}), mode: theme.mode };
+  const themeId = theme.id.replace(/[^a-z0-9_-]/gi, '');
+  const paletteSeg = `;palette=${encodeURIComponent(JSON.stringify(theme.palette))}`;
+  const effectsSeg = `;effects=${encodeURIComponent(JSON.stringify(effects))}`;
+  const themeSuffix = `;theme=${themeId}${paletteSeg}${effectsSeg}`;
+  const hash = ctx.density + sampler + viewSuffix + themeSuffix;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
     if (process.env.VOICEINK_DEVTOOLS === '1' && ctx.density === 'comfortable') {
