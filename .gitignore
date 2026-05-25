@@ -80,3 +80,13 @@ scripts/run-regression-suite.js
 scripts/run-exercise-loop.js
 scripts/run-foreground-loop.js
 scripts/_msg.txt
+
+# Session artifacts — never committed
+_audit/
+_screen-*.png
+_swap-*.png
+_flash-*.png
+_pill-scale-*.png
+probe-cdp.js
+*.bak
+voiceink-settings.json.pre-*.bak

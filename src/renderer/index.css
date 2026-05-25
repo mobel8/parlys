@@ -54,9 +54,85 @@
   --on-accent: #ffffff;
 }
 
+/* [EXPERIMENT:refonte-v1] Motion tokens.
+   Standardise transitions to 5 durations + 3 easings. Additive — existing
+   hardcoded transitions are left in place for reversibility. */
+:root {
+  --motion-instant: 80ms;
+  --motion-micro:   150ms;
+  --motion-normal:  220ms;
+  --motion-slow:    400ms;
+  --motion-ambient: 1200ms;
+  --easing-snappy:  ease-out;
+  --easing-fluid:   cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --easing-spring:  cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* [EXPERIMENT:refonte-v1] Motion helpers (new components opt in) */
+.motion-micro  { transition: all var(--motion-micro)  var(--easing-snappy); }
+.motion-normal { transition: all var(--motion-normal) var(--easing-fluid); }
+.motion-slow   { transition: all var(--motion-slow)   var(--easing-fluid); }
+
+/* [EXPERIMENT:refonte-v1] Typography tokens (px-fixed, density-aware).
+   Coexists with Tailwind text-* utilities; `t-*` namespace is distinct. */
+:root {
+  --text-xs:   11px;
+  --text-sm:   12.5px;
+  --text-base: 14px;
+  --text-lg:   16px;
+  --text-2xl:  20px;
+  --text-3xl:  28px;
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --tracking-tight: -0.015em;
+  --tracking-label:  0.05em;
+}
+
+/* [EXPERIMENT:refonte-v1] Semantic typography classes */
+.t-h1       { font-size: var(--text-3xl); font-weight: 700; letter-spacing: var(--tracking-tight); line-height: 1.1; }
+.t-heading  { font-size: var(--text-2xl); font-weight: var(--weight-semibold); letter-spacing: var(--tracking-tight); line-height: 1.2; }
+.t-label-tk { font-size: var(--text-xs); font-weight: var(--weight-medium); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-dim); }
+.t-body     { font-size: var(--text-base); line-height: 1.6; }
+.t-caption  { font-size: var(--text-xs); color: var(--text-mute); }
+
+/* [EXPERIMENT:refonte-v1] Lucide icons — uniform strokeWidth.
+   Lucide-react adds `class="lucide lucide-<name>"` on every SVG; this rule
+   bumps the default 2 → 1.5 globally. Explicit `strokeWidth={N}` props
+   still win via the SVG attribute (attribute beats stylesheet). */
+svg.lucide { stroke-width: 1.5; }
+
+/* [EXPERIMENT:refonte-v1] Glass / surface alpha tokens.
+   ADDITIFS: ces variables sont introduites pour standardiser les surfaces
+   white-alpha (glass, cards, hovers). Le CSS existant (.glass, .glass-strong,
+   .btn, .card, .nav-item, scrollbars, etc.) n'est PAS refactoré pour
+   préserver la réversibilité du A/B. Les nouveaux composants/refontes
+   peuvent consommer ces tokens; les anciens conservent leurs rgba() en dur.
+   Valeurs alignées sur les alpha déjà utilisés par .glass (0.035/0.02) et
+   .glass-strong (0.06/0.02) pour garantir l'équivalence visuelle. */
+:root {
+  --white-002: rgba(255,255,255,0.02);
+  --white-005: rgba(255,255,255,0.05);
+  --white-008: rgba(255,255,255,0.08);
+  --white-012: rgba(255,255,255,0.12);
+  --white-020: rgba(255,255,255,0.20);
+  --white-035: rgba(255,255,255,0.035);
+  --white-060: rgba(255,255,255,0.06);
+}
+
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 html { color-scheme: dark; }
+
+/* Defense-in-depth against the white-flash on density swap.
+   The inline bootstrap stamps --bg-0 on <html> synchronously during
+   parse, but a single unstyled frame on first paint (between
+   window.show and the first composited renderer frame) used to leak
+   the user-agent default WHITE through the html element. Painting html
+   itself with the same fallback as body eliminates that frame.
+   The fallback colour matches the darkest theme bg0 — close enough to
+   any palette to be invisible if the bootstrap somehow fails. */
+html { background: var(--bg-0, #07070d); }
 
 /* =========================================================
    Fluid responsive scale — proportional UI at any size.
@@ -141,13 +217,59 @@ html.is-leaving #root {
   }
 }
 
+/* Density-swap performance lift.
+   During the ~250 ms cross-fade, the GPU is already busy compositing two
+   windows + the opacity/transform transition on #root. The aurora float
+   animation and shimmer animation contribute roughly 10-15% of frame cost
+   even though they're not perceptible during the fade. Pausing them frees
+   that budget and removes the 1-2 dropped frames previously visible as a
+   micro-stutter on integrated GPUs. They resume automatically when the
+   class is removed (after the 2nd rAF). */
+html.is-entering .bg-aurora::before,
+html.is-entering .bg-aurora::after,
+html.is-entering .bg-aurora .spot-3,
+html.is-leaving .bg-aurora::before,
+html.is-leaving .bg-aurora::after,
+html.is-leaving .bg-aurora .spot-3 {
+  animation: none !important;
+}
+
+/* =========================================================
+   Pill window proportional scaling (0.6x – 1.2x).
+   -----------------------------------------------------------
+   Main process resizes the BrowserWindow to (176*scale, 52*scale)
+   and exposes the factor as `--pill-scale` on <html> via the
+   bootstrap script in index.html. We use `zoom` (not
+   `transform: scale`) because:
+     - `zoom` reflows layout so the body fills the new window
+       bounds exactly — critical for `transparent: true` where
+       any gap shows through.
+     - Hit-testing, drag-regions, and getBoundingClientRect()
+       all operate on the zoomed geometry natively.
+     - Text is re-hinted at the new size (crisper than a
+       rasterized transform upscale at 1.2x).
+     - Inline SVGs (lucide-react `<Mic size={14}>`) re-rasterize
+       from their viewBox at the zoomed pixel size.
+     - Standardized in CSSWG (2024), shipping in Chromium 128+
+       (we target Chromium 130 / Electron 33).
+     - No composite layer promotion — lighter than a transform
+       with will-change on a 52px-tall window.
+   Note: `zoom` is not transition-animatable; pill scale changes
+   are discrete (driven by Settings), matching the instantaneous
+   OS-level BrowserWindow resize. No visual desync. */
+html[data-window="pill"] {
+  zoom: var(--pill-scale, 1);
+}
+/* Reduced-motion users still get the discrete zoom — it's not
+   animation, just a static layout change. No override needed. */
+
 body {
   font-family: 'Inter', 'Segoe UI', system-ui, -apple-system,
                'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji',
                sans-serif;
   font-feature-settings: 'cv11','ss01','ss03';
   color: var(--text);
-  background: var(--bg-0);
+  background: var(--bg-0, #07070d);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -1219,4 +1341,11 @@ select option:hover {
 .pill-expand:hover {
   background: rgba(255, 255, 255, 0.12);
   color: white;
+}
+
+/* [EXPERIMENT:refonte-v1] Responsive sidebar */
+@media (max-width: 880px) {
+  .sidebar-root { width: 56px !important; }
+  .sidebar-label { display: none !important; }
+  .sidebar-root .nav-item { padding-left: 0 !important; padding-right: 0 !important; justify-content: center !important; }
 }

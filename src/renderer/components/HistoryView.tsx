@@ -6,6 +6,11 @@ import { HistoryEntry, Mode } from '../../shared/types';
 
 type DateFilter = 'all' | 'today' | '7d' | '30d' | 'pinned';
 
+// [EXPERIMENT:refonte-v1] Pagination chunk size — render 50 items max,
+// reveal more on demand. Cheaper than a real virtualized list and works
+// fine up to a few thousand rows since DOM stays small.
+const VIEW_PAGE_SIZE = 50;
+
 export function HistoryView() {
   const { history, removeHistory, clearHistory, loadHistory } = useStore();
   const [q, setQ] = useState('');
@@ -14,6 +19,9 @@ export function HistoryView() {
   const [langFilter, setLangFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [exporting, setExporting] = useState(false);
+  // [EXPERIMENT:refonte-v1] density + pagination
+  const [density, setDensity] = useState<'compact' | 'comfortable'>('comfortable');
+  const [pageSize, setPageSize] = useState(VIEW_PAGE_SIZE);
 
   // Distinct languages actually present in history, for the picker.
   const languages = useMemo(() => {
@@ -81,6 +89,12 @@ export function HistoryView() {
 
   const hasFilters = !!q || modeFilter !== 'all' || langFilter !== 'all' || dateFilter !== 'all';
 
+  // [EXPERIMENT:refonte-v1] Mini-virtualization: cap rendered rows at pageSize
+  // when the filtered list is long. Below 100 rows we render everything since
+  // the DOM cost is negligible.
+  const visible = filtered.length > 100 ? filtered.slice(0, pageSize) : filtered;
+  const hasMore = filtered.length > 100 && pageSize < filtered.length;
+
   return (
     <div className="px-8 py-8 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
@@ -92,6 +106,21 @@ export function HistoryView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* [EXPERIMENT:refonte-v1] density toggle — compact vs full cards */}
+          <div className="flex rounded-md overflow-hidden border border-white/10 text-[11px]" role="group" aria-label="Densité d'affichage">
+            <button
+              className={`px-2.5 py-1 ${density === 'comfortable' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
+              onClick={() => setDensity('comfortable')}
+              aria-pressed={density === 'comfortable'}
+              title="Vue confortable (carte complète)"
+            >Confort</button>
+            <button
+              className={`px-2.5 py-1 ${density === 'compact' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
+              onClick={() => setDensity('compact')}
+              aria-pressed={density === 'compact'}
+              title="Vue compacte (1 ligne par entrée)"
+            >Compact</button>
+          </div>
           <ExportMenu onExport={doExport} disabled={exporting || history.length === 0} />
           {history.length > 0 && (
             <button className="btn btn-danger !text-xs" onClick={() => confirm('Tout effacer ? Les transcriptions épinglées sont conservées.') && clearHistory()}>
@@ -154,12 +183,44 @@ export function HistoryView() {
       </div>
 
       {filtered.length === 0 ? (
-        <div className="glass rounded-2xl p-12 text-center text-white/40">
-          {history.length === 0 ? 'Aucune transcription pour le moment.' : 'Aucun résultat pour ces filtres.'}
+        <div className="glass rounded-2xl p-12 text-center">
+          <div className="text-white/30 mb-3 flex justify-center">
+            <Clock size={28} />
+          </div>
+          <div className="text-white/60 mb-1">
+            {history.length === 0 ? 'Aucune transcription pour le moment.' : 'Aucun résultat pour ces filtres.'}
+          </div>
+          <div className="text-white/40 text-xs">
+            {history.length === 0
+              ? 'Dictez quelque chose depuis la page d\'accueil pour la voir apparaître ici.'
+              : (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-violet-300 hover:text-violet-200 underline"
+                >
+                  Réinitialiser les filtres
+                </button>
+              )}
+          </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filtered.map((h: HistoryEntry) => (
+        <div className={density === 'compact' ? 'space-y-1' : 'space-y-3'}>
+          {/* [EXPERIMENT:refonte-v1] visible = paginated slice when > 100 items */}
+          {visible.map((h: HistoryEntry) => density === 'compact' ? (
+            <div key={h.id} className={`text-sm py-1.5 px-3 rounded-md border border-white/5 hover:bg-white/5 flex items-center gap-2 motion-micro ${h.pinned ? 'bg-[rgba(var(--accent-1-rgb),0.08)]' : ''}`}>
+              <span className="text-[10px] text-white/40 shrink-0 w-20 font-mono">{formatDate(h.createdAt)}</span>
+              {h.pinned && <Pin size={10} className="accent-text shrink-0" />}
+              <span className="text-[10px] text-white/40 shrink-0">{MODE_LABELS[h.mode as Mode]?.icon}</span>
+              <span className="flex-1 truncate text-white/85" title={h.finalText}>{h.finalText || <em className="text-white/30">(vide)</em>}</span>
+              <button className="btn btn-ghost !p-1 shrink-0" onClick={() => copy(h.id, h.finalText)} title="Copier" aria-label="Copier la transcription">
+                {copiedId === h.id ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              </button>
+              <button className="btn btn-ghost !p-1 shrink-0 hover:!text-rose-300" onClick={() => removeHistory(h.id)} title="Supprimer" aria-label="Supprimer la transcription">
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ) : (
             <div key={h.id} className={`card slide-up ${h.pinned ? 'ring-1 ring-[rgba(var(--accent-1-rgb),0.28)]' : ''}`}>
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -185,19 +246,29 @@ export function HistoryView() {
                   )}
                 </div>
                 <div className="flex flex-col gap-1">
-                  <button className="btn btn-ghost !p-2" onClick={() => togglePin(h.id)} title={h.pinned ? 'Désépingler' : 'Épingler'}>
+                  <button className="btn btn-ghost !p-2" onClick={() => togglePin(h.id)} title={h.pinned ? 'Désépingler' : 'Épingler'} aria-label={h.pinned ? 'Désépingler' : 'Épingler'}>
                     {h.pinned ? <Pin size={14} className="accent-text" /> : <PinOff size={14} />}
                   </button>
-                  <button className="btn btn-ghost !p-2" onClick={() => copy(h.id, h.finalText)} title="Copier">
+                  <button className="btn btn-ghost !p-2" onClick={() => copy(h.id, h.finalText)} title="Copier" aria-label="Copier la transcription">
                     {copiedId === h.id ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                   </button>
-                  <button className="btn btn-ghost !p-2 hover:!text-rose-300" onClick={() => removeHistory(h.id)} title="Supprimer">
+                  <button className="btn btn-ghost !p-2 hover:!text-rose-300" onClick={() => removeHistory(h.id)} title="Supprimer" aria-label="Supprimer la transcription">
                     <Trash2 size={14} />
                   </button>
                 </div>
               </div>
             </div>
           ))}
+          {/* [EXPERIMENT:refonte-v1] "Voir plus" pagination control */}
+          {hasMore && (
+            <button
+              type="button"
+              className="btn btn-ghost w-full !text-xs motion-micro"
+              onClick={() => setPageSize((p) => p + VIEW_PAGE_SIZE)}
+            >
+              Voir {Math.min(VIEW_PAGE_SIZE, filtered.length - pageSize)} entrée(s) suivante(s) ({filtered.length - pageSize} restantes)
+            </button>
+          )}
         </div>
       )}
     </div>

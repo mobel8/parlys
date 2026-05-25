@@ -77,6 +77,19 @@ export default function App() {
     return () => { try { unsub?.(); } catch { /* ignore */ } };
   }, []);
 
+  // Live-apply the pill scale broadcast by main when the slider moves.
+  // The bootstrap already stamps the initial value from the URL hash;
+  // this hook just keeps it in sync afterward.
+  useEffect(() => {
+    const unsub = (window.voiceink as any)?.onPillScaleChanged?.((scale: number) => {
+      if (Number.isFinite(scale) && scale >= 0.5 && scale <= 1.5) {
+        document.documentElement.style.setProperty('--pill-scale', String(scale));
+        document.documentElement.setAttribute('data-window', 'pill');
+      }
+    });
+    return () => { try { unsub?.(); } catch { /* ignore */ } };
+  }, []);
+
   const compact = settings.density === 'compact';
 
   // Pill mode: just the floating widget, no frame/titlebar/sidebar/aurora.
@@ -93,10 +106,17 @@ export default function App() {
     <div className="density-comfortable relative h-full w-full flex flex-col">
       <div className="bg-aurora"><div className="spot-3" /></div>
       <div className="relative z-10 flex flex-col h-full">
+        {/* [EXPERIMENT:refonte-v1] a11y skip link — invisible until Tab focus */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only fixed top-2 left-2 z-50 px-3 py-2 rounded bg-violet-500 text-white text-sm focus:outline-none focus:ring-2 focus:ring-white"
+        >
+          Aller au contenu principal
+        </a>
         <TitleBar />
         <div className="flex-1 flex min-h-0">
           <Sidebar />
-          <main className="flex-1 min-w-0 min-h-0 overflow-auto">
+          <main id="main-content" className="flex-1 min-w-0 min-h-0 overflow-auto">
             <div key={view} className="h-full">
               {view === 'main' && <MainView />}
               {view === 'settings' && <SettingsView />}

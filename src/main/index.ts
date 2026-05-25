@@ -106,9 +106,37 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const COMFORTABLE = { w: 1180, h: 760, minW: 880, minH: 560 };
 
 // Compact pill widget — small floating badge (Superwhisper-style).
-// 176x52 is generous enough for mic + status/waveform + expand button while
-// staying very discreet.
-const WIDGET = { w: 176, h: 52 };
+// 176x52 is the stock size at pillScale=1.0; user-configurable in Settings.
+const WIDGET_BASE = { w: 176, h: 52 };
+
+// Compute actual pill bounds from the user's pillScale. Reading the
+// setting lazily (not at module load) means a SET_SETTINGS change can
+// take effect on the next createWindow / buildWindow call without
+// requiring an app restart.
+function pillDimensions(): { w: number; h: number; scale: number } {
+  const s = getSettings();
+  const raw = (s as any).pillScale;
+  const scale = typeof raw === 'number' && Number.isFinite(raw)
+    ? Math.max(0.5, Math.min(1.5, raw))
+    : 1.0;
+  return {
+    w: Math.round(WIDGET_BASE.w * scale),
+    h: Math.round(WIDGET_BASE.h * scale),
+    scale,
+  };
+}
+
+// Back-compat alias: legacy code that reads WIDGET.w / WIDGET.h still
+// resolves through the Proxy getter and picks up the scaled values.
+const WIDGET = new Proxy(WIDGET_BASE, {
+  get(_t, prop: string) {
+    const d = pillDimensions();
+    if (prop === 'w') return d.w;
+    if (prop === 'h') return d.h;
+    if (prop === 'scale') return d.scale;
+    return (WIDGET_BASE as any)[prop];
+  },
+}) as { w: number; h: number; scale: number };
 
 function getWin(): BrowserWindow | null {
   return current && !current.win.isDestroyed() ? current.win : null;
@@ -153,6 +181,14 @@ function clampToDisplays(x: number, y: number): { x: number; y: number } {
  */
 function buildWindow(density: Density): WindowCtx {
   const s = getSettings();
+  // Read the user's theme bg0 so the native window backgroundColor matches
+  // the renderer's bg0 from the very first frame. With the previous
+  // hardcoded '#07070d', a non-midnight theme briefly painted the wrong
+  // dark shade between window.show() and the first composited renderer
+  // frame — perceived as a "flash of the default theme" on every density
+  // swap. Using the real palette eliminates the off-by-shade flash and
+  // also gives the GPU a same-colour frame to interpolate from.
+  const themeBg0 = getTheme(s.themeId).palette.bg0 || '#07070d';
 
   // Defense-in-depth webPreferences. Order matters: even if one flag is
   // mis-set in the future, the others still protect the app.
@@ -172,6 +208,9 @@ function buildWindow(density: Density): WindowCtx {
     experimentalFeatures: false,
     webviewTag: false,
     spellcheck: false,
+    // Defense-in-depth: prevents the renderer from spamming JS dialogs
+    // (alert/confirm/prompt) that the user would have to dismiss.
+    safeDialogs: true,
   };
 
   let win: BrowserWindow;
@@ -226,7 +265,11 @@ function buildWindow(density: Density): WindowCtx {
       height: COMFORTABLE.h,
       minWidth: COMFORTABLE.minW,
       minHeight: COMFORTABLE.minH,
-      backgroundColor: '#07070d',
+      // Match the user's theme bg0 so any pre-composited frame the OS
+      // shows between window.show() and the first painted renderer frame
+      // is the right shade — eliminates the brief mid-tone flash that
+      // was perceived as a "weird flash" on density swap.
+      backgroundColor: themeBg0,
       frame: false,
       titleBarStyle: 'hidden',
       show: false,
@@ -311,7 +354,13 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   const paletteSeg = `;palette=${encodeURIComponent(JSON.stringify(theme.palette))}`;
   const effectsSeg = `;effects=${encodeURIComponent(JSON.stringify(effects))}`;
   const themeSuffix = `;theme=${themeId}${paletteSeg}${effectsSeg}`;
-  const hash = ctx.density + sampler + viewSuffix + themeSuffix;
+  // Send the scale + a `data-window=pill` hint to the bootstrap so the
+  // renderer can stamp `html[data-window="pill"]` and `--pill-scale`
+  // before any CSS evaluates. Only meaningful for the compact density.
+  const pillScaleSeg = ctx.density === 'compact'
+    ? `;pillscale=${pillDimensions().scale.toFixed(3)}`
+    : '';
+  const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
     if (process.env.VOICEINK_DEVTOOLS === '1' && ctx.density === 'comfortable') {
@@ -483,12 +532,16 @@ async function swapDensity(density: Density): Promise<void> {
 
     // 3. Tell the OLD renderer to fade-out (120 ms CSS transition).
     //    The new renderer, off-screen, is already mid-fade-in from its
-    //    inline bootstrap. We give the fade-out ~130 ms to play before
-    //    swapping the windows — perceived as a cross-fade, not a flip.
+    //    inline bootstrap. We give the fade-out a generous 160 ms (vs
+    //    the 120 ms CSS duration) to absorb IPC latency + the renderer's
+    //    requestAnimationFrame scheduling so the cross-fade is never
+    //    cut short — at the previous 130 ms margin, a ~10 ms IPC stall
+    //    would let the old pill at ~4% opacity peek out the moment the
+    //    new window appeared, perceived as a visible "step" in the swap.
     const wasVisible = prev ? prev.win.isVisible() : true;
     if (prev && !prev.win.isDestroyed() && wasVisible) {
       try { prev.win.webContents.send('voiceink:densitySwapOut'); } catch { /* ignore */ }
-      await new Promise<void>((r) => setTimeout(r, 130));
+      await new Promise<void>((r) => setTimeout(r, 160));
     }
 
     // 4. Show the new window. Its #root is either already at opacity 1
@@ -611,11 +664,23 @@ function installNavigationGuards(): void {
     // Refuse <webview> attachment in case the flag ever slips back on.
     contents.on('will-attach-webview', (e) => e.preventDefault());
 
-    // Never allow permission prompts (camera, geolocation…) — mic is
-    // handled via getUserMedia and Electron auto-grants on sandbox.
-    contents.session.setPermissionRequestHandler((_wc, permission, cb) => {
-      if (permission === 'media') return cb(true);
-      cb(false);
+    // Permission handler — explicit allow-list scoped to our OWN renderer
+    // origin (file:// in prod, the Vite dev server in dev). Without the
+    // origin scope, any HTML page our renderer somehow loaded could grab
+    // the mic. We also refuse 'media' requests that include video — this
+    // is a dictation app, never a camera app.
+    contents.session.setPermissionRequestHandler((_wc, permission, cb, details) => {
+      if (permission !== 'media') return cb(false);
+      const url = (details as any)?.requestingUrl as string | undefined;
+      if (!url || !isAllowedRendererOrigin(url)) return cb(false);
+      const types = (details as any)?.mediaTypes as string[] | undefined;
+      if (Array.isArray(types) && types.includes('video')) return cb(false);
+      cb(true);
+    });
+    // Mirror for navigator.permissions.query() (synchronous path).
+    contents.session.setPermissionCheckHandler((_wc, permission, requestingOrigin) => {
+      if (permission !== 'media') return false;
+      return !!requestingOrigin && isAllowedRendererOrigin(requestingOrigin);
     });
   });
 }
@@ -633,6 +698,16 @@ if (process.env.VOICEINK_CDP === '1') {
 app.whenReady().then(async () => {
   installNavigationGuards();
   registerIpc();
+  // macOS: probe Accessibility permission at boot. Without it, our osascript
+  // keystroke injection runs but the OS silently drops the keys — paste
+  // looks broken with zero error. The probe logs a clear warning telling
+  // the user where to grant the permission. No-op on Windows/Linux.
+  if (process.platform === 'darwin') {
+    try {
+      const { checkMacAccessibility } = await import('./services/injection');
+      await checkMacAccessibility();
+    } catch (e) { console.warn('[boot] accessibility probe failed', e); }
+  }
   reconcileAutoStart();
 
   ipcMain.handle(IPC.WINDOW_MINIMIZE, () => getWin()?.minimize());

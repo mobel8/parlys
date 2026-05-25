@@ -28,6 +28,10 @@ import {
   validateTranscribeRequest,
   validateInterpretRequest,
   validateText,
+  validateSpeakRequest,
+  validateListenerTranscribeRequest,
+  validateHistoryEntry,
+  sanitizeInjectionText,
 } from './services/validate';
 
 /**
@@ -61,6 +65,36 @@ export function registerIpc(): void {
     if (shortcutsChanged) {
       try { reRegisterShortcuts(); } catch (e) { console.warn('[ipc:set] reRegister failed', e); }
     }
+    // Live-resize the pill window when the user moves the scale slider
+    // in Settings. We only resize the COMPACT window because the
+    // comfortable window doesn't read pillScale. The top-left anchor is
+    // preserved (we re-pass the current x,y) so the user's drag position
+    // survives the resize.
+    if ((next as any).pillScale !== (before as any).pillScale) {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed()) continue;
+        const [w, h] = win.getSize();
+        // The pill is the only window with width < 400 — cheap heuristic
+        // that avoids needing to track densities per HWND here.
+        if (w < 400) {
+          try {
+            const scale = Math.max(0.5, Math.min(1.5, (next as any).pillScale || 1));
+            const newW = Math.round(176 * scale);
+            const newH = Math.round(52 * scale);
+            // Relax min/max BEFORE resize — they were locked at constructor
+            // time to the prior dimensions and would otherwise refuse the
+            // new format.
+            win.setMinimumSize(newW, newH);
+            win.setMaximumSize(newW, newH);
+            const [x, y] = win.getPosition();
+            win.setBounds({ x, y, width: newW, height: newH }, false);
+            // Tell the renderer to re-stamp --pill-scale + data-window so
+            // its zoom matches the new native bounds in the SAME frame.
+            try { win.webContents.send('voiceink:pillScaleChanged', scale); } catch { /* ignore */ }
+          } catch (e) { console.warn('[ipc:set] pill resize failed', e); }
+        }
+      }
+    }
     // Broadcast to every renderer (main + any secondary, e.g. future
     // panels) so their Zustand store sees the new value without having
     // to poll getSettings. Does NOT echo back to the sender — the
@@ -74,7 +108,11 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.GET_HISTORY, () => listHistory());
-  ipcMain.handle(IPC.ADD_HISTORY, (_e, entry) => addHistory(entry));
+  ipcMain.handle(IPC.ADD_HISTORY, (_e, entry: unknown) => {
+    const safe = validateHistoryEntry(entry);
+    if (!safe) return { ok: false, error: 'invalid history entry' };
+    return addHistory(safe as any);
+  });
   ipcMain.handle(IPC.DELETE_HISTORY, (_e, id: unknown) => {
     const safe = validateHistoryId(id);
     if (!safe) return;
@@ -113,7 +151,11 @@ export function registerIpc(): void {
   });
 
   ipcMain.handle(IPC.SET_AUTO_START, (_e, enabled: unknown) => {
-    const flag = !!enabled; // explicit boolean coerce
+    // Strict boolean: reject non-bool inputs entirely rather than
+    // accepting any truthy value (was previously `!!enabled` which silently
+    // accepted strings, numbers, etc.).
+    if (typeof enabled !== 'boolean') return { ok: false, error: 'expected boolean' };
+    const flag = enabled;
     try {
       app.setLoginItemSettings({
         openAtLogin: flag,
@@ -148,7 +190,11 @@ export function registerIpc(): void {
       const settings = getSettings();
       const buf = Buffer.from(req.audioBase64, 'base64');
       console.log(`[transcribe] received audio: ${buf.length} bytes (${req.mimeType})`);
-      if (buf.length < 500) {
+      // 1.2 KB ≈ a typical 100 ms opus frame + webm header — anything smaller
+      // is almost certainly an empty container the user produced by mis-clicking
+      // the record button. Was 500 B which was so low it accepted header-only
+      // blobs and shipped them to Whisper, which returned hallucinated text.
+      if (buf.length < 1200) {
         throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
       }
 
@@ -267,7 +313,7 @@ export function registerIpc(): void {
       const settings = getSettings();
       const buf = Buffer.from(req.audioBase64, 'base64');
       console.log(`[interpret] received audio: ${buf.length} bytes (${req.mimeType}) → ${req.targetLang}`);
-      if (buf.length < 500) {
+      if (buf.length < 1200) {
         throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
       }
 
@@ -512,9 +558,9 @@ export function registerIpc(): void {
   // voice synthesis).
   // -------------------------------------------------------------------
   ipcMain.handle(IPC.SPEAK, async (event, rawReq: unknown): Promise<{ ok: boolean; ttfbMs?: number; error?: string; requestId: string }> => {
-    const req = rawReq as { requestId: string; text: string; language?: string };
-    if (!req || !req.requestId || !req.text?.trim()) {
-      return { ok: false, requestId: req?.requestId || '', error: 'invalid request' };
+    const req = validateSpeakRequest(rawReq);
+    if (!req) {
+      return { ok: false, requestId: '', error: 'invalid request' };
     }
     const sender = event.sender;
     const send = (payload: InterpretChunkEvent) => {
@@ -569,13 +615,13 @@ export function registerIpc(): void {
     error?: string;
   }> => {
     try {
-      const req = rawReq as { audioBase64: string; mimeType: string; targetLang: string; sourceLang?: string };
-      if (!req || typeof req.audioBase64 !== 'string' || !req.audioBase64) {
+      const req = validateListenerTranscribeRequest(rawReq);
+      if (!req) {
         return { ok: false, text: '', error: 'invalid request' };
       }
       const settings = getSettings();
       const buf = Buffer.from(req.audioBase64, 'base64');
-      if (buf.length < 500) {
+      if (buf.length < 1200) {
         return { ok: false, text: '', error: 'audio too short' };
       }
       const explicitLangL = req.sourceLang && req.sourceLang !== 'auto' ? req.sourceLang : '';

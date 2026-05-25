@@ -69,6 +69,12 @@ export function getSettings(): Settings {
   if (!merged.groqApiKey && process.env.GROQ_API_KEY) {
     merged.groqApiKey = process.env.GROQ_API_KEY;
   }
+  // Env var fallback for the Cerebras key (parallel to GROQ_API_KEY). Only
+  // applied when Cerebras is the active provider so it can't accidentally
+  // shadow an OpenAI / Anthropic key stored in the same llmApiKey field.
+  if (!merged.llmApiKey && merged.llmProvider === 'cerebras' && process.env.CEREBRAS_API_KEY) {
+    merged.llmApiKey = process.env.CEREBRAS_API_KEY;
+  }
   // One-way mode migration — idempotent, only rewrites legacy strings.
   const migrated = MODE_MIGRATION[merged.mode as unknown as string];
   if (migrated) {

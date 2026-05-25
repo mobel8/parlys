@@ -58,15 +58,22 @@ export interface ContinuousInterpreterHandle {
   isActive: () => boolean;
 }
 
-// Tunables. Refined empirically — hold short enough for snappy
-// interpretation (~500 ms feels "live"), RMS gap loose enough to
-// tolerate soft speakers.
-const SPEAK_START_RMS = 0.035;
-const SILENCE_END_RMS = 0.02;
-const SILENCE_HOLD_MS = 600;
-/** Minimum phrase length before we bother shipping it — avoids firing
- *  interpret for 'ah' or a single clipped consonant. */
-const MIN_PHRASE_MS = 400;
+// Two-stage VAD with a soft/hard threshold pair gives us natural pre-roll:
+// the recorder opens on the soft trigger so MediaRecorder's ~50-100 ms
+// spin-up overlaps with the user's first phoneme instead of clipping it.
+// If RMS doesn't reach the hard threshold within CONFIRM_WINDOW_MS we
+// silently discard (door slams, keyboard clicks, etc.) so we don't ship
+// junk to Whisper.
+const SPEAK_SOFT_RMS = 0.018;       // open recorder optimistically
+const SPEAK_HARD_RMS = 0.032;       // confirm it's actual speech
+const CONFIRM_WINDOW_MS = 280;      // soft → hard must happen within this
+const SILENCE_END_RMS = 0.018;
+// 850 ms tolerates the natural inter-clause pause in French/English speech.
+// 600 ms was cutting "X, … et Y" right after the comma.
+const SILENCE_HOLD_MS = 850;
+/** Minimum phrase length before we bother shipping it. Dropped from 400 ms
+ *  to 220 ms so short legitimate answers like "oui", "non", "OK" survive. */
+const MIN_PHRASE_MS = 220;
 /** Hard cap on a single phrase, to protect API limits and avoid huge
  *  latency spikes on monologues. 18 s covers most sentences. */
 const MAX_PHRASE_MS = 18000;
@@ -84,6 +91,10 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const silenceSinceRef = useRef<number>(0);
   const activeRef = useRef<boolean>(false);
   const stoppingForShipRef = useRef<boolean>(false);
+  // 'idle' = no recorder; 'preroll' = recorder open, awaiting hard confirm;
+  // 'speaking' = confirmed phrase in progress.
+  const phraseStateRef = useRef<'idle' | 'preroll' | 'speaking'>('idle');
+  const prerollOpenedAtRef = useRef<number>(0);
 
   const optsRef = useRef(opts);
   optsRef.current = opts;
@@ -121,10 +132,15 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       try { rec.stop(); } catch { /* ignore */ }
       recorderRef.current = null;
       chunksRef.current = [];
+      phraseStateRef.current = 'idle';
       return;
     }
     stoppingForShipRef.current = true;
+    // Flush encoder so the tail of the phrase isn't dropped between the
+    // last 100 ms timeslice and stop().
+    try { rec.requestData(); } catch { /* ignore */ }
     try { rec.stop(); } catch { /* ignore */ }
+    phraseStateRef.current = 'idle';
   }, []);
 
   const shipBlob = useCallback(async (blob: Blob, mimeType: string) => {
@@ -187,7 +203,7 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) { mime = c; break; }
     }
     mimeRef.current = mime || 'audio/webm';
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined);
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 128000 } : undefined);
     chunksRef.current = [];
     rec.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
@@ -212,12 +228,15 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const start = useCallback(async () => {
     if (activeRef.current) return;
     activeRef.current = true;
+    // See useAudioRecorder for the rationale on disabling all browser DSP
+    // (AGC, noiseSuppression, echoCancellation) for Whisper accuracy.
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
         channelCount: 1,
+        sampleRate: 48000,
       },
     });
     streamRef.current = stream;
@@ -246,13 +265,31 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
 
       const rec = recorderRef.current;
       const isRecording = !!rec && rec.state === 'recording';
+      const state = phraseStateRef.current;
 
-      if (!isRecording) {
-        if (rms > SPEAK_START_RMS) {
+      if (!isRecording || state === 'idle') {
+        // Soft trigger: open recorder optimistically to capture pre-roll.
+        if (rms > SPEAK_SOFT_RMS) {
           openRecorder();
+          prerollOpenedAtRef.current = now;
+          phraseStateRef.current = 'preroll';
+        }
+      } else if (state === 'preroll') {
+        if (rms > SPEAK_HARD_RMS) {
+          // Confirmed real speech — promote to 'speaking'.
+          phraseStateRef.current = 'speaking';
+          // Reset silence accounting now that we're in a real phrase.
+          silenceSinceRef.current = 0;
+        } else if (now - prerollOpenedAtRef.current > CONFIRM_WINDOW_MS) {
+          // No confirmed speech — discard silently. NOT shipped.
+          stoppingForShipRef.current = false;
+          try { rec!.stop(); } catch { /* ignore */ }
+          recorderRef.current = null;
+          chunksRef.current = [];
+          phraseStateRef.current = 'idle';
         }
       } else {
-        // Inside a phrase — track silence.
+        // 'speaking' — track silence.
         if (rms < SILENCE_END_RMS) {
           if (silenceSinceRef.current === 0) silenceSinceRef.current = now;
           if (now - silenceSinceRef.current >= SILENCE_HOLD_MS) {
@@ -274,15 +311,21 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   const stop = useCallback(() => {
     activeRef.current = false;
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
-    // Ship any phrase still in progress so the user doesn't lose audio.
+    // Ship any CONFIRMED phrase still in progress so the user doesn't lose audio.
+    // We deliberately don't ship 'preroll' state — that's by definition not yet
+    // confirmed speech, and shipping it just feeds Whisper unintelligible blips.
     const rec = recorderRef.current;
     if (rec && rec.state === 'recording') {
-      const phraseMs = Date.now() - phraseStartAtRef.current;
-      if (phraseMs >= MIN_PHRASE_MS) {
-        stoppingForShipRef.current = true;
+      if (phraseStateRef.current === 'speaking') {
+        const phraseMs = Date.now() - phraseStartAtRef.current;
+        if (phraseMs >= MIN_PHRASE_MS) {
+          stoppingForShipRef.current = true;
+          try { rec.requestData(); } catch { /* ignore */ }
+        }
       }
       try { rec.stop(); } catch { /* ignore */ }
     }
+    phraseStateRef.current = 'idle';
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;

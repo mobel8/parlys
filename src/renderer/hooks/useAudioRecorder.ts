@@ -43,12 +43,23 @@ export function useAudioRecorder(opts: {
 
   const start = useCallback(async () => {
     try {
+      // Whisper-large-v3 was trained on relatively clean but UN-PROCESSED
+      // audio. EVERY browser-level DSP we leave on hurts accuracy:
+      //   - AGC pumps gain during silent gaps then clips the first phoneme
+      //     of resumed speech ("ello" instead of "hello").
+      //   - noiseSuppression (RNNoise) strips natural sibilants/consonants.
+      //   - echoCancellation runs an adaptive far-end filter that — without
+      //     a real far-end reference in a dictation flow — introduces audible
+      //     artefacts and chops short attacks. Multiple field studies show
+      //     it degrades Whisper WER on otherwise clean mic input.
+      // Capture raw PCM at the mic's native rate; Groq resamples to 16 kHz.
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
           channelCount: 1,
+          sampleRate: 48000,
         },
       });
       streamRef.current = stream;
@@ -91,7 +102,10 @@ export function useAudioRecorder(opts: {
       }
       mimeRef.current = mime || 'audio/webm';
 
-      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 96000 } : undefined);
+      // 128 kbps opus mono gives noticeably better Whisper accuracy than 96 —
+      // the extra headroom preserves consonants and sibilants that Whisper
+      // relies on for word boundaries.
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime, audioBitsPerSecond: 128000 } : undefined);
       recorderRef.current = rec;
       chunksRef.current = [];
 
@@ -118,6 +132,11 @@ export function useAudioRecorder(opts: {
   const stop = useCallback(() => {
     const rec = recorderRef.current;
     if (rec && rec.state !== 'inactive') {
+      // Flush any audio still buffered in the encoder before stopping —
+      // without requestData(), the last ~100 ms (one timeslice worth) can
+      // get dropped when stop() races the encoder, which is exactly the
+      // tail of the user's utterance.
+      try { rec.requestData(); } catch {}
       try { rec.stop(); } catch {}
     } else {
       cleanup();

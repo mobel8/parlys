@@ -48,3 +48,29 @@ A `.lnk` whose target is `cmd.exe /c something.bat` will ALWAYS show a console w
 - `WorkingDirectory` -> project root (so `process.cwd()`-relative asset lookups still resolve)
 
 Use `dev.bat`-via-cmd shortcuts ONLY for the dev launcher (HMR + tsc-watch + auto-restart), where the console is the point. Daily-use shortcuts must bypass cmd entirely.
+
+## %APPDATA% / %USERPROFILE% are unset when a script runs under WSL
+
+Helper scripts that write to the app's userData (e.g. injecting an API key into
+`voiceink-settings.json`) assume Windows env vars. Under WSL `process.env.APPDATA`
+and `USERPROFILE` are **undefined**, so a naive `APPDATA || HOME/AppData/Roaming`
+fallback silently writes to a junk Linux path (`/home/<user>/AppData/...`) — the
+real Windows file is never touched and the change appears to do nothing. Resolve
+the path WSL-aware: prefer `$APPDATA`, else on `win32` use `%USERPROFILE%`, else
+(`linux`/WSL) target `/mnt/c/Users/<user>/AppData/Roaming` and **verify the dir
+exists** before writing. Always re-read the real file afterwards to confirm the
+patch landed (and that pre-existing keys like `groqApiKey` survived).
+
+## Repeated `taskkill /F /IM electron.exe` corrupts the single-instance state
+
+VoiceInk holds `app.requestSingleInstanceLock()` (per userData dir). Force-killing
+Electron in a tight test loop doesn't let it release the Windows mutex/lock
+cleanly, so the *next* spawn can early-exit with **code=0 and no console output**
+(the "lost the lock" branch) — looks exactly like a config crash but is purely
+environmental contention. It clears on its own once the killed procs fully die.
+Two rules: (1) to prove a config change is innocent, A/B boot the OLD vs NEW
+settings in an **isolated `--user-data-dir`** (its own lock — can't collide); both
+booting identically = the change is exonerated. (2) `loop-smoke` does NOT taskkill
+so it collides with any running instance; `smoke-settings` DOES taskkill (kills the
+user's app). For a non-disruptive live-console check, boot isolated and kill only
+your own child — never taskkill-all while the user's app is up.

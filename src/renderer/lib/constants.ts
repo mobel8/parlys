@@ -62,6 +62,23 @@ export const GROQ_STT_MODELS = [
 ];
 
 /**
+ * Cerebras LLM catalog for post-processing (and translation when the
+ * Cerebras provider is selected). Cerebras runs an OpenAI-compatible API
+ * on wafer-scale hardware — the lowest latency of any hosted provider
+ * (~10-20 ms for an 8B model). This list mirrors `GET /v1/models`; a
+ * power user can still paste a custom id by editing the settings file.
+ *
+ * Default is `gpt-oss-120b`: the best quality/latency balance, closest in
+ * spirit to the old 70B post-processing default while staying fast.
+ */
+export const CEREBRAS_LLM_MODELS = [
+  { id: 'gpt-oss-120b', label: 'GPT-OSS 120B (qualité/vitesse, recommandé)' },
+  { id: 'qwen-3-235b-a22b-instruct-2507', label: 'Qwen3 235B (qualité max, multilingue)' },
+  { id: 'zai-glm-4.7', label: 'GLM 4.7 (multilingue)' },
+  { id: 'llama3.1-8b', label: 'Llama 3.1 8B (le plus rapide)' },
+];
+
+/**
  * Targets available for automatic translation. Empty code = no translation.
  * Uses native language names so the user recognises them instantly.
  */
@@ -155,6 +172,22 @@ export const TTS_PROVIDERS: Array<{
     ],
   },
 ];
+
+/**
+ * [EXPERIMENT:refonte-v1] Cost hint per TTS provider — displayed in the
+ * provider picker so users can compare $/min at a glance instead of
+ * hunting through provider websites.
+ *
+ * Approximations based on ~800 chars/min spoken cadence:
+ *   - Cartesia Sonic-2     : ~$0.015 / 1k chars → ~$0.012/min
+ *   - ElevenLabs Flash 2.5 : ~$0.22 / 1k chars (Pro plan) → ~$0.18/min
+ *   - OpenAI gpt-4o-mini-tts : ~$0.015 / 1k chars → ~$0.012/min
+ */
+export const TTS_COST_HINTS: Record<'cartesia' | 'elevenlabs' | 'openai', string> = {
+  cartesia:   '~$0.01/min · économique',
+  elevenlabs: '~$0.18/min · premium',
+  openai:     '~$0.01/min · 50+ langues',
+};
 
 /**
  * Interpreter target language list. Reuses the same codes as

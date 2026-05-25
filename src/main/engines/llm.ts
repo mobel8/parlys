@@ -1,5 +1,7 @@
 // Optional LLM post-processing. Uses Groq chat completions by default
-// (very low latency) or OpenAI / Anthropic / Ollama if configured.
+// (very low latency) or OpenAI / Anthropic / Ollama / Cerebras if configured.
+// Cerebras (api.cerebras.ai) is OpenAI-compatible and the lowest-latency
+// hosted backend; when selected it also serves translation (see translateBackend).
 //
 // Designed to be self-contained and *loud*: every branch logs enough
 // context that the user can diagnose "why didn't my mode apply?" from
@@ -64,7 +66,7 @@ export async function postProcess(
     const provider = settings.llmProvider || 'groq';
     console.warn(`[llm] mode=${mode} requested but no key configured for provider=${provider}.` +
       ` Returning raw Whisper text. Fix: set settings.groqApiKey (Groq / default) or` +
-      ` settings.llmApiKey (OpenAI / Anthropic), or switch provider to 'ollama' for local.`);
+      ` settings.llmApiKey (OpenAI / Anthropic / Cerebras), or switch provider to 'ollama' for local.`);
     return text;
   }
 
@@ -91,6 +93,9 @@ export async function postProcess(
     } else if (provider === 'openai') {
       out = await callOpenAICompat(text, prompt, 'https://api.openai.com/v1/chat/completions',
         settings.llmApiKey, settings.llmModel || 'gpt-4o-mini', 'openai');
+    } else if (provider === 'cerebras') {
+      out = await callOpenAICompat(text, prompt, 'https://api.cerebras.ai/v1/chat/completions',
+        settings.llmApiKey, settings.llmModel || 'gpt-oss-120b', 'cerebras');
     } else if (provider === 'ollama') {
       out = await callOllama(text, prompt, settings);
     } else if (provider === 'anthropic') {
@@ -228,6 +233,46 @@ function stripCodeFences(s: string): string {
 }
 
 /**
+ * Model ids served by Cerebras (mirrors GET /v1/models). Used only to
+ * guard the *translate* model so a stale Groq id like
+ * 'llama-3.1-8b-instant' can never leak into a Cerebras request. The
+ * post-processing model is whatever the user picked (settings.llmModel).
+ */
+const CEREBRAS_MODELS = [
+  'gpt-oss-120b',
+  'qwen-3-235b-a22b-instruct-2507',
+  'zai-glm-4.7',
+  'llama3.1-8b',
+];
+
+/**
+ * Resolve which OpenAI-compatible backend handles *translation*.
+ *
+ * Translation has always run on Groq (the STT backbone, which is always
+ * keyed). When — and only when — the user explicitly selects the Cerebras
+ * post-processing provider, we route translation through Cerebras too: it
+ * is even lower latency than Groq and speaks the same /chat/completions
+ * dialect, SSE streaming included. Every other provider keeps the exact
+ * historical Groq path, so existing installs are byte-for-byte unchanged.
+ */
+function translateBackend(settings: Settings): { url: string; apiKey: string; model: string } {
+  if ((settings.llmProvider || 'groq') === 'cerebras' && settings.llmApiKey) {
+    return {
+      url: 'https://api.cerebras.ai/v1/chat/completions',
+      apiKey: settings.llmApiKey,
+      // Default to the fast 8B for translation latency; honour an explicit
+      // Cerebras model the user may have set, but never a Groq-only id.
+      model: CEREBRAS_MODELS.includes(settings.translateModel) ? settings.translateModel : 'llama3.1-8b',
+    };
+  }
+  return {
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    apiKey: settings.groqApiKey || settings.llmApiKey,
+    model: settings.translateModel || 'llama-3.1-8b-instant',
+  };
+}
+
+/**
  * Translate text to `targetCode` (ISO 639-1). Uses Groq llama-3.1-8b-instant
  * by default for minimum latency — typically 60-150 ms end-to-end on a
  * warm socket (vs 200-450 ms for 70B). The translation quality difference
@@ -256,25 +301,24 @@ export async function translateText(
   // Every extra token adds ~1 ms of prefix processing on llama-3.1-8b-instant.
   const system = `Translate to ${targetName}. Reply with ONLY the translation, no quotes, no notes.`;
 
-  const apiKey = settings.groqApiKey || settings.llmApiKey;
+  const { url, apiKey, model } = translateBackend(settings);
   if (!apiKey) {
-    console.warn('[translate] no Groq API key — skipping translation');
+    console.warn('[translate] no API key for the active provider — skipping translation');
     return text;
   }
 
   try {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        // Ask the Groq edge to keep the TCP socket alive so subsequent
-        // requests reuse it — cuts the TCP + TLS handshake (~40-80 ms)
-        // on every call after the first.
+        // Keep the TCP socket alive so subsequent requests reuse it — cuts
+        // the TCP + TLS handshake (~40-80 ms) on every call after the first.
         Connection: 'keep-alive',
       },
       body: JSON.stringify({
-        model: settings.translateModel || 'llama-3.1-8b-instant',
+        model,
         temperature: 0,
         // Cap the output so a runaway model can't block the pipeline.
         // 512 tokens is ~2000 characters of translated text — plenty.
@@ -287,7 +331,7 @@ export async function translateText(
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
-      console.warn(`[translate] Groq ${res.status}: ${body.slice(0, 200)}`);
+      console.warn(`[translate] HTTP ${res.status}: ${body.slice(0, 200)}`);
       return text;
     }
     const data = (await res.json()) as any;
@@ -346,10 +390,10 @@ export async function* streamTranslate(
   }
   const targetName = LANGUAGE_NAMES[targetCode.toLowerCase()] || targetCode;
   const system = `Translate to ${targetName}. Reply with ONLY the translation, no quotes, no notes.`;
-  const apiKey = settings.groqApiKey || settings.llmApiKey;
+  const { url, apiKey, model } = translateBackend(settings);
   if (!apiKey) { yield text; return; }
 
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const res = await fetch(url, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -358,7 +402,7 @@ export async function* streamTranslate(
       Accept: 'text/event-stream',
     },
     body: JSON.stringify({
-      model: settings.translateModel || 'llama-3.1-8b-instant',
+      model,
       temperature: 0,
       max_tokens: 512,
       stream: true,

@@ -46,12 +46,13 @@ export function ReplacementsSection() {
     await update(list.filter((r) => r.id !== id));
   };
 
-  const importPreset = async (preset: 'fr' | 'en') => {
+  const importPreset = async (preset: 'fr' | 'en' | 'tech') => {
     // Load presets lazily to avoid pulling main-process code into the renderer
     // bundle. These are just static arrays.
-    const FR = FRENCH_PRESETS;
-    const EN = ENGLISH_PRESETS;
-    const source = preset === 'fr' ? FR : EN;
+    const source =
+      preset === 'fr' ? FRENCH_PRESETS :
+      preset === 'en' ? ENGLISH_PRESETS :
+                        TECH_PRESETS;
     const existingFrom = new Set(list.map((r) => r.from.toLowerCase()));
     const toAdd: Replacement[] = source
       .filter((r) => !existingFrom.has(r.from.toLowerCase()))
@@ -144,10 +145,13 @@ export function ReplacementsSection() {
       {/* Presets & IO */}
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn btn-ghost !text-xs" onClick={() => importPreset('fr')}>
-          <Sparkles size={12} /> Ajouter les règles FR
+          <Sparkles size={12} /> Ponctuation FR
         </button>
         <button className="btn btn-ghost !text-xs" onClick={() => importPreset('en')}>
-          <Sparkles size={12} /> Ajouter les règles EN
+          <Sparkles size={12} /> Ponctuation EN
+        </button>
+        <button className="btn btn-ghost !text-xs" onClick={() => importPreset('tech')}>
+          <Sparkles size={12} /> Vocabulaire technique
         </button>
         <div className="flex-1" />
         <button className="btn btn-ghost !text-xs" onClick={importJson}>
@@ -248,4 +252,41 @@ const ENGLISH_PRESETS: Omit<Replacement, 'id'>[] = [
   { from: 'at sign', to: '@', caseSensitive: false, wholeWord: true, enabled: true },
   { from: 'hashtag', to: '#', caseSensitive: false, wholeWord: true, enabled: true },
   { from: 'dash', to: '-', caseSensitive: false, wholeWord: true, enabled: true },
+];
+
+// Technical / brand-name normalisations. Whisper occasionally lower-cases or
+// mis-splits common IT acronyms — these put them back in their canonical
+// uppercase / branded form. Safe to apply for any language since they're
+// brand names, not natural words.
+const TECH_PRESETS: Omit<Replacement, 'id'>[] = [
+  { from: 'api', to: 'API', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'mcp', to: 'MCP', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'url', to: 'URL', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'json', to: 'JSON', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'yaml', to: 'YAML', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'html', to: 'HTML', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'css', to: 'CSS', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'sql', to: 'SQL', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'http', to: 'HTTP', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'https', to: 'HTTPS', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'rest', to: 'REST', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'graphql', to: 'GraphQL', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'oauth', to: 'OAuth', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'jwt', to: 'JWT', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'cli', to: 'CLI', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'sdk', to: 'SDK', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'github', to: 'GitHub', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'gitlab', to: 'GitLab', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'vs code', to: 'VS Code', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'vscode', to: 'VS Code', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'node js', to: 'Node.js', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'nodejs', to: 'Node.js', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'typescript', to: 'TypeScript', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'javascript', to: 'JavaScript', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'postgresql', to: 'PostgreSQL', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'mongodb', to: 'MongoDB', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'docker', to: 'Docker', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'kubernetes', to: 'Kubernetes', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'voice inc', to: 'VoiceInk', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'voiceink', to: 'VoiceInk', caseSensitive: false, wholeWord: true, enabled: true },
 ];

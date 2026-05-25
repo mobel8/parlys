@@ -60,128 +60,27 @@ function extractThemesJson(): string {
 const THEMES_JSON = extractThemesJson();
 
 /**
- * HTML transform plugin: injects two `<script>` blocks into <head> right
- * after the existing density bootstrap so they run synchronously during
- * HTML parse.
+ * HTML transform plugin: exposes the THEMES table on `window` (kept for
+ * any debug tooling that wants to introspect the palettes at runtime)
+ * and otherwise lets the inline bootstrap in `index.html` do all the
+ * pre-paint work.
  *
- *   1. `window.__VOICEINK_THEMES__ = {…}` — the full palette table.
- *   2. The "pre-apply theme" snippet: reads themeId + effects from the
- *      URL hash, looks up the palette, and writes every CSS variable
- *      that lib/theme.ts would write — so the FIRST PAINT already shows
- *      the user's theme. React's later applyTheme() becomes a no-op
- *      visually because the values match.
+ * History: this plugin used to ALSO inject a second pre-apply-theme
+ * snippet, but that snippet read `;fx=…` from the URL while main encodes
+ * `;effects=…` (full JSON). The mismatch meant the second snippet
+ * silently fell back to the DEFAULT effects (glow=65, blur=18, grain=0)
+ * after the first inline bootstrap had correctly stamped the user's
+ * values from `;effects=…`. React's later applyTheme() then re-stamped
+ * the correct values, producing the visible "default theme briefly,
+ * then user theme" flash on every density swap. The fix is simply to
+ * stop running that broken second snippet — the inline bootstrap in
+ * index.html already does the job, and correctly.
  */
 function preApplyThemePlugin(): Plugin {
   return {
     name: 'voiceink-pre-apply-theme',
     transformIndexHtml(html) {
-      const inject = `
-    <script>window.__VOICEINK_THEMES__ = ${THEMES_JSON};</script>
-    <script>
-      /* Pre-apply theme synchronously, BEFORE any CSS rule evaluates.
-         Reads the user's themeId from the URL hash (encoded by main in
-         loadRenderer()) and writes every CSS variable that
-         src/renderer/lib/theme.ts would write. Without this, the first
-         frame uses the Midnight defaults baked into :root, and React's
-         applyTheme() ~10-50 ms later flashes the right palette in. */
-      (function () {
-        try {
-          var hash = (location.hash || '').replace('#', '');
-          var themeMatch = hash.match(/(?:^|;)theme=([a-z0-9_-]+)/i);
-          var fxMatch = hash.match(/(?:^|;)fx=([^;]+)/i);
-          var THEMES = window.__VOICEINK_THEMES__ || {};
-          var theme = (themeMatch && THEMES[themeMatch[1]]) || THEMES.midnight;
-          if (!theme) return;
-          var p = theme.palette;
-          var root = document.documentElement;
-          function hexToRgb(hex) {
-            var h = (hex || '').replace('#', '').trim();
-            if (h.length === 3) {
-              return parseInt(h[0]+h[0],16) + ',' + parseInt(h[1]+h[1],16) + ',' + parseInt(h[2]+h[2],16);
-            }
-            if (h.length === 6) {
-              return parseInt(h.slice(0,2),16) + ',' + parseInt(h.slice(2,4),16) + ',' + parseInt(h.slice(4,6),16);
-            }
-            return '139,92,246';
-          }
-          function darken(hex, amount) {
-            var rgb = hexToRgb(hex).split(',').map(Number);
-            return 'rgb(' + Math.max(0, Math.round(rgb[0]*(1-amount))) + ',' + Math.max(0, Math.round(rgb[1]*(1-amount))) + ',' + Math.max(0, Math.round(rgb[2]*(1-amount))) + ')';
-          }
-          function lighten(hex, amount) {
-            var rgb = hexToRgb(hex).split(',').map(Number);
-            return 'rgb(' + Math.min(255, Math.round(rgb[0]+(255-rgb[0])*amount)) + ',' + Math.min(255, Math.round(rgb[1]+(255-rgb[1])*amount)) + ',' + Math.min(255, Math.round(rgb[2]+(255-rgb[2])*amount)) + ')';
-          }
-          function lum(hex) {
-            var rgb = hexToRgb(hex).split(',').map(Number);
-            return (0.2126*rgb[0] + 0.7152*rgb[1] + 0.0722*rgb[2]) / 255;
-          }
-          var s = root.style;
-          s.setProperty('--bg-0', p.bg0);
-          s.setProperty('--bg-1', p.bg1);
-          s.setProperty('--bg-2', p.bg2);
-          s.setProperty('--line', p.line);
-          s.setProperty('--line-strong', p.lineStrong);
-          s.setProperty('--text', p.text);
-          s.setProperty('--text-dim', p.textDim);
-          s.setProperty('--text-mute', p.textMute);
-          s.setProperty('--accent-1', p.accent1);
-          s.setProperty('--accent-2', p.accent2);
-          s.setProperty('--accent-3', p.accent3);
-          s.setProperty('--accent-1-rgb', hexToRgb(p.accent1));
-          s.setProperty('--accent-2-rgb', hexToRgb(p.accent2));
-          s.setProperty('--accent-3-rgb', hexToRgb(p.accent3));
-          s.setProperty('--accent-1-dim', darken(p.accent1, 0.35));
-          s.setProperty('--accent-1-light', lighten(p.accent1, 0.25));
-          s.setProperty('--on-accent', lum(p.accent1) > 0.65 ? '#0a0a0a' : '#ffffff');
-          s.setProperty('--violet', p.accent1);
-          s.setProperty('--fuchsia', p.accent2);
-          s.setProperty('--cyan', p.accent3);
-          s.setProperty('--aura-1', p.aura1);
-          s.setProperty('--aura-2', p.aura2);
-          s.setProperty('--aura-3', p.aura3);
-          s.setProperty('--danger', p.danger);
-          s.setProperty('--success', p.success);
-          s.setProperty('--warn', p.warn);
-          s.setProperty('--info', p.info);
-          s.setProperty('--danger-rgb', hexToRgb(p.danger));
-          s.setProperty('--success-rgb', hexToRgb(p.success));
-          /* Effects from URL hash. Format: ;fx=g=65,b=18,a=1,u=1,s=1,n=0 */
-          var fx = { glowIntensity: 65, blurStrength: 18, animateAura: true, auraEnabled: true, shimmer: true, grain: false };
-          if (fxMatch) {
-            fxMatch[1].split(',').forEach(function (kv) {
-              var parts = kv.split('=');
-              var k = parts[0]; var v = parts[1];
-              if (k === 'g') fx.glowIntensity = +v;
-              else if (k === 'b') fx.blurStrength = +v;
-              else if (k === 'a') fx.animateAura = v === '1';
-              else if (k === 'u') fx.auraEnabled = v === '1';
-              else if (k === 's') fx.shimmer = v === '1';
-              else if (k === 'n') fx.grain = v === '1';
-            });
-          }
-          var glow = Math.max(0, Math.min(100, fx.glowIntensity)) / 100;
-          s.setProperty('--glow-intensity', String(glow));
-          s.setProperty('--blur-strength', Math.round(fx.blurStrength) + 'px');
-          root.dataset.theme = theme.id;
-          root.dataset.themeMode = theme.mode;
-          root.dataset.animateAura = fx.animateAura ? '1' : '0';
-          root.dataset.auraEnabled = fx.auraEnabled ? '1' : '0';
-          root.dataset.shimmer = fx.shimmer ? '1' : '0';
-          root.dataset.grain = fx.grain ? '1' : '0';
-          /* Body bg: paint immediately so the window's solid backgroundColor
-             (set by main BEFORE the renderer loads) is hidden under the
-             user's actual bg0 from frame 1. */
-          if (document.body) document.body.style.backgroundColor = p.bg0;
-          else document.addEventListener('DOMContentLoaded', function () {
-            document.body.style.backgroundColor = p.bg0;
-          }, { once: true });
-        } catch (_) { /* no-op — fall back to :root defaults */ }
-      })();
-    </script>`;
-      // Inject right before </head> so it runs alongside the existing
-      // density bootstrap script (which is in <head>) and BEFORE any
-      // <link rel="stylesheet"> Vite emits at build time.
+      const inject = `\n    <script>window.__VOICEINK_THEMES__ = ${THEMES_JSON};</script>`;
       return html.replace('</head>', inject + '\n  </head>');
     },
   };

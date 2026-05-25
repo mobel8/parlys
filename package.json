@@ -1,6 +1,6 @@
 {
   "name": "voiceink",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
   "author": {
     "name": "VoiceInk",
@@ -31,7 +31,7 @@
     "electron-store": "^8.2.0",
     "electron-updater": "^6.3.9",
     "koffi": "^2.11.0",
-    "ws": "^8.18.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
@@ -41,7 +41,7 @@
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
-    "electron": "^33.2.0",
+    "electron": "^33.4.11",
     "electron-builder": "^25.1.8",
     "lucide-react": "^0.460.0",
     "png-to-ico": "^3.0.1",

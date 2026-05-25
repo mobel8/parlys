@@ -38,6 +38,8 @@ export function TitleBar() {
           className={`grid place-items-center rounded hover:bg-white/10 ${settings.alwaysOnTop ? 'text-fuchsia-300' : 'text-white/60 hover:text-white'} ${compact ? 'w-7 h-6' : 'w-8 h-7'}`}
           onClick={toggleOnTop}
           title={settings.alwaysOnTop ? 'Ne plus épingler au premier plan' : 'Épingler au premier plan'}
+          aria-label={settings.alwaysOnTop ? 'Ne plus épingler au premier plan' : 'Épingler au premier plan'}
+          aria-pressed={settings.alwaysOnTop}
         >
           {settings.alwaysOnTop ? <Pin size={12} /> : <PinOff size={12} />}
         </button>
@@ -45,19 +47,20 @@ export function TitleBar() {
           className={`grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-8 h-7'}`}
           onClick={goPill}
           title="Passer en mode pilule flottante"
+          aria-label="Passer en mode pilule flottante"
         >
           <Minimize2 size={12} />
         </button>
         <div className="w-2" />
-        <button className={`grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowMinimize()} title="Réduire">
+        <button className={`grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowMinimize()} title="Réduire" aria-label="Réduire la fenêtre">
           <Minus size={compact ? 12 : 14} />
         </button>
         {!compact && (
-          <button className="w-9 h-7 grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white" onClick={() => api?.windowMaximize()} title="Agrandir">
+          <button className="w-9 h-7 grid place-items-center rounded hover:bg-white/10 text-white/60 hover:text-white" onClick={() => api?.windowMaximize()} title="Agrandir" aria-label="Agrandir / Restaurer la fenêtre">
             <Square size={12} />
           </button>
         )}
-        <button className={`grid place-items-center rounded hover:bg-rose-500/80 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowClose()} title="Fermer">
+        <button className={`grid place-items-center rounded hover:bg-rose-500/80 text-white/60 hover:text-white ${compact ? 'w-7 h-6' : 'w-9 h-7'}`} onClick={() => api?.windowClose()} title="Fermer" aria-label="Fermer la fenêtre">
           <X size={compact ? 12 : 14} />
         </button>
       </div>

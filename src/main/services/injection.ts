@@ -3,12 +3,13 @@ import { exec } from 'child_process';
 import { platform } from 'os';
 import { getLastExternalHwnd } from './focus';
 import { getWin32, pointerToHwnd, VK } from './win32';
+import { sanitizeInjectionText } from './validate';
 
 /** Win32 ShowWindow verbs we actually use. */
 const SW_RESTORE = 9;
 
 export function copyToClipboard(text: string): void {
-  clipboard.writeText(text);
+  clipboard.writeText(sanitizeInjectionText(text));
 }
 
 /**
@@ -24,7 +25,13 @@ export function copyToClipboard(text: string): void {
  * to remain available for re-pasting.
  */
 export async function injectText(text: string): Promise<void> {
-  clipboard.writeText(text);
+  // Strip C0 control chars + Unicode bidi-override marks (Trojan Source)
+  // before the clipboard write. Defense-in-depth against LLM hallucinations
+  // or replacements rules that would inject hidden control bytes — these
+  // are interpreted as commands when pasted into a terminal or messaging
+  // app. Keep tab/LF/CR (legitimate whitespace).
+  const safe = sanitizeInjectionText(text);
+  clipboard.writeText(safe);
 
   // Blur our windows so focus can move to the target app.
   for (const w of BrowserWindow.getAllWindows()) {
@@ -42,12 +49,80 @@ export async function injectText(text: string): Promise<void> {
   } else if (os === 'darwin') {
     await new Promise((r) => setTimeout(r, 80));
     await new Promise<void>((resolve) => {
-      exec(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`, () => resolve());
+      exec(`osascript -e 'tell application "System Events" to keystroke "v" using command down'`, (err) => {
+        if (err) console.warn('[inject] osascript failed (Accessibility permission?):', err.message);
+        resolve();
+      });
     });
   } else {
+    // Linux: Wayland uses different injection tools than X11.
+    // xdotool only works on X11 — on Wayland it fails silently because
+    // the compositor isolates apps from synthetic input. Detect via
+    // WAYLAND_DISPLAY and try wtype (simple) then ydotool (needs daemon).
+    const isWayland = !!process.env.WAYLAND_DISPLAY;
     await new Promise((r) => setTimeout(r, 80));
-    await new Promise<void>((resolve) => exec('xdotool key ctrl+v', () => resolve()));
+    if (isWayland) {
+      const tryWtype = await execAndCheck('wtype -M ctrl v -m ctrl');
+      if (!tryWtype) {
+        // ydotool key codes: 29=LeftCtrl, 47=V. Format: code:state (1=down, 0=up).
+        const tryYdotool = await execAndCheck('ydotool key 29:1 47:1 47:0 29:0');
+        if (!tryYdotool) {
+          console.warn('[inject] Wayland: neither wtype nor ydotool available — paste failed');
+        }
+      }
+    } else {
+      await new Promise<void>((resolve) => exec('xdotool key ctrl+v', (err) => {
+        if (err) console.warn('[inject] xdotool failed:', err.message);
+        resolve();
+      }));
+    }
   }
+}
+
+/** Run a shell command and resolve true on exit 0, false on any error. */
+function execAndCheck(cmd: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    exec(cmd, (err) => resolve(!err));
+  });
+}
+
+/**
+ * macOS-only: detect whether the app has been granted Accessibility permission.
+ * Without it, osascript runs but the keystroke is silently swallowed by the OS
+ * — the user sees nothing pasted with no visible error. We probe at boot and
+ * log a clear warning so the user knows to enable it in System Settings.
+ *
+ * Returns true if permission appears granted, false otherwise. The check is
+ * best-effort: if osascript itself fails we err on the side of "probably ok"
+ * to avoid false negatives.
+ */
+export async function checkMacAccessibility(): Promise<boolean> {
+  if (platform() !== 'darwin') return true;
+  return new Promise((resolve) => {
+    // `System Events` requires Accessibility. A no-op query (count processes)
+    // returns an error string with code -1719 or -25211 if denied.
+    exec(
+      `osascript -e 'tell application "System Events" to count processes'`,
+      { timeout: 3000 },
+      (err, _stdout, stderr) => {
+        const msg = (stderr || err?.message || '').toLowerCase();
+        const denied =
+          msg.includes('not authorized') ||
+          msg.includes('-1719') ||
+          msg.includes('-25211') ||
+          msg.includes('assistive');
+        if (denied) {
+          console.warn(
+            '[inject] macOS Accessibility permission NOT granted — paste will fail silently. ' +
+              'Enable VoiceInk in System Settings → Privacy & Security → Accessibility.',
+          );
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      },
+    );
+  });
 }
 
 /**

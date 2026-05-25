@@ -304,8 +304,9 @@ export function MainView() {
               <button
                 className={`record-btn ${recState === 'recording' ? 'recording' : ''} ${recState === 'processing' ? 'processing' : ''}`}
                 onClick={toggle}
-                disabled={recState === 'processing'}
-                title={recState === 'recording' ? 'Arrêter' : 'Démarrer'}
+                disabled={recState === 'processing' || !hasKey}
+                title={!hasKey ? 'Configurez la clé API Groq d\'abord' : (recState === 'recording' ? 'Arrêter' : 'Démarrer')}
+                aria-label={recState === 'recording' ? 'Arrêter l\'enregistrement' : recState === 'processing' ? 'Transcription en cours' : 'Démarrer l\'enregistrement'}
               >
                 {recState === 'processing' && <Loader2 size={38} className="animate-spin" />}
                 {recState === 'recording' && <Square size={34} fill="white" />}
@@ -356,7 +357,7 @@ export function MainView() {
                   </div>
                   <div className="text-white/40 text-xs mt-0.5">
                     {settings.interpreterEnabled
-                      ? <>Whisper Turbo → Groq llama → {settings.ttsProvider}</>
+                      ? <>Whisper Turbo → {settings.llmProvider === 'cerebras' ? 'Cerebras' : 'Groq llama'} → {settings.ttsProvider}</>
                       : <>Whisper Turbo sur Groq{settings.translateTo && <> + traduction</>}</>}
                   </div>
                 </>
@@ -371,10 +372,16 @@ export function MainView() {
               )}
             </div>
 
-            {/* Waveform — fluid width with a sensible max */}
-            <div className="wave w-full max-w-[min(60vw,360px)]">
+            {/* Waveform — only visible during recording to reduce ambient
+                visual noise when idle. Fades in/out via the wave wrapper
+                opacity. */}
+            <div
+              className="wave w-full max-w-[min(60vw,360px)] transition-opacity duration-200"
+              style={{ opacity: recState === 'recording' ? 1 : 0 }}
+              aria-hidden="true"
+            >
               {bars.map((h, i) => (
-                <div key={i} className="bar" style={{ height: `${h}px`, opacity: recState === 'recording' ? 1 : 0.25 }} />
+                <div key={i} className="bar" style={{ height: `${h}px` }} />
               ))}
             </div>
           </div>
@@ -410,8 +417,18 @@ export function MainView() {
           <div
             className="min-h-[68px] max-h-40 overflow-auto text-white/90 text-sm leading-relaxed select-text whitespace-pre-wrap"
             style={{ userSelect: 'text' }}
+            role="region"
+            aria-live="polite"
+            aria-label="Dernière transcription"
           >
-            {lastTranscript || <span className="text-white/30">Votre transcription apparaîtra ici…</span>}
+            {lastTranscript || (
+              <span className="text-white/30 flex items-center gap-2">
+                <Mic size={12} className="opacity-50" />
+                {hasKey
+                  ? 'Appuyez sur Espace ou cliquez sur le micro pour dicter.'
+                  : 'Configurez votre clé API Groq dans les paramètres pour commencer.'}
+              </span>
+            )}
           </div>
         </div>
 

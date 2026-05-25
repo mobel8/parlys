@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Settings, DEFAULT_SETTINGS, HistoryEntry } from '../../shared/types';
+import { Settings, DEFAULT_SETTINGS, HistoryEntry, ThemeId, ThemeEffects, THEME_ORDER, DEFAULT_EFFECTS } from '../../shared/types';
 
 export type View = 'main' | 'history' | 'settings';
 export type RecState = 'idle' | 'recording' | 'processing' | 'error';
@@ -43,13 +43,67 @@ function initialView(): View {
 }
 
 /**
- * Seed settings with the URL-hash density so the initial render matches
- * the window's actual size. Everything else stays at defaults until
- * `loadSettings()` finishes (~1 IPC round-trip, <10 ms).
+ * Pull a `key=value` segment out of the URL hash main process baked in
+ * via `loadRenderer()`. Returns the URL-decoded value or null when absent.
+ * Mirrors the parser used by the inline bootstrap in `index.html` so the
+ * store seed values are guaranteed to match what's already painted on screen.
+ */
+function pickHashSegment(key: string): string | null {
+  if (typeof location === 'undefined') return null;
+  const raw = (location.hash || '').replace('#', '');
+  const seg = raw.split(';').find((s) => s.startsWith(`${key}=`));
+  if (!seg) return null;
+  try { return decodeURIComponent(seg.slice(key.length + 1)); }
+  catch { return seg.slice(key.length + 1); }
+}
+
+/**
+ * Seed `themeId` from the URL hash so React's very first render holds the
+ * user's actual theme, not DEFAULT_SETTINGS.midnight. Without this hook,
+ * the App.tsx `useEffect[settings.themeId]` would fire on mount with
+ * 'midnight', overwrite the cyberpunk CSS vars the inline bootstrap
+ * already stamped, then loadSettings would resolve ~10 ms later and the
+ * effect would re-fire with 'cyberpunk' — visible as a one-frame flash
+ * of the default theme on every cold start and every density swap.
+ */
+function initialThemeId(): ThemeId {
+  const id = pickHashSegment('theme');
+  if (id && (THEME_ORDER as readonly string[]).includes(id)) return id as ThemeId;
+  return DEFAULT_SETTINGS.themeId;
+}
+
+/** Seed themeEffects from the URL hash (same anti-flash motivation). */
+function initialThemeEffects(): ThemeEffects {
+  const json = pickHashSegment('effects');
+  if (!json) return DEFAULT_SETTINGS.themeEffects;
+  try {
+    const parsed = JSON.parse(json) as Partial<ThemeEffects>;
+    return { ...DEFAULT_EFFECTS, ...parsed };
+  } catch { return DEFAULT_SETTINGS.themeEffects; }
+}
+
+/** Seed pillScale from `;pillscale=<n>`. */
+function initialPillScale(): number {
+  const v = pickHashSegment('pillscale');
+  if (!v) return DEFAULT_SETTINGS.pillScale;
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return DEFAULT_SETTINGS.pillScale;
+  return Math.min(1.5, Math.max(0.5, n));
+}
+
+/**
+ * Seed settings with everything the URL hash carries so the very first
+ * render produces a frame that already matches the user's persisted
+ * theme + pill scale. loadSettings() later returns the same values
+ * (they were the source for the hash), so the applyTheme useEffect
+ * is a no-op repaint — no theme flash on first render or density swap.
  */
 const INITIAL_SETTINGS: Settings = {
   ...DEFAULT_SETTINGS,
   density: initialDensity(),
+  themeId: initialThemeId(),
+  themeEffects: initialThemeEffects(),
+  pillScale: initialPillScale(),
 };
 
 interface State {

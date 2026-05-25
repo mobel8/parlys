@@ -204,7 +204,6 @@ export function CompactView() {
           onDoubleClick={expand}
           aria-hidden={!isTrueIdle}
           tabIndex={isTrueIdle ? 0 : -1}
-          title="Démarrer (Espace) · Double-clic = agrandir"
         >
           <span className="pill-idle-capsule">
             <span className="pill-idle-dot" />
@@ -219,11 +218,6 @@ export function CompactView() {
             onDoubleClick={expand}
             disabled={recState === 'processing'}
             tabIndex={isTrueIdle ? -1 : 0}
-            title={
-              recState === 'recording' ? 'Arrêter (Espace)' :
-              recState === 'processing' ? 'Transcription en cours…' :
-              'Démarrer (Espace) · Double-clic = agrandir'
-            }
           >
             {recState === 'processing' ? <Loader2 size={15} className="animate-spin" /> :
              recState === 'recording'  ? <Square size={11} fill="currentColor" /> :

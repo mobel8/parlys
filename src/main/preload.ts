@@ -183,6 +183,15 @@ const api = {
     return () => ipcRenderer.removeListener('voiceink:densitySwapOut', listener);
   },
 
+  // Main process broadcasts this whenever the user moves the pill-scale
+  // slider, so the compact renderer can re-stamp `--pill-scale` +
+  // `data-window` in the same frame as the native setBounds.
+  onPillScaleChanged: (cb: (scale: number) => void) => {
+    const listener = (_e: unknown, scale: number) => cb(scale);
+    ipcRenderer.on('voiceink:pillScaleChanged', listener);
+    return () => ipcRenderer.removeListener('voiceink:pillScaleChanged', listener);
+  },
+
   /**
    * Auto-updater API. See `src/main/updater.ts` for the state machine.
    * - `updaterCheck()` : fire a manual check (user clicked "Check for updates")

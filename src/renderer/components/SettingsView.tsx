@@ -1,15 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker, Globe } from 'lucide-react';
+import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker, Globe, Gauge, Sparkles, RotateCcw } from 'lucide-react';
 import { useStore } from '../stores/useStore';
-import { GROQ_STT_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES } from '../lib/constants';
+import { GROQ_STT_MODELS, CEREBRAS_LLM_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES, TTS_COST_HINTS } from '../lib/constants';
 import { Settings, TTSProvider } from '../../shared/types';
 import { AppearanceSection } from './AppearanceSection';
 import { ReplacementsSection } from './ReplacementsSection';
 import { VoicePicker } from './VoicePicker';
 import { AudioDevicePicker } from './AudioDevicePicker';
 import { SpeedSlider } from './SpeedSlider';
+import { AudioLevelMeter } from './AudioLevelMeter';
+import { useAudioCalibration } from '../hooks/useAudioCalibration';
 import { useT } from '../lib/i18n';
 import { SUPPORTED_UI_LANGUAGES, type UILanguage } from '../../shared/i18n';
+import { validateApiKeyFormat, KeyValidityBadge } from '../lib/api-key-validator';
+
+// Fallback thresholds matching useContinuousInterpreter constants. Used by
+// the level meter when the user hasn't calibrated yet.
+const VAD_FALLBACK_SOFT = 0.018;
+const VAD_FALLBACK_HARD = 0.032;
 
 export function SettingsView() {
   const { settings, updateSettings } = useStore();
@@ -126,6 +134,45 @@ export function SettingsView() {
           value={settings.alwaysOnTop}
           onChange={setAlwaysOnTop}
         />
+
+        {/* Pill size slider — proportional resize of the compact pill
+            window. Changes apply live: main resizes the BrowserWindow
+            to (176*scale, 52*scale) and the renderer stamps
+            `--pill-scale` for the CSS `zoom` rule. Icons, text, shadows
+            all scale together. Live setBounds on every onChange is
+            cheap on transparent+frameless windows. */}
+        <div className="border-t border-white/5 pt-4">
+          <div className="label mb-2 flex items-center justify-between">
+            <span>Taille de la pastille (compact)</span>
+            <span className="text-[11px] text-white/50 font-mono">
+              {((settings.pillScale ?? 1.0) * 100).toFixed(0)}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0.6}
+            max={1.2}
+            step={0.05}
+            value={settings.pillScale ?? 1.0}
+            onChange={(e) => save({ pillScale: parseFloat(e.target.value) })}
+            className="range-input w-full"
+            style={{ ['--pct' as any]: `${(((settings.pillScale ?? 1.0) - 0.6) / 0.6) * 100}%` }}
+          />
+          <div className="flex items-center justify-between text-[10px] text-white/40 mt-1">
+            <span>60%</span>
+            <button
+              type="button"
+              className="text-violet-300 hover:text-violet-200"
+              onClick={() => save({ pillScale: 1.0 })}
+            >
+              Réinitialiser à 100%
+            </button>
+            <span>120%</span>
+          </div>
+          <p className="text-[11px] text-white/40 mt-2">
+            Ajuste la taille de la pilule flottante (mode compact). Tout l'intérieur — icônes, texte, ombres — reste proportionnel.
+          </p>
+        </div>
       </section>
 
       {/* Replacements / custom dictionary */}
@@ -194,7 +241,15 @@ export function SettingsView() {
         </div>
 
         <div>
-          <div className="label mb-2">Clé API Groq</div>
+          <div className="label mb-2 flex items-center">
+            <span>Clé API Groq</span>
+            {/* [EXPERIMENT:refonte-v1] inline format check — `null` while
+                the field is empty so we don't shout "invalid" at the
+                user before they've started pasting. */}
+            <KeyValidityBadge
+              {...(settings.groqApiKey ? validateApiKeyFormat('groq', settings.groqApiKey) : { valid: null })}
+            />
+          </div>
           <div className="flex gap-2">
             <input
               type={showKey ? 'text' : 'password'}
@@ -210,6 +265,18 @@ export function SettingsView() {
           <p className="text-[11px] text-white/40 mt-2">Stockée localement. Jamais envoyée ailleurs que vers l'API Groq.</p>
         </div>
 
+        {/* HIGH-PRECISION TOGGLE — quick switch between turbo (default,
+            fast) and whisper-large-v3 (slower, ~1.5 WER points better
+            on noisy/multilingual input). The toggle and the dropdown
+            stay in sync — the dropdown is the source of truth, the
+            toggle is a fast path for the user. */}
+        <ToggleRow
+          label="Mode haute précision"
+          desc="Utilise whisper-large-v3 (vs turbo). +30 ms latence environ, +1-2 pts d'accuracy sur audio bruité ou multilingue."
+          value={settings.sttModel === 'whisper-large-v3'}
+          onChange={(v) => save({ sttModel: v ? 'whisper-large-v3' : 'whisper-large-v3-turbo' })}
+        />
+
         <div>
           <div className="label mb-2">Modèle Whisper</div>
           <select className="select" value={settings.sttModel} onChange={(e) => save({ sttModel: e.target.value })}>
@@ -223,7 +290,32 @@ export function SettingsView() {
             {SUPPORTED_LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
           </select>
         </div>
+
+        {/* CUSTOM STT PROMPT — appended to the built-in DEFAULT_PROMPTS in
+            whisper.ts to bias the model toward the user's specific
+            vocabulary. Free-form text, up to ~4096 chars (Whisper itself
+            uses only the last ~224 tokens). */}
+        <div>
+          <div className="label mb-2 flex items-center justify-between">
+            <span>Prompt personnalisé (vocabulaire)</span>
+            <span className="text-[10px] text-white/40 font-normal">{settings.sttPrompt.length} / ~1500 chars utiles</span>
+          </div>
+          <textarea
+            className="input font-mono !text-xs"
+            rows={3}
+            placeholder="Ex: Mon entreprise s'appelle Acme. Mes contacts sont Marc, Sophie, Yannick. Je travaille sur le projet Athena et l'API GraphQL."
+            value={settings.sttPrompt}
+            onChange={(e) => save({ sttPrompt: e.target.value })}
+          />
+          <p className="text-[11px] text-white/40 mt-2">
+            Quelques phrases dans votre langue avec les noms propres / termes techniques que vous dictez souvent.
+            Whisper imite le style et l'orthographe du prompt. Laisser vide pour utiliser les défauts intégrés.
+          </p>
+        </div>
       </section>
+
+      {/* SENSIBILITE MICRO (VAD) — auto-calibration de la détection vocale */}
+      <VadCalibrationSection />
 
       {/* Workflow */}
       <section id="sec-workflow" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
@@ -245,7 +337,10 @@ export function SettingsView() {
       {/* LLM */}
       <section id="sec-llm" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-lg">Post-traitement LLM</h2>
+          <div className="flex items-center gap-2">
+            <Brain size={16} className="accent-text" />
+            <h2 className="font-semibold text-lg">Post-traitement LLM</h2>
+          </div>
           <Switch value={settings.llmEnabled} onChange={(v) => save({ llmEnabled: v })} />
         </div>
         <p className="text-white/50 text-sm">Nettoie / reformule automatiquement selon le mode choisi. Désactivé en mode "Brut".</p>
@@ -254,8 +349,19 @@ export function SettingsView() {
           <div className="space-y-4 slide-up">
             <div>
               <div className="label mb-2">Fournisseur</div>
-              <select className="select" value={settings.llmProvider} onChange={(e) => save({ llmProvider: e.target.value as Settings['llmProvider'] })}>
+              <select className="select" value={settings.llmProvider} onChange={(e) => {
+                const next = e.target.value as Settings['llmProvider'];
+                const patch: Partial<Settings> = { llmProvider: next };
+                // Switching to Cerebras: if the current model is a non-Cerebras
+                // id (e.g. the Groq 70B default), seed the recommended default
+                // so the first request hits a model that actually exists.
+                if (next === 'cerebras' && !CEREBRAS_LLM_MODELS.some((m) => m.id === settings.llmModel)) {
+                  patch.llmModel = 'gpt-oss-120b';
+                }
+                save(patch);
+              }}>
                 <option value="groq">Groq (rapide, utilise la même clé)</option>
+                <option value="cerebras">Cerebras (ultra-rapide)</option>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="ollama">Ollama (local)</option>
@@ -263,15 +369,46 @@ export function SettingsView() {
             </div>
             <div>
               <div className="label mb-2">Modèle</div>
-              <input className="input font-mono" value={settings.llmModel} onChange={(e) => save({ llmModel: e.target.value })} />
+              {settings.llmProvider === 'cerebras' ? (
+                <select className="select font-mono" value={settings.llmModel} onChange={(e) => save({ llmModel: e.target.value })}>
+                  {CEREBRAS_LLM_MODELS.map((m) => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="input font-mono" value={settings.llmModel} onChange={(e) => save({ llmModel: e.target.value })} />
+              )}
             </div>
-            {(settings.llmProvider === 'openai' || settings.llmProvider === 'anthropic') && (
+            {(settings.llmProvider === 'openai' || settings.llmProvider === 'anthropic' || settings.llmProvider === 'cerebras') && (
               <div>
-                <div className="label mb-2">Clé API</div>
+                <div className="label mb-2 flex items-center justify-between">
+                  <span className="flex items-center">
+                    <span>Clé API{settings.llmProvider === 'cerebras' ? ' Cerebras' : ''}</span>
+                    {/* [EXPERIMENT:refonte-v1] LLM provider supplies its
+                        own key prefix — feed the active provider into the
+                        validator so switching providers re-checks. */}
+                    <KeyValidityBadge
+                      {...(settings.llmApiKey
+                        ? validateApiKeyFormat(settings.llmProvider, settings.llmApiKey)
+                        : { valid: null })}
+                    />
+                  </span>
+                  {settings.llmProvider === 'cerebras' && (
+                    <a href="https://cloud.cerebras.ai" target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
+                      Obtenir une clé <ExternalLink size={11} />
+                    </a>
+                  )}
+                </div>
                 <div className="flex gap-2">
                   <input
                     type={showLlmKey ? 'text' : 'password'}
                     className="input font-mono"
+                    placeholder={
+                      settings.llmProvider === 'cerebras' ? 'csk-...' :
+                      settings.llmProvider === 'openai' ? 'sk-proj-...' :
+                      settings.llmProvider === 'anthropic' ? 'sk-ant-...' :
+                      ''
+                    }
                     value={settings.llmApiKey}
                     onChange={(e) => save({ llmApiKey: e.target.value.trim() })}
                   />
@@ -396,9 +533,10 @@ const SETTINGS_SECTIONS: Array<{ id: string; icon: React.ComponentType<{ size?: 
   { id: 'sec-appearance',    icon: Palette,       label: 'Apparence' },
   { id: 'sec-interface',     icon: Layout,        label: 'Interface' },
   { id: 'sec-replacements',  icon: Book,          label: 'Dictionnaire' },
-  { id: 'sec-interpreter',   icon: Volume2,       label: 'Traducteur vocal' },
-  { id: 'sec-translation',   icon: Languages,     label: 'Traduction' },
   { id: 'sec-transcription', icon: Zap,           label: 'Transcription' },
+  { id: 'sec-vad',           icon: Gauge,         label: 'Sensibilité micro' },
+  { id: 'sec-translation',   icon: Languages,     label: 'Traduction' },
+  { id: 'sec-interpreter',   icon: Volume2,       label: 'Traducteur vocal' },
   { id: 'sec-workflow',      icon: WorkflowIcon,  label: 'Workflow' },
   { id: 'sec-llm',           icon: Brain,         label: 'Post-traitement' },
   { id: 'sec-shortcuts',     icon: Keyboard,      label: 'Raccourcis' },
@@ -478,6 +616,117 @@ function SettingsNav() {
         })}
       </nav>
     </div>
+  );
+}
+
+/**
+ * VAD calibration UI. Runs a 700 ms ambient-noise measurement and stores
+ * the derived thresholds on the global Settings. The two VAD-driven hooks
+ * (useContinuousInterpreter, useListener) consult these values at runtime;
+ * when unset (vadCalibrated=false) they fall back to their built-in
+ * conservative defaults.
+ *
+ * The AudioLevelMeter below the button gives instant feedback so the user
+ * can verify that their voice clears the hard threshold and that ambient
+ * noise stays under the soft threshold.
+ */
+function VadCalibrationSection() {
+  const { settings, updateSettings } = useStore();
+  const cal = useAudioCalibration();
+  const [calibError, setCalibError] = useState<string>('');
+  const soft = settings.vadCalibrated && settings.vadSoftThreshold > 0
+    ? settings.vadSoftThreshold : VAD_FALLBACK_SOFT;
+  const hard = settings.vadCalibrated && settings.vadHardThreshold > 0
+    ? settings.vadHardThreshold : VAD_FALLBACK_HARD;
+
+  const run = async () => {
+    setCalibError('');
+    try {
+      const r = await cal.calibrate(undefined, 700);
+      await updateSettings({
+        vadCalibrated: true,
+        vadNoiseFloor: r.noiseFloor,
+        vadSoftThreshold: r.softThreshold,
+        vadHardThreshold: r.hardThreshold,
+        vadSilenceEnd: r.silenceEnd,
+      });
+    } catch (e: any) {
+      // Inline error feedback — was alert() which is jarring + blocks the UI.
+      setCalibError(e?.message || String(e));
+    }
+  };
+
+  const reset = async () => {
+    await updateSettings({
+      vadCalibrated: false,
+      vadNoiseFloor: 0,
+      vadSoftThreshold: 0,
+      vadHardThreshold: 0,
+      vadSilenceEnd: 0,
+    });
+  };
+
+  return (
+    <section id="sec-vad" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
+      <div className="flex items-center gap-2">
+        <Gauge size={16} className="accent-text" />
+        <h2 className="font-semibold text-lg">Sensibilité micro (VAD)</h2>
+      </div>
+      <p className="text-white/55 text-sm">
+        La détection vocale (Voice Activity Detection) décide quand votre voix commence et s'arrête.
+        Mal calibrée, elle coupe le début de vos phrases ou enregistre votre clavier.
+        Cliquez sur « Calibrer » pendant 1 seconde en silence — VoiceInk en déduit les bons seuils.
+      </p>
+
+      <div className="flex items-center gap-2">
+        <button
+          className="btn btn-primary"
+          onClick={run}
+          disabled={cal.calibrating}
+        >
+          <Sparkles size={14} />
+          {cal.calibrating ? 'Mesure en cours…' : 'Calibrer mon micro (700 ms)'}
+        </button>
+        {settings.vadCalibrated && (
+          <button className="btn btn-ghost" onClick={reset} title="Revenir aux seuils par défaut">
+            <RotateCcw size={12} /> Réinitialiser
+          </button>
+        )}
+        {settings.vadCalibrated && (
+          <div className="ml-auto text-[11px] text-emerald-300/80 font-mono">
+            Calibré · bruit ambient = {settings.vadNoiseFloor.toFixed(4)}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <div className="label mb-2">Niveau micro en direct</div>
+        <AudioLevelMeter softThreshold={soft} hardThreshold={hard} />
+      </div>
+
+      {settings.vadCalibrated && (
+        <div className="grid grid-cols-3 gap-3 text-xs">
+          <div className="card !p-3">
+            <div className="text-white/45 text-[10px] uppercase tracking-wider">Seuil soft</div>
+            <div className="font-mono mt-1">{settings.vadSoftThreshold.toFixed(4)}</div>
+          </div>
+          <div className="card !p-3">
+            <div className="text-white/45 text-[10px] uppercase tracking-wider">Seuil hard</div>
+            <div className="font-mono mt-1">{settings.vadHardThreshold.toFixed(4)}</div>
+          </div>
+          <div className="card !p-3">
+            <div className="text-white/45 text-[10px] uppercase tracking-wider">Fin silence</div>
+            <div className="font-mono mt-1">{settings.vadSilenceEnd.toFixed(4)}</div>
+          </div>
+        </div>
+      )}
+
+      {calibError && (
+        <div className="text-[11px] text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-3 py-2" role="alert">
+          ⚠ Calibration impossible : {calibError}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -723,6 +972,8 @@ function InterpreterSection() {
                       {active && <Check size={12} className="text-emerald-300 ml-auto" />}
                     </div>
                     <p className="text-[11px] text-white/50 mt-1">{p.desc}</p>
+                    {/* [EXPERIMENT:refonte-v1] Cost hint badge */}
+                    <p className="text-[10px] text-white/35 mt-1">{TTS_COST_HINTS[p.id]}</p>
                   </button>
                 );
               })}
@@ -759,7 +1010,16 @@ function InterpreterSection() {
           {/* API key for the selected provider */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <div className="label">Clé API {provider.label}</div>
+              <div className="label flex items-center">
+                <span>Clé API {provider.label}</span>
+                {/* [EXPERIMENT:refonte-v1] provider id matches the key in
+                    the validator's pattern table (cartesia, elevenlabs). */}
+                <KeyValidityBadge
+                  {...(currentApiKey
+                    ? validateApiKeyFormat(providerId, currentApiKey)
+                    : { valid: null })}
+                />
+              </div>
               <a
                 href={provider.keyUrl}
                 target="_blank"

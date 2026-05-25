@@ -43,11 +43,20 @@ export interface UseListenerHandle {
   clearSegments: () => void;
 }
 
-// Looser than interpreter — remote audio is often quieter.
-const SPEAK_START_RMS = 0.025;
-const SILENCE_END_RMS = 0.015;
-const SILENCE_HOLD_MS = 700;
-const MIN_PHRASE_MS = 500;
+// Two-stage VAD: soft trigger opens the recorder optimistically so the
+// first ~100 ms of speech isn't clipped by MediaRecorder spin-up; if RMS
+// doesn't reach the hard threshold within CONFIRM_WINDOW_MS we discard
+// silently (background noise, door, etc.). Looser than the interpreter
+// thresholds because remote VoIP audio is typically quieter.
+const SPEAK_SOFT_RMS = 0.012;
+const SPEAK_HARD_RMS = 0.024;
+const CONFIRM_WINDOW_MS = 300;
+const SILENCE_END_RMS = 0.013;
+// 900 ms tolerates the natural pause between a question and its answer
+// in a phone conversation. 700 ms was cutting the second half off.
+const SILENCE_HOLD_MS = 900;
+// Reduced from 500 ms so short interjections ("oui", "yeah", "OK") survive.
+const MIN_PHRASE_MS = 280;
 const MAX_PHRASE_MS = 15000;
 
 export function useListener(opts: UseListenerOptions): UseListenerHandle {
@@ -61,6 +70,9 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
   const phraseStartAtRef = useRef<number>(0);
   const silenceSinceRef = useRef<number>(0);
   const stoppingRef = useRef<boolean>(false);
+  // VAD state machine, mirrors useContinuousInterpreter.
+  const phraseStateRef = useRef<'idle' | 'preroll' | 'speaking'>('idle');
+  const prerollOpenedAtRef = useRef<number>(0);
 
   // Keep latest opts in a ref so our useCallbacks don't re-bind often.
   const optsRef = useRef(opts);
@@ -130,7 +142,9 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
     ];
     const mime = candidates.find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)) || '';
     mimeRef.current = mime || 'audio/webm';
-    const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    const rec = mime
+      ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 128000 })
+      : new MediaRecorder(stream);
     chunksRef.current = [];
     rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
     rec.onstop = () => {
@@ -153,6 +167,9 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
   const stop = useCallback(() => {
     setIsActive(false);
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    // Reset state so a half-armed pre-roll doesn't ship junk on the next start.
+    phraseStateRef.current = 'idle';
+    stoppingRef.current = false;
     try { recRef.current?.stop(); } catch { /* ignore */ }
     recRef.current = null;
     try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
@@ -166,9 +183,13 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
   const start = useCallback(async () => {
     try {
       const deviceId = optsRef.current.inputDeviceId();
+      // For the listener pipeline the input is typically a loopback / VB-Cable
+      // device — keeping echoCancellation OFF avoids destroying remote-VoIP
+      // audio that has already been processed by the caller's stack. AGC OFF
+      // for the same reason it's off elsewhere: Whisper accuracy.
       const audio: MediaTrackConstraints = deviceId
-        ? { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false }
-        : { echoCancellation: false, noiseSuppression: false };
+        ? { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false };
       const stream = await navigator.mediaDevices.getUserMedia({ audio });
       streamRef.current = stream;
 
@@ -197,17 +218,34 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
 
         const rec = recRef.current;
         const now = Date.now();
-        if (rec && rec.state === 'inactive' && rms > SPEAK_START_RMS) {
-          // Start capturing a new phrase.
+        const state = phraseStateRef.current;
+
+        if (rec && rec.state === 'inactive' && state === 'idle' && rms > SPEAK_SOFT_RMS) {
+          // Soft trigger — open the recorder optimistically (pre-roll capture).
           phraseStartAtRef.current = now;
           silenceSinceRef.current = 0;
+          prerollOpenedAtRef.current = now;
+          phraseStateRef.current = 'preroll';
           try { rec.start(100); } catch { /* already started */ }
-        } else if (rec && rec.state === 'recording') {
+        } else if (rec && rec.state === 'recording' && state === 'preroll') {
+          if (rms > SPEAK_HARD_RMS) {
+            // Confirmed real speech.
+            phraseStateRef.current = 'speaking';
+            silenceSinceRef.current = 0;
+          } else if (now - prerollOpenedAtRef.current > CONFIRM_WINDOW_MS) {
+            // Soft trigger never confirmed — discard silently.
+            stoppingRef.current = false;
+            try { rec.stop(); } catch { /* ignore */ }
+            phraseStateRef.current = 'idle';
+          }
+        } else if (rec && rec.state === 'recording' && state === 'speaking') {
           if (rms < SILENCE_END_RMS) {
             if (silenceSinceRef.current === 0) silenceSinceRef.current = now;
             else if (now - silenceSinceRef.current >= SILENCE_HOLD_MS && (now - phraseStartAtRef.current) >= MIN_PHRASE_MS) {
               // End of phrase — ship it.
               stoppingRef.current = true;
+              phraseStateRef.current = 'idle';
+              try { rec.requestData(); } catch { /* ignore */ }
               try { rec.stop(); } catch { /* ignore */ }
             }
           } else {
@@ -216,6 +254,8 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
           // Hard cap: ship even if still speaking.
           if ((now - phraseStartAtRef.current) >= MAX_PHRASE_MS) {
             stoppingRef.current = true;
+            phraseStateRef.current = 'idle';
+            try { rec.requestData(); } catch { /* ignore */ }
             try { rec.stop(); } catch { /* ignore */ }
           }
         }
@@ -234,16 +274,3 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
   return { start, stop, isActive, level, segments, clearSegments };
 }
 
-// Local variant retained for symmetry with the old API — new callers
-// should import `blobToBase64` from '../lib/blob' instead. Kept private
-// to avoid breaking any out-of-tree import during the migration.
-async function blobToBase64Local(blob: Blob): Promise<string> {
-  const ab = await blob.arrayBuffer();
-  const bytes = new Uint8Array(ab);
-  let bin = '';
-  const CHUNK = 0x8000;
-  for (let i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)) as number[]);
-  }
-  return btoa(bin);
-}

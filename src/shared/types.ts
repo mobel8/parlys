@@ -153,7 +153,7 @@ export interface Settings {
   translateTo: string;    // '' = no translation, else ISO code
   mode: Mode;
   llmEnabled: boolean;
-  llmProvider: 'groq' | 'openai' | 'anthropic' | 'ollama';
+  llmProvider: 'groq' | 'openai' | 'anthropic' | 'ollama' | 'cerebras';
   llmModel: string;
   llmApiKey: string;
   translateModel: string; // Groq model used for translation
@@ -266,6 +266,43 @@ export interface Settings {
    * 'audio'          = also synthesize TTS of the translation.
    */
   listenerMode: 'text' | 'audio';
+
+  // --- Whisper accuracy tuning ------------------------------------------
+  /**
+   * Optional user-supplied vocabulary biasing prompt appended to the
+   * built-in DEFAULT_PROMPTS in `src/main/engines/whisper.ts`. Up to ~224
+   * tokens; should be written in the same language as the audio (e.g. a
+   * sample French sentence including the user's frequent technical names).
+   * Empty = use built-in defaults only.
+   */
+  sttPrompt: string;
+
+  // --- VAD calibration (Voice Activity Detection thresholds) ------------
+  /**
+   * True once the user has run "Calibrer mon micro" in Settings. When
+   * true, the renderer hooks read the threshold values below instead of
+   * the hardcoded fallbacks in useContinuousInterpreter / useListener.
+   * Default false → preserves the historical behaviour for users who
+   * never touch Settings.
+   */
+  vadCalibrated: boolean;
+  /** Measured ambient noise RMS floor (p95 over a 700ms sample). */
+  vadNoiseFloor: number;
+  /** Soft trigger — opens the recorder optimistically (≥ 2× noiseFloor). */
+  vadSoftThreshold: number;
+  /** Hard trigger — confirms real speech (≥ 3.5× noiseFloor). */
+  vadHardThreshold: number;
+  /** Silence-end threshold for ending a phrase. */
+  vadSilenceEnd: number;
+
+  /**
+   * Proportional resize of the compact pill window. 1.0 = stock 176×52.
+   * The renderer applies `zoom: var(--pill-scale)` and main resizes the
+   * BrowserWindow to (176*scale, 52*scale) atomically — chrome, icons,
+   * text, shadows all scale together. Range clamped to [0.5, 1.5] in
+   * validate.ts (UI exposes 0.6 – 1.2 as the usable band).
+   */
+  pillScale: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -323,6 +360,13 @@ export const DEFAULT_SETTINGS: Settings = {
   listenerInputDeviceId: '',
   listenerTargetLang: 'fr',
   listenerMode: 'text',
+  sttPrompt: '',
+  vadCalibrated: false,
+  vadNoiseFloor: 0,
+  vadSoftThreshold: 0,
+  vadHardThreshold: 0,
+  vadSilenceEnd: 0,
+  pillScale: 1.0,
 };
 
 export interface HistoryEntry {

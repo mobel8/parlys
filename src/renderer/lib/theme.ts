@@ -56,9 +56,28 @@ function luminance(hex: string): number {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }
 
+// Cheap memo over the last call. The store's useEffect re-fires whenever
+// `settings.themeEffects` gets a fresh object identity (which loadSettings
+// does on every IPC return) even though the values are identical — we'd
+// otherwise re-write 30+ CSS vars on every settings round-trip. With this
+// memo, the second call returns immediately if the resolved theme id +
+// effects payload haven't actually changed. Critical for the "no flash
+// on cold start" path: the inline bootstrap stamps cyberpunk → React's
+// first applyTheme(cyberpunk, ...) is a no-op → loadSettings returns →
+// useEffect re-runs with the same values → short-circuits here.
+let lastAppliedThemeId: string | null = null;
+let lastAppliedEffectsKey: string | null = null;
+function effectsKey(e: ThemeEffects): string {
+  return `${e.glowIntensity}|${e.blurStrength}|${+e.animateAura}|${+e.auraEnabled}|${+e.shimmer}|${+e.grain}`;
+}
+
 export function applyTheme(themeOrId: Theme | string | undefined, effects: ThemeEffects): void {
   if (typeof document === 'undefined') return;
   const theme = typeof themeOrId === 'string' || !themeOrId ? getTheme(themeOrId as any) : themeOrId;
+  const key = effectsKey(effects);
+  if (theme.id === lastAppliedThemeId && key === lastAppliedEffectsKey) return;
+  lastAppliedThemeId = theme.id;
+  lastAppliedEffectsKey = key;
   const { palette } = theme;
   const root = document.documentElement;
 
