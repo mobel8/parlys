@@ -5,6 +5,7 @@ import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settin
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
 import { postProcess, translateText, streamTranslate, prewarmGroq } from './engines/llm';
+import { cleanupTranscription } from './services/text-cleanup';
 import { streamTTS } from './engines/tts';
 import { listVoices } from './engines/tts/catalog';
 import { prewarmCartesia } from './engines/tts/cartesia';
@@ -203,13 +204,24 @@ export function registerIpc(): void {
       const t2 = Date.now();
       console.log(`[transcribe] groq whisper: ${t2 - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'})`);
 
-      // Custom dictionary (replacements) — applied to the RAW Whisper output
-      // before anything else so translation / LLM see the corrected text.
-      let rawText = r.text;
+      // Hallucination + filler scrubbing — runs in EVERY mode (incl. raw)
+      // because the LLM modes are the only thing that used to strip
+      // "euh"/"um" and we don't want raw mode to be the broken one. The
+      // hallucination filter also catches "Merci d'avoir regardé"-style
+      // YouTube tails Whisper emits on trailing silence.
+      const cleaned = cleanupTranscription(r.text, r.language || settings.language);
+      if (cleaned !== r.text) {
+        console.log(`[transcribe] cleanup: ${r.text.length}→${cleaned.length}ch (fillers/hallucinations)`);
+      }
+
+      // Custom dictionary (replacements) — applied to the cleaned Whisper
+      // output before anything else so translation / LLM see the corrected
+      // text.
+      let rawText = cleaned;
       if (settings.replacementsEnabled !== false && settings.replacements?.length) {
         const rs = Date.now();
         rawText = applyReplacements(rawText, settings.replacements);
-        if (rawText !== r.text) {
+        if (rawText !== cleaned) {
           console.log(`[transcribe] applied ${settings.replacements.length} replacement rule(s) in ${Date.now() - rs}ms`);
         }
       }
@@ -351,7 +363,10 @@ export function registerIpc(): void {
       }
       console.log(`[interpret] whisper: ${Date.now() - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'}, hint=${hintLang || 'auto'})`);
 
-      let rawText = r.text;
+      // Strip fillers + Whisper hallucinations before translation so the
+      // target language doesn't get a translated "Merci d'avoir regardé".
+      const cleaned = cleanupTranscription(r.text, r.language || hintLang);
+      let rawText = cleaned;
       if (settings.replacementsEnabled !== false && settings.replacements?.length) {
         rawText = applyReplacements(rawText, settings.replacements);
       }
@@ -633,9 +648,12 @@ export function registerIpc(): void {
       if (wh.language && typeof wh.language === 'string') {
         LANG_HINTS.listener = wh.language.toLowerCase();
       }
+      // Same cleanup as the dictation/interpret pipelines so the listener
+      // transcript stays free of "Merci d'avoir regardé" and "euh".
+      const cleaned = cleanupTranscription(wh.text, wh.language || listenerHint);
       const text = (settings.replacementsEnabled && settings.replacements?.length)
-        ? applyReplacements(wh.text, settings.replacements)
-        : wh.text;
+        ? applyReplacements(cleaned, settings.replacements)
+        : cleaned;
       if (!text.trim()) {
         return { ok: true, text: '', sourceLang: wh.language };
       }

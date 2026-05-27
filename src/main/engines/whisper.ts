@@ -9,34 +9,84 @@ const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
 /**
  * Default vocabulary-biasing prompts per language.
  *
- * Whisper's `prompt` parameter (up to 224 tokens) makes the model imitate the
- * style + vocabulary of the prompt — it's NOT an instruction. So the prompt
- * must be a sample "exemplary transcription" in the target language, with
- * proper casing, punctuation and accents, plus the technical/brand names the
- * user is likely to dictate. Whisper then biases toward those spellings:
- * "VoiceInk" stays "VoiceInk" instead of slipping to "Voice Inc.", "API"
- * stays uppercase, French accents render correctly, etc.
+ * IMPORTANT — we deliberately do NOT pack a wordlist here.
  *
- * Note: prompt MUST be in the same language as the audio, otherwise it
- * degrades accuracy (Whisper code-switches to the prompt's language).
+ * Earlier versions of this file shipped a comma-separated technical
+ * glossary ("VoiceInk, API, MCP, LLM, GPT, Claude, Anthropic, Groq…").
+ * That was actively harmful: on trailing silence Whisper falls back on
+ * the prompt's distribution to "continue" the utterance, and when the
+ * distribution is a wordlist the model emits stuff like "VoiceInk API
+ * MCP Groq" out of thin air. We saw this hallucination in production
+ * on short clips with ~500 ms of post-speech silence.
+ *
+ * The fix is to keep the prompt as ONE natural sentence that demonstrates
+ * style (punctuation, capitalisation, accents) without giving the model
+ * a vocabulary list to draw from. Users who want brand-name biasing can
+ * still set `settings.sttPrompt` — and they should write it as a
+ * sentence, not a wordlist, for the same reason.
+ *
+ * Prompt MUST be in the same language as the audio, otherwise Whisper
+ * code-switches to the prompt's language.
  */
 const DEFAULT_PROMPTS: Record<string, string> = {
-  fr:
-    "Transcription française précise avec ponctuation et accents corrects (é, è, à, ç, ù, ï). " +
-    "Vocabulaire technique courant : VoiceInk, API, MCP, LLM, GPT, Claude, Anthropic, OpenAI, " +
-    "Groq, Whisper, TypeScript, JavaScript, Node.js, React, Vite, Electron, GitHub, VS Code, " +
-    "prompt, token, endpoint, webhook, frontend, backend, npm, async, await, callback, JSON, " +
-    "Chrome DevTools, console, IPC, render, build, debug, refactor.",
-  en:
-    "Accurate English transcription with correct punctuation and capitalisation. " +
-    "Common technical vocabulary: VoiceInk, API, MCP, LLM, GPT, Claude, Anthropic, OpenAI, " +
-    "Groq, Whisper, TypeScript, JavaScript, Node.js, React, Vite, Electron, GitHub, VS Code, " +
-    "prompt, token, endpoint, webhook, frontend, backend, npm, async, await, callback, JSON.",
+  fr: "Voici une dictée en français avec ponctuation, majuscules et accents corrects.",
+  en: "Here is dictation in English with correct punctuation and capitalisation.",
+  es: "Esta es una dictación en español con puntuación y mayúsculas correctas.",
+  de: "Hier ist ein Diktat auf Deutsch mit korrekter Zeichensetzung und Großschreibung.",
+  it: "Questa è una dettatura in italiano con punteggiatura e maiuscole corrette.",
+  pt: "Esta é uma ditado em português com pontuação e maiúsculas corretas.",
 };
 
 export interface WhisperResult {
   text: string;
   language?: string;
+}
+
+/**
+ * One segment of a Groq verbose_json response. Mirrors the OpenAI
+ * /audio/transcriptions schema — fields can be missing if the model
+ * didn't compute them, in which case we conservatively keep the
+ * segment.
+ */
+interface VerboseSegment {
+  id?: number;
+  start?: number;
+  end?: number;
+  text?: string;
+  /** Higher = model more confident this is silence/noise, not speech. */
+  no_speech_prob?: number;
+  /** Lower (more negative) = less confident in the decoded tokens. */
+  avg_logprob?: number;
+  /** Higher = more repetitive output (Whisper's classic loop hallucination). */
+  compression_ratio?: number;
+}
+
+/**
+ * Confidence thresholds for the verbose_json hallucination filter.
+ *
+ * Values come from the OpenAI Whisper paper §4 ("Robustness via
+ * decoding heuristics") but slightly loosened so we keep faint but
+ * real speech instead of clipping it. False-negative on a real word
+ * is much worse for a dictation app than a stray "Merci d'avoir
+ * regardé" that gets handed off to the regex scrubber downstream.
+ *
+ *   - no_speech_prob > 0.7    → segment is probably pure silence/noise
+ *   - avg_logprob    < -1.2   → model very uncertain about the tokens
+ *   - compression_ratio > 2.6 → text is repeating itself (looped)
+ *
+ * A segment is filtered if AT LEAST ONE threshold is breached. We
+ * count the filter as fail-open: if the field is missing (older API
+ * version, Groq decided to omit it) we keep the segment.
+ */
+const NO_SPEECH_PROB_MAX = 0.7;
+const AVG_LOGPROB_MIN = -1.2;
+const COMPRESSION_RATIO_MAX = 2.6;
+
+function isLowConfidence(seg: VerboseSegment): boolean {
+  if (typeof seg.no_speech_prob === 'number' && seg.no_speech_prob > NO_SPEECH_PROB_MAX) return true;
+  if (typeof seg.avg_logprob === 'number' && seg.avg_logprob < AVG_LOGPROB_MIN) return true;
+  if (typeof seg.compression_ratio === 'number' && seg.compression_ratio > COMPRESSION_RATIO_MAX) return true;
+  return false;
 }
 
 export async function transcribeWithGroq(
@@ -65,7 +115,14 @@ export async function transcribeWithGroq(
     const blob = new Blob([ab], { type: mimeType });
     form.append('file', blob, filename);
     form.append('model', settings.sttModel || 'whisper-large-v3-turbo');
-    form.append('response_format', 'json');
+    // verbose_json gives us per-segment no_speech_prob / avg_logprob /
+    // compression_ratio — the three signals we use to drop hallucinated
+    // segments. Cost is negligible (~5% bigger response payload).
+    form.append('response_format', 'verbose_json');
+    // temperature=0 = pure greedy decoding, no sampling fallback. This is
+    // the SAFER setting against hallucinations; the OpenAI default of
+    // temperature-fallback can decode louder hallucinations on a silent
+    // input because it re-samples until logprob comes up.
     form.append('temperature', '0');
     if (settings.language && settings.language !== 'auto') {
       form.append('language', settings.language);
@@ -94,13 +151,24 @@ export async function transcribeWithGroq(
   for (let attempt = 0; attempt <= backoff.length; attempt++) {
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${settings.groqApiKey}` },
+      headers: {
+        Authorization: `Bearer ${settings.groqApiKey}`,
+        // Keep the TLS socket pooled so the next call (translate, LLM,
+        // a second dictation in quick succession) reuses it. Saves the
+        // 40-100 ms TCP+TLS handshake on every cold call.
+        Connection: 'keep-alive',
+      },
       body: buildForm() as any,
     });
 
     if (res.ok) {
-      const data = (await res.json()) as { text: string; language?: string };
-      return { text: (data.text || '').trim(), language: data.language };
+      const data = (await res.json()) as {
+        text?: string;
+        language?: string;
+        segments?: VerboseSegment[];
+      };
+      const cleanText = applySegmentFilter(data);
+      return { text: cleanText, language: data.language };
     }
 
     const body = await res.text().catch(() => '');
@@ -117,6 +185,56 @@ export async function transcribeWithGroq(
   }
   // Unreachable (the loop either returns or throws), but satisfies the type checker.
   throw new Error('Groq transcription failed after retries');
+}
+
+/**
+ * Build the final text from a verbose_json response, dropping any
+ * segment whose confidence signals flag it as a hallucination
+ * (`isLowConfidence`).
+ *
+ * Falls back to the response's `text` field if segments are absent
+ * (older API versions) or if every segment was filtered (we don't
+ * want to return an empty string when the model produced *something*
+ * confident enough — that case is handled by callers via the regex
+ * hallucination scrubber).
+ */
+function applySegmentFilter(data: {
+  text?: string;
+  segments?: VerboseSegment[];
+}): string {
+  const fallback = (data.text || '').trim();
+  if (!Array.isArray(data.segments) || data.segments.length === 0) {
+    return fallback;
+  }
+  const kept: string[] = [];
+  let droppedCount = 0;
+  for (const seg of data.segments) {
+    if (!seg || typeof seg.text !== 'string') continue;
+    if (isLowConfidence(seg)) {
+      droppedCount += 1;
+      console.log(
+        `[whisper] dropped low-confidence segment ` +
+        `no_speech=${seg.no_speech_prob?.toFixed(3) ?? '?'} ` +
+        `logprob=${seg.avg_logprob?.toFixed(3) ?? '?'} ` +
+        `cr=${seg.compression_ratio?.toFixed(2) ?? '?'} ` +
+        `→ "${seg.text.slice(0, 60).trim()}"`,
+      );
+      continue;
+    }
+    kept.push(seg.text);
+  }
+  if (kept.length === 0) {
+    // Every segment was flagged — fall back to the full text. Downstream
+    // hallucination regex will likely scrub the obvious bits ("Merci
+    // d'avoir regardé"), and if NOTHING survives the user simply gets
+    // an empty result, which is correct: their audio was unintelligible.
+    if (droppedCount > 0) {
+      console.warn(`[whisper] every segment (${droppedCount}) was low-confidence; returning full text for regex scrubber`);
+    }
+    return fallback;
+  }
+  // Joining with a single space matches Whisper's own segment concat.
+  return kept.join('').replace(/\s+/g, ' ').trim();
 }
 
 function mimeToExt(mime: string): string {

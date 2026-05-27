@@ -22,6 +22,23 @@ export interface Win32Api {
   GetForegroundWindow: () => any;                 // returns HWND pointer
   SetForegroundWindow: (hwnd: bigint) => number;  // returns BOOL
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
+  /**
+   * Modern keyboard input API. We use it to type characters via
+   * KEYEVENTF_UNICODE which works inside terminal TUI apps (Claude Code,
+   * vim, tmux, etc.) that consume Ctrl+V as a raw key event without
+   * mapping it to clipboard-paste.
+   *
+   * Accepts an array of INPUT records (built via koffi struct helpers)
+   * and the size of one record. Returns the number of events
+   * successfully inserted into the input stream.
+   */
+  SendInput: (nInputs: number, pInputs: any, cbSize: number) => number;
+  INPUT_KEYBOARD: number;
+  /** Build a KEYBDINPUT-shaped INPUT struct (typed as `any` because the
+   *  koffi-allocated buffer is opaque to TS). */
+  makeKeyInput: (wVk: number, wScan: number, dwFlags: number) => any;
+  /** Size in bytes of one INPUT record — needed by SendInput. */
+  inputStructSize: number;
   BringWindowToTop: (hwnd: bigint) => number;
   IsWindow: (hwnd: bigint) => number;
   IsIconic: (hwnd: bigint) => number;             // non-zero if minimized
@@ -73,12 +90,70 @@ export function getWin32(): Win32Api | null {
     const kernel32 = koffi.load('kernel32.dll');
     const GetCurrentThreadId = kernel32.func('uint32_t __stdcall GetCurrentThreadId()');
 
+    // SendInput + INPUT/KEYBDINPUT structs.
+    //
+    // The native INPUT union has three branches (mouse/keyboard/hardware).
+    // We only ever build keyboard records, so we declare a fixed-layout
+    // struct that matches INPUT-as-KEYBDINPUT on 64-bit Windows:
+    //
+    //   DWORD     type;        // 4 B  + 4 B padding
+    //   WORD      wVk;         // 2 B
+    //   WORD      wScan;       // 2 B
+    //   DWORD     dwFlags;     // 4 B
+    //   DWORD     time;        // 4 B
+    //   ULONG_PTR dwExtraInfo; // 8 B
+    //   BYTE      pad[8];      // 8 B  — pad up to MOUSEINPUT footprint
+    //                                   (the union is sized to the largest
+    //                                    branch; on x64 INPUT is 40 bytes)
+    //
+    // We pin sizeof(INPUT)=40 by hand because koffi's sizeof() of our
+    // smaller KEYBDINPUT-only struct would mis-report it and SendInput
+    // would treat the next record as a partial.
+    // Lay out an INPUT-as-keyboard with EXPLICIT padding so the struct
+    // koffi materialises is byte-for-byte the 40-byte `INPUT` Win32 expects
+    // on x64. Any size mismatch with the `cbSize` arg to SendInput would
+    // cause every event after the first to read garbage padding bytes.
+    const KEYBDINPUT = koffi.struct('KEYBDINPUT_pad', {
+      type:        'uint32',     // 0..3
+      _pad0:       'uint32',     // 4..7    align union member to 8
+      wVk:         'uint16',     // 8..9
+      wScan:       'uint16',     // 10..11
+      dwFlags:     'uint32',     // 12..15
+      time:        'uint32',     // 16..19
+      _pad1:       'uint32',     // 20..23  align dwExtraInfo to 8
+      dwExtraInfo: 'uintptr_t',  // 24..31
+      _pad2:       'uint64',     // 32..39  pad up to sizeof(INPUT)
+    });
+    const INPUT_STRUCT_SIZE_X64 = 40; // sizeof(INPUT) on x64
+    // Declare SendInput with a pointer-to-struct param so koffi can marshal
+    // a JS array of `KEYBDINPUT_pad`-shaped objects directly. With `void*`
+    // koffi would have no way to compute the layout.
+    const SendInput = user32.func(
+      'uint32_t __stdcall SendInput(uint32_t cInputs, KEYBDINPUT_pad *pInputs, int cbSize)',
+    );
+    const INPUT_KEYBOARD = 1;
+    const makeKeyInput = (wVk: number, wScan: number, dwFlags: number): any => ({
+      type: INPUT_KEYBOARD,
+      _pad0: 0,
+      wVk,
+      wScan,
+      dwFlags,
+      time: 0,
+      _pad1: 0,
+      dwExtraInfo: 0n,
+      _pad2: 0n,
+    });
+
     api = {
       koffi,
       user32,
       GetForegroundWindow,
       SetForegroundWindow,
       keybd_event,
+      SendInput,
+      INPUT_KEYBOARD,
+      makeKeyInput,
+      inputStructSize: INPUT_STRUCT_SIZE_X64,
       BringWindowToTop,
       IsWindow,
       IsIconic,
@@ -87,6 +162,8 @@ export function getWin32(): Win32Api | null {
       GetWindowThreadProcessId,
       GetCurrentThreadId,
     };
+    // Stash the struct constructor so injection.ts can build arrays of it.
+    (api as any)._KEYBDINPUT = KEYBDINPUT;
     loaded = true;
     console.log('[win32] koffi loaded — native user32 bindings active');
     return api;
@@ -113,9 +190,15 @@ export function pointerToHwnd(ptr: any, w: Win32Api): string | null {
   }
 }
 
-/** Virtual key codes we need for paste (Ctrl+V). */
+/** Virtual key codes + KEYEVENTF flags. */
 export const VK = {
   CONTROL: 0x11,
   V: 0x56,
+  /** Indicates a key release. Without this flag a key event is a press. */
   KEYEVENTF_KEYUP: 0x0002,
+  /** wScan carries a Unicode codepoint instead of a hardware scancode.
+   *  Used to "type" arbitrary characters into apps that read WM_CHAR or
+   *  ReadConsoleInput key records — works inside terminal TUI apps that
+   *  ignore Ctrl+V. wVk MUST be 0 when this flag is set. */
+  KEYEVENTF_UNICODE: 0x0004,
 } as const;

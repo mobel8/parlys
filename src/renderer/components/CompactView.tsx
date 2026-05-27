@@ -99,6 +99,11 @@ export function CompactView() {
     if (current === 'processing') return;
     setLastError('');
     setRecState('recording');
+    // Fire TLS warm-up for Groq the moment recording begins — by the
+    // time the user stops speaking the HTTPS socket is hot, shaving
+    // 40-80 ms off the Whisper round-trip. The compact pill flow was
+    // missing this, MainView already had it.
+    try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
     await recorder.start();
   };
 

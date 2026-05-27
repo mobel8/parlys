@@ -224,6 +224,7 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     ['listenerTargetLang', 16],
     ['listenerMode', 16],
     ['sttPrompt', 4096],
+    ['injectMode', 16],
   ];
   for (const [k, max] of stringFields) {
     const v = clampString(p[k as string], max);
@@ -302,6 +303,12 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
   // Enforce listenerMode enum.
   if (out.listenerMode && out.listenerMode !== 'text' && out.listenerMode !== 'audio') {
     delete out.listenerMode;
+  }
+  // Enforce injectMode enum — only 'paste' and 'type' are valid. A
+  // corrupted value would otherwise reach injection.ts and silently fall
+  // back to paste (the safer default).
+  if ((out as any).injectMode && (out as any).injectMode !== 'paste' && (out as any).injectMode !== 'type') {
+    delete (out as any).injectMode;
   }
 
   // Enforce llmProvider enum — a forged / corrupted value would otherwise

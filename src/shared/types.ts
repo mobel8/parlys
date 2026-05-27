@@ -159,6 +159,23 @@ export interface Settings {
   translateModel: string; // Groq model used for translation
   autoInject: boolean;
   autoCopy: boolean;
+  /**
+   * How VoiceInk delivers the dictated text into the focused app:
+   *
+   *   - 'paste' (default) — write to clipboard then synthesise Ctrl+V.
+   *     Fast (≈1 keystroke regardless of length) and works in every
+   *     regular text field. BUT terminal TUI apps in raw-keyboard mode
+   *     (Claude Code, vim, tmux, REPLs…) read keystrokes via
+   *     `ReadConsoleInput` and never translate Ctrl+V to a clipboard
+   *     paste, so nothing visible happens there.
+   *
+   *   - 'type' — type each character via `SendInput KEYEVENTF_UNICODE`.
+   *     ~50 µs per char of OS overhead (a 200-char dictation lands in
+   *     ~10 ms — imperceptible). Works in EVERY input target including
+   *     TUI apps. Pick this if you dictate into terminals or editors
+   *     and the paste mode silently swallows your text.
+   */
+  injectMode: 'paste' | 'type';
   shortcutToggle: string; // Electron accelerator
   shortcutPTT: string;    // Push-to-talk accelerator (press-and-hold)
   pttEnabled: boolean;    // Enable push-to-talk shortcut
@@ -318,6 +335,7 @@ export const DEFAULT_SETTINGS: Settings = {
   translateModel: 'llama-3.1-8b-instant',
   autoInject: true,
   autoCopy: true,
+  injectMode: 'paste',
   shortcutToggle: 'CommandOrControl+Shift+Space',
   shortcutPTT: 'CommandOrControl+Shift+V',
   shortcutInterpreter: 'CommandOrControl+Shift+I',
