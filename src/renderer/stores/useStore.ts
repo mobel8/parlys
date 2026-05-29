@@ -169,7 +169,17 @@ export const useStore = create<State>()((set, get) => ({
   setSettingsFromBroadcast: (next) => {
     // Trust main's payload but keep the density locked to this
     // window's URL hash — see loadSettings() comment for why.
-    set({ settings: { ...next, density: initialDensity() } });
+    const merged = { ...next, density: initialDensity() };
+    // Bail if nothing actually changed. Every broadcast otherwise creates a
+    // fresh settings object (and fresh themeEffects identity), re-running the
+    // applyTheme effect and re-rendering every useStore() subscriber even for
+    // an unrelated flip (e.g. the interpreter hotkey). A cheap deep-equal
+    // (settings is small + JSON-serialisable) skips that churn.
+    const cur = get().settings;
+    try {
+      if (JSON.stringify(cur) === JSON.stringify(merged)) return;
+    } catch { /* fall through to set on any serialise hiccup */ }
+    set({ settings: merged });
   },
 
   history: [],

@@ -122,6 +122,7 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
         text: res.text,
         translated: res.translated,
         sourceLang: res.sourceLang,
+        translateFailed: res.translateFailed,
         speaking: false,
       } : s));
     } catch (err: any) {

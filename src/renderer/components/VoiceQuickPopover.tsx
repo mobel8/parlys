@@ -4,6 +4,7 @@ import { useStore } from '../stores/useStore';
 import { TTS_PROVIDERS } from '../lib/constants';
 import { VoicePicker } from './VoicePicker';
 import { SpeedSlider } from './SpeedSlider';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import type { TTSProvider } from '../../shared/types';
 
 /**
@@ -28,6 +29,8 @@ export function VoiceQuickPopover() {
   const { settings, updateSettings } = useStore();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Trap Tab focus inside the popover while open; restore to trigger on close.
+  const panelRef = useFocusTrap(open);
 
   const providerId: TTSProvider = (settings.ttsProvider as TTSProvider) || 'cartesia';
   const provider = TTS_PROVIDERS.find((p) => p.id === providerId) ?? TTS_PROVIDERS[0];
@@ -67,6 +70,9 @@ export function VoiceQuickPopover() {
         type="button"
         onClick={(e) => { e.preventDefault(); setOpen((o) => !o); }}
         title="Changer la voix et la vitesse"
+        aria-label="Changer la voix et la vitesse"
+        aria-haspopup="dialog"
+        aria-expanded={open}
         className="inline-flex items-center justify-center w-5 h-5 rounded hover:bg-white/10 text-white/55 hover:text-white transition"
       >
         <Settings2 size={12} />
@@ -74,6 +80,10 @@ export function VoiceQuickPopover() {
 
       {open && (
         <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Réglages voix et vitesse"
           className="absolute right-0 top-full mt-2 z-50 w-[360px] rounded-2xl border border-white/10 bg-[var(--bg-1)] shadow-2xl p-3 space-y-3 slide-up"
           // Prevent a click inside from bubbling to the chip <label>
           // which would re-toggle whatever the label is bound to.
@@ -89,6 +99,7 @@ export function VoiceQuickPopover() {
               onClick={() => setOpen(false)}
               className="w-5 h-5 rounded hover:bg-white/10 text-white/55 hover:text-white flex items-center justify-center"
               title="Fermer"
+              aria-label="Fermer"
             >
               <X size={11} />
             </button>

@@ -430,6 +430,18 @@ export interface TranscribeResponse {
   translatedTo?: string;
   durationMs: number;
   error?: string;
+  /**
+   * True when the main process already injected (pasted) the final text
+   * itself — the renderer must then SKIP its own injectText() call to avoid
+   * a double paste. Lets the paste fire without a renderer round-trip.
+   */
+  injected?: boolean;
+  /** LLM post-processing (the chosen mode) failed and degraded to raw text. */
+  postProcessFailed?: boolean;
+  /** Translation failed and degraded to the SOURCE-language text. */
+  translateFailed?: boolean;
+  /** Whisper produced no intelligible speech (everything scrubbed). */
+  empty?: boolean;
 }
 
 /**
@@ -519,6 +531,8 @@ export interface ListenerSegment {
   audioMs: number;
   /** True while the main process is still synthesizing TTS for this segment. */
   speaking?: boolean;
+  /** Translation failed → `translated` is the untranslated source text. */
+  translateFailed?: boolean;
 }
 
 export const IPC = {

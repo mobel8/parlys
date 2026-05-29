@@ -110,7 +110,13 @@ export function ReplacementsSection() {
           <Book size={16} className="accent-text" />
           <h2 className="font-semibold text-lg">Dictionnaire personnalisé</h2>
         </div>
-        <div className={`switch ${settings.replacementsEnabled !== false ? 'on' : ''}`}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.replacementsEnabled !== false}
+          aria-label="Activer le dictionnaire personnalisé"
+          className={`switch ${settings.replacementsEnabled !== false ? 'on' : ''}`}
+          style={{ border: 0, padding: 0 }}
           onClick={() => updateSettings({ replacementsEnabled: !(settings.replacementsEnabled !== false) })}
         />
       </div>
@@ -171,8 +177,13 @@ export function ReplacementsSection() {
         <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
           {list.map((r) => (
             <div key={r.id} className={`card !p-2.5 flex items-center gap-2 ${r.enabled ? '' : 'opacity-50'}`}>
-              <div
+              <button
+                type="button"
+                role="switch"
+                aria-checked={r.enabled}
+                aria-label={`Activer la règle ${r.from}`}
                 className={`switch !w-9 !h-5 shrink-0 ${r.enabled ? 'on' : ''}`}
+                style={{ border: 0, padding: 0 }}
                 onClick={() => patch(r.id, { enabled: !r.enabled })}
               />
               <input

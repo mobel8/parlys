@@ -90,6 +90,19 @@ export default function App() {
     return () => { try { unsub?.(); } catch { /* ignore */ } };
   }, []);
 
+  // Single source of truth: keep the rendered --pill-scale in lockstep with
+  // the store value, regardless of which path delivered the change (dedicated
+  // IPC above, settings broadcast, or loadSettings). Without this, a settings
+  // update that doesn't fire the dedicated pillScaleChanged event would leave
+  // the DOM zoom and the store diverged (notably during a density-swap overlap
+  // where main's w<400 heuristic can mis-target the resize).
+  useEffect(() => {
+    if (document.documentElement.dataset.density !== 'compact') return;
+    const s = Math.min(1.5, Math.max(0.5, settings.pillScale ?? 1));
+    document.documentElement.style.setProperty('--pill-scale', String(s));
+    document.documentElement.setAttribute('data-window', 'pill');
+  }, [settings.pillScale]);
+
   const compact = settings.density === 'compact';
 
   // Pill mode: just the floating widget, no frame/titlebar/sidebar/aurora.

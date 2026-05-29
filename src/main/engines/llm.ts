@@ -60,6 +60,7 @@ export async function postProcess(
   mode: Mode,
   settings: Settings,
   languageHint?: string,
+  onFail?: () => void,
 ): Promise<string> {
   if (mode === 'raw' || !text.trim()) return text;
   if (!isLlmAvailable(settings)) {
@@ -67,12 +68,14 @@ export async function postProcess(
     console.warn(`[llm] mode=${mode} requested but no key configured for provider=${provider}.` +
       ` Returning raw Whisper text. Fix: set settings.groqApiKey (Groq / default) or` +
       ` settings.llmApiKey (OpenAI / Anthropic / Cerebras), or switch provider to 'ollama' for local.`);
+    onFail?.();
     return text;
   }
 
   const template = MODE_PROMPTS[mode];
   if (!template) {
     console.warn(`[llm] unknown mode ${mode}, returning raw text`);
+    onFail?.();
     return text;
   }
 
@@ -105,6 +108,7 @@ export async function postProcess(
     return out;
   } catch (err: any) {
     console.error('[llm] postProcess failed, returning raw text:', err?.message || err);
+    onFail?.();
     return text;
   }
 }
@@ -132,8 +136,12 @@ async function callOpenAICompat(
 
   // Retry on 429 (rate limit) and 5xx with exponential backoff. When
   // Groq embeds a "try again in Xs" hint we honour it instead of our
-  // own schedule — usually faster.
-  const backoff = [1000, 2000, 4000];
+  // own schedule — usually faster. First step is 350 ms (not 1 s) to keep
+  // the interactive post-process snappy on a transient blip.
+  // On terminal failure we THROW (instead of silently returning the input):
+  // postProcess() catches it, falls back to raw text, AND signals onFail so
+  // the UI can tell the user the chosen mode didn't apply.
+  const backoff = [350, 1200, 3000];
   for (let attempt = 0; attempt <= backoff.length; attempt++) {
     const res = await fetch(url, {
       method: 'POST',
@@ -148,7 +156,7 @@ async function callOpenAICompat(
       const out = data?.choices?.[0]?.message?.content;
       if (typeof out !== 'string' || !out.trim()) {
         console.warn(`[llm:${label}] empty / non-string response:`, JSON.stringify(data).slice(0, 200));
-        return text;
+        throw new Error(`${label} empty response`);
       }
       return stripCodeFences(out.trim());
     }
@@ -157,7 +165,7 @@ async function callOpenAICompat(
     const errBody = await res.text().catch(() => '');
     if (!retryable || attempt === backoff.length) {
       console.warn(`[llm:${label}] HTTP ${res.status}: ${errBody.slice(0, 300)}`);
-      return text;
+      throw new Error(`${label} HTTP ${res.status}`);
     }
 
     // Parse optional "try again in <N>s" hint.
@@ -167,7 +175,7 @@ async function callOpenAICompat(
     console.warn(`[llm:${label}] HTTP ${res.status} — retry ${attempt + 1}/${backoff.length} in ${wait}ms`);
     await new Promise((r) => setTimeout(r, wait));
   }
-  return text;
+  throw new Error(`${label} failed after retries`);
 }
 
 async function callOllama(text: string, system: string, settings: Settings): Promise<string> {
@@ -292,6 +300,7 @@ export async function translateText(
   targetCode: string,
   settings: Settings,
   sourceCode?: string,
+  onFail?: () => void,
 ): Promise<string> {
   if (!text.trim() || !targetCode) return text;
   if (sourceCode && sourceCode.toLowerCase() === targetCode.toLowerCase()) return text;
@@ -304,6 +313,7 @@ export async function translateText(
   const { url, apiKey, model } = translateBackend(settings);
   if (!apiKey) {
     console.warn('[translate] no API key for the active provider — skipping translation');
+    onFail?.();
     return text;
   }
 
@@ -332,13 +342,17 @@ export async function translateText(
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.warn(`[translate] HTTP ${res.status}: ${body.slice(0, 200)}`);
+      onFail?.(); // fell back to SOURCE text → wrong language, must be surfaced
       return text;
     }
     const data = (await res.json()) as any;
     const out = data?.choices?.[0]?.message?.content;
-    return typeof out === 'string' && out.trim() ? out.trim() : text;
+    if (typeof out === 'string' && out.trim()) return out.trim();
+    onFail?.();
+    return text;
   } catch (err: any) {
     console.warn('[translate] error:', err?.message || err);
+    onFail?.();
     return text;
   }
 }
@@ -374,6 +388,45 @@ export function prewarmGroq(apiKey: string): void {
     method: 'GET',
     headers: { Authorization: `Bearer ${apiKey}`, Connection: 'keep-alive' },
   }).then((r) => r.arrayBuffer()).catch(() => { /* best-effort */ });
+}
+
+/**
+ * Warm the TLS socket for the configured LLM POST-PROCESS backend. The
+ * dictation post-process and translation run on whatever provider the user
+ * picked — often Cerebras (a DIFFERENT origin than Groq). prewarmGroq only
+ * warms api.groq.com, so without this the post-process call on the
+ * transcribe→paste critical path eats a cold TCP+TLS handshake. Fire this
+ * alongside prewarmGroq at record-start. Best-effort, result discarded.
+ */
+export function prewarmLlm(settings: Settings): void {
+  const provider = settings.llmProvider || 'groq';
+  if (provider === 'groq') {
+    // Same origin as Whisper — prewarmGroq already covers it.
+    prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+    return;
+  }
+  if (provider === 'ollama') {
+    fetch('http://localhost:11434/api/tags', { method: 'GET' })
+      .then((r) => r.arrayBuffer()).catch(() => { /* best-effort */ });
+    return;
+  }
+  const key = settings.llmApiKey;
+  if (!key) return;
+  if (provider === 'cerebras') {
+    fetch('https://api.cerebras.ai/v1/models', {
+      method: 'GET', headers: { Authorization: `Bearer ${key}`, Connection: 'keep-alive' },
+    }).then((r) => r.arrayBuffer()).catch(() => { /* best-effort */ });
+  } else if (provider === 'openai') {
+    fetch('https://api.openai.com/v1/models', {
+      method: 'GET', headers: { Authorization: `Bearer ${key}`, Connection: 'keep-alive' },
+    }).then((r) => r.arrayBuffer()).catch(() => { /* best-effort */ });
+  } else if (provider === 'anthropic') {
+    // Anthropic has no public GET; a HEAD to the messages origin still opens
+    // the TLS session (401 is fine — we only want the pooled socket).
+    fetch('https://api.anthropic.com/v1/models', {
+      method: 'GET', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', Connection: 'keep-alive' },
+    }).then((r) => r.arrayBuffer()).catch(() => { /* best-effort */ });
+  }
 }
 
 export async function* streamTranslate(

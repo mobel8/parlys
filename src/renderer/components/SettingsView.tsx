@@ -188,7 +188,7 @@ export function SettingsView() {
       {/* Translation */}
       <section id="sec-translation" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center gap-2">
-          <Languages size={16} className="text-fuchsia-300" />
+          <Languages size={16} className="accent-text" />
           <h2 className="font-semibold text-lg">Traduction automatique</h2>
         </div>
         <p className="text-white/50 text-sm">
@@ -234,7 +234,10 @@ export function SettingsView() {
       {/* Groq API */}
       <section id="sec-transcription" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-lg">Moteur de transcription</h2>
+          <div className="flex items-center gap-2">
+            <Zap size={16} className="accent-text" />
+            <h2 className="font-semibold text-lg">Moteur de transcription</h2>
+          </div>
           <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="text-xs text-violet-300 hover:text-violet-200 inline-flex items-center gap-1">
             Obtenir une clé <ExternalLink size={12} />
           </a>
@@ -319,7 +322,10 @@ export function SettingsView() {
 
       {/* Workflow */}
       <section id="sec-workflow" className="glass rounded-2xl p-6 space-y-4 scroll-mt-20">
-        <h2 className="font-semibold text-lg">Workflow</h2>
+        <div className="flex items-center gap-2">
+          <WorkflowIcon size={16} className="accent-text" />
+          <h2 className="font-semibold text-lg">Workflow</h2>
+        </div>
         <ToggleRow
           label="Copie automatique"
           desc="Copier la transcription dans le presse-papier."
@@ -530,13 +536,17 @@ export function SettingsView() {
  * above, in the same top-to-bottom order that greets the user.
  */
 const SETTINGS_SECTIONS: Array<{ id: string; icon: React.ComponentType<{ size?: number | string }>; label: string }> = [
+  // Order MUST match the section render order in the return() below, since
+  // the IntersectionObserver highlights by visual position. DOM order:
+  // appearance → interface → replacements → interpreter → translation →
+  // transcription → vad → workflow → llm → shortcuts → system.
   { id: 'sec-appearance',    icon: Palette,       label: 'Apparence' },
   { id: 'sec-interface',     icon: Layout,        label: 'Interface' },
   { id: 'sec-replacements',  icon: Book,          label: 'Dictionnaire' },
+  { id: 'sec-interpreter',   icon: Volume2,       label: 'Traducteur vocal' },
+  { id: 'sec-translation',   icon: Languages,     label: 'Traduction' },
   { id: 'sec-transcription', icon: Zap,           label: 'Transcription' },
   { id: 'sec-vad',           icon: Gauge,         label: 'Sensibilité micro' },
-  { id: 'sec-translation',   icon: Languages,     label: 'Traduction' },
-  { id: 'sec-interpreter',   icon: Volume2,       label: 'Traducteur vocal' },
   { id: 'sec-workflow',      icon: WorkflowIcon,  label: 'Workflow' },
   { id: 'sec-llm',           icon: Brain,         label: 'Post-traitement' },
   { id: 'sec-shortcuts',     icon: Keyboard,      label: 'Raccourcis' },
@@ -592,6 +602,7 @@ function SettingsNav() {
               className={`
                 group relative w-8 h-8 rounded-full flex items-center justify-center
                 transition-all duration-200 ease-out outline-none
+                focus-visible:ring-2 focus-visible:ring-violet-400/70
                 ${isActive
                   ? 'bg-violet-500/25 text-violet-100 ring-1 ring-violet-400/40 shadow-[0_0_10px_-2px_rgba(167,139,250,0.5)]'
                   : 'text-white/50 hover:text-white hover:bg-white/10'}
@@ -672,7 +683,7 @@ function VadCalibrationSection() {
         <Gauge size={16} className="accent-text" />
         <h2 className="font-semibold text-lg">Sensibilité micro (VAD)</h2>
       </div>
-      <p className="text-white/55 text-sm">
+      <p className="text-white/50 text-sm">
         La détection vocale (Voice Activity Detection) décide quand votre voix commence et s'arrête.
         Mal calibrée, elle coupe le début de vos phrases ou enregistre votre clavier.
         Cliquez sur « Calibrer » pendant 1 seconde en silence — VoiceInk en déduit les bons seuils.
@@ -701,7 +712,7 @@ function VadCalibrationSection() {
 
       <div>
         <div className="label mb-2">Niveau micro en direct</div>
-        <AudioLevelMeter softThreshold={soft} hardThreshold={hard} />
+        <AudioLevelMeter softThreshold={soft} hardThreshold={hard} paused={cal.calibrating} />
       </div>
 
       {settings.vadCalibrated && (
@@ -745,9 +756,21 @@ function ToggleRow({ label, desc, value, onChange, icon }: { label: string; desc
   );
 }
 
-function Switch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+function Switch({ value, onChange, label }: { value: boolean; onChange: (v: boolean) => void; label?: string }) {
+  // A real <button> so it's keyboard-focusable and Space/Enter-activatable
+  // for free. A plain <div role="switch"> announced its state to screen
+  // readers but could never be toggled without a mouse. type=button avoids
+  // accidental form submits; the .switch CSS sizes it via width/height.
   return (
-    <div className={`switch ${value ? 'on' : ''}`} onClick={() => onChange(!value)} role="switch" aria-checked={value} />
+    <button
+      type="button"
+      className={`switch ${value ? 'on' : ''}`}
+      onClick={() => onChange(!value)}
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
+      style={{ border: 0, padding: 0 }}
+    />
   );
 }
 

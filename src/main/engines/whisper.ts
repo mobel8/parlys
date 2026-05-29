@@ -147,7 +147,11 @@ export async function transcribeWithGroq(
   // Non-retryable 4xx (bad key, bad audio) still throw immediately. NOTE: a
   // per-DAY quota exhaustion also returns 429 but won't clear in seconds —
   // retries will be exhausted and it throws, as before (see OpenAI/local STT).
-  const backoff = [1000, 2000, 4000];
+  // First retry at 350 ms (not 1 s) so a transient single-minute 429 blip
+  // clears near-invisibly on the interactive dictation path. A genuine
+  // sustained rate-limit that supplies a "try again in Xs" hint is still
+  // honoured via Math.max below.
+  const backoff = [350, 1200, 3000];
   for (let attempt = 0; attempt <= backoff.length; attempt++) {
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
@@ -168,13 +172,21 @@ export async function transcribeWithGroq(
         segments?: VerboseSegment[];
       };
       const cleanText = applySegmentFilter(data);
-      return { text: cleanText, language: data.language };
+      // Normalise Whisper's language to an ISO-639-1 code at the source.
+      // Groq returns the full name ("french", "english"), which then leaked
+      // into history badges ("FRENCH"), CSV/MD exports, and byLanguage stats.
+      // Storing the code keeps every downstream consumer consistent.
+      return { text: cleanText, language: normalizeLangToISO(data.language) };
     }
 
     const body = await res.text().catch(() => '');
     const retryable = res.status === 429 || (res.status >= 500 && res.status < 600);
     if (!retryable || attempt === backoff.length) {
-      throw new Error(`Groq ${res.status} ${res.statusText} — ${body.slice(0, 300)}`);
+      // Map known statuses to actionable French messages. The raw provider
+      // body stays in the console for diagnostics, but the user sees
+      // something they can act on instead of "Groq 429 Too Many R…".
+      console.error(`[whisper] Groq ${res.status} ${res.statusText} — ${body.slice(0, 300)}`);
+      throw new Error(friendlyGroqError(res.status, res.statusText));
     }
 
     let wait = backoff[attempt];
@@ -185,6 +197,42 @@ export async function transcribeWithGroq(
   }
   // Unreachable (the loop either returns or throws), but satisfies the type checker.
   throw new Error('Groq transcription failed after retries');
+}
+
+/** Map a Groq/Whisper status to an actionable French error message. */
+function friendlyGroqError(status: number, statusText: string): string {
+  if (status === 401 || status === 403) {
+    return 'Clé API Groq invalide ou révoquée. Vérifiez-la dans Paramètres.';
+  }
+  if (status === 429) {
+    return 'Limite de requêtes Groq atteinte (quota). Réessayez plus tard ou utilisez une autre clé.';
+  }
+  if (status === 413) {
+    return 'Audio trop long pour Groq. Dictez des segments plus courts.';
+  }
+  if (status >= 500) {
+    return 'Service Groq temporairement indisponible. Réessayez dans un instant.';
+  }
+  return `Erreur Groq (${status} ${statusText}). Réessayez ou vérifiez votre clé dans Paramètres.`;
+}
+
+/**
+ * Whisper/Groq returns the full English language NAME ("french"). Map it to
+ * an ISO-639-1 code so badges/exports/stats stay short and consistent. Pass
+ * through anything already short (≤3 chars = already a code) or unknown.
+ */
+const LANG_NAME_TO_ISO: Record<string, string> = {
+  french: 'fr', english: 'en', spanish: 'es', german: 'de', italian: 'it',
+  portuguese: 'pt', dutch: 'nl', polish: 'pl', russian: 'ru', japanese: 'ja',
+  chinese: 'zh', korean: 'ko', arabic: 'ar', turkish: 'tr', hindi: 'hi',
+  swedish: 'sv', norwegian: 'no', danish: 'da', finnish: 'fi', greek: 'el',
+  czech: 'cs', romanian: 'ro', hungarian: 'hu', ukrainian: 'uk', catalan: 'ca',
+};
+function normalizeLangToISO(lang?: string): string | undefined {
+  if (!lang) return lang;
+  const l = lang.trim().toLowerCase();
+  if (l.length <= 3) return l; // already an ISO code
+  return LANG_NAME_TO_ISO[l] || l;
 }
 
 /**

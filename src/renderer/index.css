@@ -69,9 +69,12 @@
 }
 
 /* [EXPERIMENT:refonte-v1] Motion helpers (new components opt in) */
-.motion-micro  { transition: all var(--motion-micro)  var(--easing-snappy); }
-.motion-normal { transition: all var(--motion-normal) var(--easing-fluid); }
-.motion-slow   { transition: all var(--motion-slow)   var(--easing-fluid); }
+/* Explicit property lists — never `transition: all` (it animates layout/paint
+   props like width/height/top and forces the engine to watch every property).
+   These helpers cover the composited props + the common surface props. */
+.motion-micro  { transition: opacity var(--motion-micro)  var(--easing-snappy), transform var(--motion-micro)  var(--easing-snappy), background-color var(--motion-micro) var(--easing-snappy), border-color var(--motion-micro) var(--easing-snappy), color var(--motion-micro) var(--easing-snappy); }
+.motion-normal { transition: opacity var(--motion-normal) var(--easing-fluid), transform var(--motion-normal) var(--easing-fluid); }
+.motion-slow   { transition: opacity var(--motion-slow)   var(--easing-fluid), transform var(--motion-slow)   var(--easing-fluid); }
 
 /* [EXPERIMENT:refonte-v1] Typography tokens (px-fixed, density-aware).
    Coexists with Tailwind text-* utilities; `t-*` namespace is distinct. */
@@ -452,6 +455,9 @@ html[data-shimmer="1"] .glass-strong:hover::before {
 }
 .btn:hover { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); }
 .btn:active { transform: translateY(1px); }
+/* Keyboard focus ring — matches .record-btn / .picker-chip / .range-input.
+   The dark-glass UI swallows the thin UA default outline, so make it explicit. */
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(var(--accent-1-rgb), 0.45); }
 .btn-primary {
   background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
   border-color: transparent;
@@ -567,6 +573,13 @@ select option:hover {
   font-size: 12px;
   cursor: pointer;
   padding-right: 14px;
+  /* Cap width so a long selected label ("Pas de traduction", "日本語") makes
+     the <select> ellipsize instead of growing the chip and wrapping the whole
+     header row onto a second line on narrow windows. */
+  max-width: clamp(80px, 12vw, 150px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   /* Custom chevron so the select arrow matches the theme instead of using
      the default OS caret (often light gray on dark). */
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10' fill='none'><path d='M2 3.5L5 6.5L8 3.5' stroke='rgba(255,255,255,0.55)' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
@@ -679,9 +692,15 @@ select option:hover {
 }
 .wave .bar {
   width: 3px;
+  /* Full-height bar scaled via transform (GPU-composited) instead of
+     animating `height` (which relayouts + repaints every frame for 48 bars
+     inside a backdrop-filter panel — jank on integrated GPUs). The JS feeds a
+     0..1 scaleY. transform-origin keeps growth anchored at the centre. */
+  height: 100%;
+  transform-origin: center;
   background: linear-gradient(to top, var(--accent-1), var(--accent-2));
   border-radius: 3px;
-  transition: height 0.08s ease-out;
+  transition: transform 0.08s ease-out;
 }
 .density-compact .wave { height: 32px; gap: 2px; }
 .density-compact .wave .bar { width: 2.5px; border-radius: 2px; }
@@ -758,6 +777,12 @@ select option:hover {
   cursor: pointer;
   transition: background 0.2s;
   flex-shrink: 0;
+}
+/* Keyboard focus ring — the Switch is now a real <button> so it can receive
+   focus; without this rule the focus would be invisible. */
+.switch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--accent-1);
 }
 .switch::after {
   content: '';
@@ -983,12 +1008,15 @@ select option:hover {
     0 6px 22px -6px rgba(0, 0, 0, 0.55),
     0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* Do NOT transition backdrop-filter — interpolating a gaussian blur
+     recomputes the blurred backdrop every frame, one of the most expensive
+     compositing ops, and on a transparent window + iGPU it stutters on
+     hover. The blur snaps between states (imperceptible, the glass
+     background opacity still cross-fades). Only animate cheap paints. */
   transition:
     background 0.22s ease,
     border-color 0.22s ease,
-    box-shadow 0.22s ease,
-    backdrop-filter 0.22s ease,
-    -webkit-backdrop-filter 0.22s ease;
+    box-shadow 0.22s ease;
   position: relative;
   cursor: grab;
 }
@@ -1315,10 +1343,14 @@ select option:hover {
 .pill-wave-bar {
   display: block;
   width: 2px;
-  min-height: 2px;
+  /* Fixed height + scaleY (composited) — animating `height` here relayouts
+     the transparent pill and can invalidate its composited layer / flip
+     :hover (documented hazard). The JS feeds a 0..1 scaleY. */
+  height: 18px;
+  transform-origin: center;
   background: linear-gradient(to top, rgba(251, 113, 133, 0.85), #f43f5e);
   border-radius: 2px;
-  transition: height 0.08s ease-out;
+  transition: transform 0.08s ease-out;
 }
 
 /* Expand (maximise) button on the right */

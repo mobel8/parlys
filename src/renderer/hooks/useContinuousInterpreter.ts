@@ -213,7 +213,10 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       const blob = new Blob(chunksRef.current, { type });
       chunksRef.current = [];
       recorderRef.current = null;
-      if (stoppingForShipRef.current && blob.size > 1000) {
+      // Don't build a player / ship after the hook was torn down (stop()
+      // sets activeRef=false). A late onstop firing post-unmount would
+      // otherwise spawn an InterpretPlayer/MediaSource on a dead component.
+      if (stoppingForShipRef.current && blob.size > 1000 && activeRef.current) {
         stoppingForShipRef.current = false;
         shipBlob(blob, type);
       }
@@ -227,18 +230,27 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
 
   const start = useCallback(async () => {
     if (activeRef.current) return;
+    // Acquire the mic BEFORE flipping activeRef. If getUserMedia throws
+    // (permission denied / no device), activeRef must stay false — otherwise
+    // the next click hits the `if (activeRef.current) return` guard and
+    // silently no-ops forever (the app appears bricked with zero feedback).
+    // See useAudioRecorder for the DSP-off rationale.
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          channelCount: 1,
+          sampleRate: 48000,
+        },
+      });
+    } catch (err) {
+      activeRef.current = false;
+      throw err; // surfaced by MainView.toggle()'s catch
+    }
     activeRef.current = true;
-    // See useAudioRecorder for the rationale on disabling all browser DSP
-    // (AGC, noiseSuppression, echoCancellation) for Whisper accuracy.
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        channelCount: 1,
-        sampleRate: 48000,
-      },
-    });
     streamRef.current = stream;
 
     const ctx = new AudioContext();
@@ -325,6 +337,9 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       }
       try { rec.stop(); } catch { /* ignore */ }
     }
+    // Defensively null the recorder ref rather than relying solely on the
+    // async onstop (which may not fire once the tracks are cut below).
+    recorderRef.current = null;
     phraseStateRef.current = 'idle';
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
@@ -335,6 +350,10 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
       ctxRef.current = null;
     }
     analyserRef.current = null;
+    // Tear down every queued/playing InterpretPlayer (MediaSource + <audio> +
+    // MP3 buffers). Without this they linger until GC and a player can keep
+    // speaking after capture stopped.
+    try { queueRef.current?.disposeAll(); } catch { /* ignore */ }
   }, []);
 
   // Tidy up on unmount.

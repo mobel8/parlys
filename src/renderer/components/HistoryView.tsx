@@ -6,6 +6,26 @@ import { HistoryEntry, Mode } from '../../shared/types';
 
 type DateFilter = 'all' | 'today' | '7d' | '30d' | 'pinned';
 
+// New entries store an ISO code (normalised in whisper.ts), but legacy
+// entries may hold the full Whisper name ("french"). Normalise to a short
+// uppercase code for the badge so widths stay consistent.
+const LANG_NAME_TO_ISO: Record<string, string> = {
+  french: 'fr', english: 'en', spanish: 'es', german: 'de', italian: 'it',
+  portuguese: 'pt', dutch: 'nl', polish: 'pl', russian: 'ru', japanese: 'ja',
+  chinese: 'zh', korean: 'ko', arabic: 'ar', turkish: 'tr', hindi: 'hi',
+};
+function langBadge(lang?: string): string {
+  if (!lang) return '';
+  const l = lang.trim().toLowerCase();
+  const code = l.length <= 3 ? l : (LANG_NAME_TO_ISO[l] || l.slice(0, 2));
+  return code.toUpperCase();
+}
+// durationMs is total pipeline latency (STT + translate + LLM), which can run
+// into thousands of ms — show seconds past 1 s so the badge width stays tidy.
+function fmtDuration(ms: number): string {
+  return ms < 1000 ? `${Math.round(ms)}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
 // [EXPERIMENT:refonte-v1] Pagination chunk size — render 50 items max,
 // reveal more on demand. Cheaper than a real virtualized list and works
 // fine up to a few thousand rows since DOM stays small.
@@ -105,17 +125,19 @@ export function HistoryView() {
             {hasFilters && ` · ${filtered.length} affichée${filtered.length > 1 ? 's' : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {/* [EXPERIMENT:refonte-v1] density toggle — compact vs full cards */}
-          <div className="flex rounded-md overflow-hidden border border-white/10 text-[11px]" role="group" aria-label="Densité d'affichage">
+        <div className="flex items-stretch gap-2">
+          {/* [EXPERIMENT:refonte-v1] density toggle — compact vs full cards.
+              items-stretch + py-2 so the pill matches the ~34px .btn height
+              of Exporter/Tout effacer beside it. */}
+          <div className="flex items-stretch rounded-md overflow-hidden border border-white/10 text-[11px]" role="group" aria-label="Densité d'affichage">
             <button
-              className={`px-2.5 py-1 ${density === 'comfortable' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
+              className={`px-2.5 py-2 flex items-center ${density === 'comfortable' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
               onClick={() => setDensity('comfortable')}
               aria-pressed={density === 'comfortable'}
               title="Vue confortable (carte complète)"
             >Confort</button>
             <button
-              className={`px-2.5 py-1 ${density === 'compact' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
+              className={`px-2.5 py-2 flex items-center ${density === 'compact' ? 'bg-white/10 text-white' : 'text-white/50 hover:bg-white/5'}`}
               onClick={() => setDensity('compact')}
               aria-pressed={density === 'compact'}
               title="Vue compacte (1 ligne par entrée)"
@@ -175,7 +197,7 @@ export function HistoryView() {
             >
               <option value="all">Toutes langues</option>
               {languages.map((l) => (
-                <option key={l} value={l}>{l.toUpperCase()}</option>
+                <option key={l} value={l}>{langBadge(l)}</option>
               ))}
             </select>
           )}
@@ -190,19 +212,17 @@ export function HistoryView() {
           <div className="text-white/60 mb-1">
             {history.length === 0 ? 'Aucune transcription pour le moment.' : 'Aucun résultat pour ces filtres.'}
           </div>
-          <div className="text-white/40 text-xs">
-            {history.length === 0
-              ? 'Dictez quelque chose depuis la page d\'accueil pour la voir apparaître ici.'
-              : (
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  className="text-violet-300 hover:text-violet-200 underline"
-                >
-                  Réinitialiser les filtres
-                </button>
-              )}
-          </div>
+          {history.length === 0 ? (
+            <div className="text-white/40 text-xs">
+              Dictez quelque chose depuis la page d'accueil pour la voir apparaître ici.
+            </div>
+          ) : (
+            <div className="mt-3 flex justify-center">
+              <button type="button" onClick={clearFilters} className="btn btn-ghost !text-xs">
+                <Filter size={12} /> Réinitialiser les filtres
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className={density === 'compact' ? 'space-y-1' : 'space-y-3'}>
@@ -227,9 +247,9 @@ export function HistoryView() {
                   <div className="flex items-center gap-2 text-[11px] text-white/50 mb-1 flex-wrap">
                     <Clock size={11} /> {formatDate(h.createdAt)}
                     <span className="badge">{MODE_LABELS[h.mode as Mode]?.icon} {MODE_LABELS[h.mode as Mode]?.label || h.mode}</span>
-                    {h.language && h.language !== 'auto' && <span className="badge">{h.language.toUpperCase()}</span>}
-                    {h.translatedTo && <span className="badge">→ {h.translatedTo.toUpperCase()}</span>}
-                    <span className="badge badge-green"><Zap size={9} /> {h.durationMs}ms</span>
+                    {h.language && h.language !== 'auto' && <span className="badge">{langBadge(h.language)}</span>}
+                    {h.translatedTo && <span className="badge">→ {langBadge(h.translatedTo)}</span>}
+                    <span className="badge badge-green" title="latence de traitement"><Zap size={9} /> {fmtDuration(h.durationMs)}</span>
                     {h.pinned && <span className="badge badge-amber"><Sparkles size={9} /> Épinglé</span>}
                     {typeof h.wordCount === 'number' && h.wordCount > 0 && (
                       <span className="text-white/40">{h.wordCount} mot{h.wordCount > 1 ? 's' : ''}</span>

@@ -63,16 +63,26 @@ export function CompactView() {
           setRecState('error');
           return;
         }
+        // Empty / inaudible recording — don't flash "Injecté" as if it worked.
+        if (res.empty || !res.finalText) {
+          setLastError('Aucune parole détectée');
+          setRecState('error');
+          return;
+        }
+        // Main already injected directly (no renderer round-trip) — only
+        // paste here if it didn't (res.injected false, e.g. native path
+        // unavailable). Avoids a double paste.
+        if (settings.autoInject && res.finalText && !res.injected) {
+          await window.voiceink.injectText(res.finalText);
+        }
         setLastTranscript(res.finalText);
         setRecState('idle');
         setLastError('');
-        loadHistory();
-        if (settings.autoInject && res.finalText) {
-          await window.voiceink.injectText(res.finalText);
-        }
         // Flash "done" state briefly before returning to idle label.
         setJustDone(true);
         setTimeout(() => setJustDone(false), 1500);
+        // History refresh last — lowest priority, never blocks the paste.
+        loadHistory();
       } catch (err: any) {
         setLastError(err?.message || String(err));
         setRecState('error');
@@ -235,22 +245,28 @@ export function CompactView() {
             {recState === 'recording' ? (
               <div className="pill-wave">
                 {bars.map((h, i) => (
-                  <span key={i} className="pill-wave-bar" style={{ height: `${h}px` }} />
+                  // scaleY (GPU-composited) instead of height (relayout) — a
+                  // relayout here can invalidate the transparent pill's
+                  // composited layer and flip :hover (documented elsewhere).
+                  <span key={i} className="pill-wave-bar" style={{ transform: `scaleY(${h})` }} />
                 ))}
               </div>
             ) : recState === 'processing' ? (
               <span className="pill-label pill-label-cyan">Transcription…</span>
             ) : recState === 'error' ? (
+              // No JS slice — CSS (nowrap + ellipsis) truncates to the real
+              // ~80px body width, so the ellipsis always lands correctly.
+              // Full text stays in the title attribute.
               <span className="pill-label pill-label-amber" title={lastError}>
-                {lastError?.slice(0, 28) || 'Erreur'}
+                {lastError || 'Erreur'}
               </span>
             ) : justDone ? (
-              <span className="pill-label pill-label-green">
-                Injecté{lastLatencyMs > 0 ? ` · ${Math.round(lastLatencyMs)}ms` : ''}
-              </span>
+              // Drop the latency suffix in compact — it overflows the ~80px
+              // body. The full stat lives in the comfortable view.
+              <span className="pill-label pill-label-green">Injecté</span>
             ) : lastTranscript ? (
               <span className="pill-label pill-label-faded" title={lastTranscript}>
-                {lastTranscript.slice(0, 24)}{lastTranscript.length > 24 ? '…' : ''}
+                {lastTranscript}
               </span>
             ) : (
               <span className="pill-label">Parler</span>
@@ -277,20 +293,26 @@ export function CompactView() {
 // every React commit reconciles the pill's descendants, and on Windows +
 // transparent compositor that occasionally invalidates the pill's
 // composited layer and flips :hover to false under a stationary cursor.
+// Returns 12 normalized scale values (0..1) for `transform: scaleY()`.
+const MINI_REST = 0.15;
 function useMiniWaveform(level: number, active: boolean): number[] {
-  const [bars, setBars] = useState<number[]>(() => new Array(12).fill(3));
+  const [bars, setBars] = useState<number[]>(() => new Array(12).fill(MINI_REST));
   const levelRef = useRef(level);
   levelRef.current = level;
   useEffect(() => {
     if (!active) {
       // Reset to rest exactly once, then stay quiet.
-      setBars((prev) => (prev.every((b) => b === 3) ? prev : new Array(12).fill(3)));
+      setBars((prev) => (prev.every((b) => b === MINI_REST) ? prev : new Array(12).fill(MINI_REST)));
       return;
     }
+    // Honour prefers-reduced-motion (matches MainView.useWaveform): freeze to a
+    // static mid bar instead of running the 70 ms animation loop.
+    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) { setBars(new Array(12).fill(0.5)); return; }
     const id = setInterval(() => {
       setBars((prev) => {
         const next = prev.slice(1);
-        next.push(3 + levelRef.current * 14 + Math.random() * 2);
+        next.push(Math.min(1, 0.15 + levelRef.current * 0.85 + Math.random() * 0.1));
         return next;
       });
     }, 70);

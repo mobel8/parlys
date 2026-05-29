@@ -65,6 +65,15 @@ export function getSettings(): Settings {
   const s = (store() as any).get('settings', DEFAULT_SETTINGS) as Settings;
   // Merge defaults (in case of new fields added later)
   const merged: Settings = { ...DEFAULT_SETTINGS, ...s };
+  // DEEP-merge the known nested objects — a shallow spread replaces them
+  // wholesale, so an install that saved before a nested key was added would
+  // lose that key (themeEffects → new effect reads as undefined→falsy;
+  // ttsVoiceId → switching to a provider whose default voice wasn't persisted
+  // yields an empty voiceId). This aligns loadSettings() with the deep-merge
+  // the renderer bootstrap already does for the first paint.
+  merged.themeEffects = { ...DEFAULT_SETTINGS.themeEffects, ...(s?.themeEffects || {}) };
+  merged.ttsVoiceId = { ...DEFAULT_SETTINGS.ttsVoiceId, ...(s?.ttsVoiceId || {}) };
+  merged.ttsApiKey = { ...DEFAULT_SETTINGS.ttsApiKey, ...(s?.ttsApiKey || {}) };
   // Env var fallback for Groq key
   if (!merged.groqApiKey && process.env.GROQ_API_KEY) {
     merged.groqApiKey = process.env.GROQ_API_KEY;

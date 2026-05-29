@@ -28,6 +28,12 @@ export interface AudioLevelMeterProps {
   height?: number;
   /** Called on every RMS sample (for parent integrations). */
   onLevel?: (rms: number) => void;
+  /**
+   * When true, release the mic and stop metering. Used so calibration can
+   * own the mic alone — two concurrent streams on the same device skew the
+   * AGC/WASAPI-shared level reading and make the calibration unrepresentative.
+   */
+  paused?: boolean;
 }
 
 export function AudioLevelMeter({
@@ -37,6 +43,7 @@ export function AudioLevelMeter({
   deviceId,
   height = 14,
   onLevel,
+  paused = false,
 }: AudioLevelMeterProps) {
   const [rms, setRms] = useState(0);
   const [error, setError] = useState<string>('');
@@ -48,6 +55,8 @@ export function AudioLevelMeter({
   onLevelRef.current = onLevel;
 
   useEffect(() => {
+    // While paused, hold no stream — let calibration own the mic alone.
+    if (paused) { setRms(0); return; }
     let cancelled = false;
     const start = async () => {
       try {
@@ -91,7 +100,7 @@ export function AudioLevelMeter({
       if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
       if (ctxRef.current) { try { ctxRef.current.close(); } catch { /* ignore */ } ctxRef.current = null; }
     };
-  }, [deviceId]);
+  }, [deviceId, paused]);
 
   if (error) {
     return (

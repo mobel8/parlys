@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo } from 'react';
 import { X, Sparkles, Wrench, Bug, Plus } from 'lucide-react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 /**
  * Renders the CHANGELOG.md contents as a polished in-app dialog.
@@ -163,8 +164,11 @@ const CATEGORY_META: Record<Category, { label: string; Icon: typeof Sparkles; ac
 };
 
 export function ChangelogModal({ onClose }: { onClose: () => void }) {
-  const dialogRef = useRef<HTMLDivElement>(null);
   const versions = useMemo(() => parseChangelog(__APP_CHANGELOG__), []);
+  // Trap Tab focus inside the dialog (and restore it to the trigger on close).
+  // Replaces the old manual focus()-on-open which let Tab leak to the page
+  // behind the backdrop — the classic broken-modal keyboard trap.
+  const dialogRef = useFocusTrap(true);
 
   // Close on Escape.
   useEffect(() => {
@@ -175,18 +179,13 @@ export function ChangelogModal({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Move focus into the dialog on open so subsequent Tab cycles stay
-  // inside it (and Escape works without clicking first).
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-8"
       onClick={onClose}
       aria-modal="true"
       role="dialog"
+      aria-labelledby="changelog-title"
     >
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -202,7 +201,7 @@ export function ChangelogModal({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="text-white/70" />
-            <h2 className="text-sm font-semibold tracking-wide text-white/90">
+            <h2 id="changelog-title" className="text-sm font-semibold tracking-wide text-white/90">
               Historique des versions
             </h2>
           </div>
@@ -210,6 +209,7 @@ export function ChangelogModal({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-white/10 text-white/60 hover:text-white/90 transition"
             title="Fermer (Échap)"
+            aria-label="Fermer l'historique des versions"
           >
             <X size={14} />
           </button>

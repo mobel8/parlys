@@ -210,6 +210,11 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
                   <span>{new Date(seg.ts).toLocaleTimeString()}</span>
                   {seg.sourceLang && <span className="px-1 rounded bg-white/5">{seg.sourceLang.toUpperCase()}</span>}
                   {seg.audioMs > 0 && <span>{(seg.audioMs / 1000).toFixed(1)}s</span>}
+                  {seg.translateFailed && (
+                    <span className="px-1 rounded" style={{ background: 'rgba(251,191,36,0.15)', color: '#fcd34d' }} title="La traduction a échoué — texte source affiché">
+                      ⚠ trad. indisponible
+                    </span>
+                  )}
                 </div>
               </div>
               {!seg.speaking && seg.text && (

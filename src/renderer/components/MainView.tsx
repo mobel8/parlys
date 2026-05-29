@@ -26,6 +26,11 @@ export function MainView() {
   const hasKey = !!settings.groqApiKey;
 
   const [copied, setCopied] = useState(false);
+  // Non-blocking warning surfaced as a dismissible badge (distinct from
+  // lastError which flips the whole UI to the 'error' state). Used for soft
+  // degradations: TTS voice failed, LLM mode/translation silently fell back,
+  // a continuous-interpreter phrase failed, empty/inaudible recording.
+  const [lastWarning, setLastWarning] = useState('');
   // TTFB stats for the interpreter. Rendered as a small badge when
   // the last session produced audio.
   const [lastTtfbMs, setLastTtfbMs] = useState(0);
@@ -70,7 +75,7 @@ export function MainView() {
           if (settings.speakTranslations !== false) {
             const player = new InterpretPlayer(requestId, {
               onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
-              onError: (err) => console.warn('[interpret-player]', err.message),
+              onError: (err) => { console.warn('[interpret-player]', err.message); setLastWarning('Voix indisponible : ' + err.message); },
             }, { sinkId: settings.ttsSinkId });
             playerRef.current = player;
           } else {
@@ -111,13 +116,21 @@ export function MainView() {
           setRecState('error');
           return;
         }
+        // Main already injected directly (no renderer round-trip) — only
+        // paste here if it didn't. Avoids a double paste.
+        if (settings.autoInject && res.finalText && !res.injected) {
+          await window.voiceink.injectText(res.finalText);
+        }
         setLastTranscript(res.finalText);
         setRecState('idle');
         setLastError('');
+        // Soft-failure feedback: tell the user when the result silently
+        // degraded instead of presenting it as a clean success.
+        if (res.empty) setLastWarning('Aucune parole détectée — audio inaudible ?');
+        else if (res.translateFailed) setLastWarning('Traduction indisponible — texte source affiché.');
+        else if (res.postProcessFailed) setLastWarning('Mode non appliqué (erreur LLM) — texte brut affiché.');
+        else setLastWarning('');
         loadHistory();
-        if (settings.autoInject && res.finalText) {
-          await window.voiceink.injectText(res.finalText);
-        }
       } catch (err: any) {
         setLastError(err?.message || String(err));
         setRecState('error');
@@ -156,13 +169,18 @@ export function MainView() {
         setLastTranscript(`${res.rawText}\n\n→ ${res.translatedText}`);
         if (typeof res.ttfbMs === 'number') setLastTtfbMs(res.ttfbMs);
         setLastLatencyMs(res.durationMs);
+        setLastWarning('');
         loadHistory();
       } else {
-        setLastError(res.error || 'Erreur interprétation');
+        // Continuous mode legitimately stays in capture between phrases, so
+        // DON'T flip to the 'error' state (that implies capture stopped).
+        // Surface a transient, non-blocking warning instead.
+        setLastWarning('Dernière phrase échouée : ' + (res.error || 'erreur interprétation'));
       }
     },
     onError: (err) => {
       console.warn('[continuous-interpreter]', err.message);
+      setLastWarning('Interprète : ' + err.message);
     },
   });
 
@@ -174,12 +192,20 @@ export function MainView() {
       // Mode VAD continu : un seul clic lance la capture, un autre l'arrête.
       if (current === 'recording') {
         continuous.stop();
+        // Resume the warm dictation recorder we suspended on start, so the
+        // next push-to-record is still instant.
+        recorder.resume();
         setRecState('idle');
         setAudioLevel(0);
       } else {
         setLastError('');
         setLastTranscript('');
         setRecState('recording');
+        // The continuous interpreter opens its OWN mic stream. Suspend the
+        // always-warm dictation recorder's AudioContext so we don't run two
+        // capture pipelines on the same device simultaneously (WASAPI
+        // contention + wasted CPU). Resumed when continuous stops.
+        recorder.suspend();
         // Fire TLS warm-up for Groq + TTS the moment recording begins —
         // by the time the user stops speaking (2-30 s later) the HTTPS
         // sockets are hot, shaving ~50-80 ms off Whisper + translate + TTS.
@@ -187,6 +213,7 @@ export function MainView() {
         try {
           await continuous.start();
         } catch (err: any) {
+          recorder.resume(); // start failed (e.g. mic denied) — un-suspend
           setLastError(err?.message || String(err));
           setRecState('error');
         }
@@ -226,7 +253,12 @@ export function MainView() {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       if (e.code === 'Space' && !e.repeat) { e.preventDefault(); toggle(); }
-      if (e.code === 'Escape' && recStateRef.current === 'recording') { recorder.stop(); }
+      // Route Escape through toggle() (which only stops when already
+      // recording). Calling recorder.stop() directly was wrong in continuous
+      // interpreter mode: it left the suspended dictation recorder's
+      // AudioContext suspended forever (continuous.stop() + recorder.resume()
+      // never ran). toggle()'s stop branch handles both modes correctly.
+      if (e.code === 'Escape' && recStateRef.current === 'recording') { toggle(); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -381,7 +413,7 @@ export function MainView() {
               aria-hidden="true"
             >
               {bars.map((h, i) => (
-                <div key={i} className="bar" style={{ height: `${h}px` }} />
+                <div key={i} className="bar" style={{ transform: `scaleY(${h})` }} />
               ))}
             </div>
           </div>
@@ -403,6 +435,18 @@ export function MainView() {
                 <span className="badge badge-green" style={{ borderColor: 'rgba(16,185,129,0.35)' }}>
                   <Volume2 size={9} /> voix {lastTtfbMs}ms
                 </span>
+              )}
+              {lastWarning && (
+                <button
+                  type="button"
+                  className="badge"
+                  style={{ background: 'rgba(251,191,36,0.15)', borderColor: 'rgba(251,191,36,0.45)', color: '#fcd34d', cursor: 'pointer' }}
+                  title={lastWarning + ' — cliquez pour masquer'}
+                  aria-label={lastWarning}
+                  onClick={() => setLastWarning('')}
+                >
+                  <AlertCircle size={9} /> {lastWarning.length > 32 ? lastWarning.slice(0, 32) + '…' : lastWarning}
+                </button>
               )}
             </div>
             <div className="flex gap-1">
@@ -560,6 +604,7 @@ function InterpreterPicker() {
             type="button"
             onClick={(e) => { e.preventDefault(); updateSettings({ interpreterEnabled: false }); }}
             title="Désactiver l'interprète vocal"
+            aria-label="Désactiver l'interprète vocal"
             style={{
               background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.5)',
               font: 'inherit', cursor: 'pointer', padding: '0 0 0 4px', lineHeight: 1,
@@ -605,26 +650,39 @@ function SpeakMuteQuickToggle() {
   );
 }
 
+// Returns 48 normalized scale values (0..1) consumed as `transform: scaleY()`
+// by `.wave .bar` (GPU-composited, no layout). The interval ONLY runs while
+// `active` — idle it resets to a flat resting array once and stops, so we
+// don't re-render 16×/s to animate an invisible (opacity 0) waveform.
+// prefers-reduced-motion freezes it to a static low bar.
 function useWaveform(level: number, active: boolean): number[] {
-  const [bars, setBars] = useState<number[]>(() => new Array(48).fill(4));
+  const REST = 0.06;
+  const [bars, setBars] = useState<number[]>(() => new Array(48).fill(REST));
   const levelRef = useRef(level);
-  const activeRef = useRef(active);
   levelRef.current = level;
-  activeRef.current = active;
 
   useEffect(() => {
+    if (!active) {
+      // Reset to rest exactly once, then stay quiet (no timer).
+      setBars((prev) => (prev.every((b) => b === REST) ? prev : new Array(48).fill(REST)));
+      return;
+    }
+    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce) {
+      // Static mid bar; honour the user's motion preference.
+      setBars(new Array(48).fill(0.4));
+      return;
+    }
     const id = setInterval(() => {
       setBars((prev) => {
         const next = prev.slice(1);
-        const target = activeRef.current
-          ? 6 + levelRef.current * 54 + Math.random() * 6
-          : 4 + Math.random() * 2;
-        next.push(target);
+        // 0.1 floor + up to ~1.0 driven by live RMS + a little jitter.
+        next.push(Math.min(1, 0.1 + levelRef.current * 0.9 + Math.random() * 0.1));
         return next;
       });
     }, 60);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
   return bars;
 }
 

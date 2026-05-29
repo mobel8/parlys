@@ -4,7 +4,7 @@ import { writeFile } from 'fs/promises';
 import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings, VoiceInfo, TTSProvider } from '../shared/types';
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
-import { postProcess, translateText, streamTranslate, prewarmGroq } from './engines/llm';
+import { postProcess, translateText, streamTranslate, prewarmGroq, prewarmLlm } from './engines/llm';
 import { cleanupTranscription } from './services/text-cleanup';
 import { streamTTS } from './engines/tts';
 import { listVoices } from './engines/tts/catalog';
@@ -189,6 +189,12 @@ export function registerIpc(): void {
     const t0 = Date.now();
     try {
       const settings = getSettings();
+      // Self-prewarm (belt-and-suspenders): warm the Whisper origin AND the
+      // configured post-process LLM origin in case the renderer's record-start
+      // PREWARM was dropped. Fire-and-forget; the pooled socket is reused by
+      // the Whisper POST + post-process below.
+      prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+      if (req.mode !== 'raw') prewarmLlm(settings);
       const buf = Buffer.from(req.audioBase64, 'base64');
       console.log(`[transcribe] received audio: ${buf.length} bytes (${req.mimeType})`);
       // 1.2 KB ≈ a typical 100 ms opus frame + webm header — anything smaller
@@ -230,10 +236,11 @@ export function registerIpc(): void {
       // takes precedence over stored setting).
       const translateTo = (req.translateTo !== undefined ? req.translateTo : settings.translateTo) || '';
       let translated: string | null = null;
+      let translateFailed = false;
       if (translateTo && rawText.trim()) {
         const ts = Date.now();
-        translated = await translateText(rawText, translateTo, settings, r.language);
-        console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms`);
+        translated = await translateText(rawText, translateTo, settings, r.language, () => { translateFailed = true; });
+        console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms${translateFailed ? ' (FAILED → source text)' : ''}`);
       }
 
       // LLM post-processing operates on whichever text we'll present
@@ -243,16 +250,43 @@ export function registerIpc(): void {
       // target, (2) Whisper's detected language, or (3) the user's
       // language setting — in that order.
       let final = translated ?? rawText;
+      let postProcessFailed = false;
       if (req.mode !== 'raw') {
         const ps = Date.now();
         const langHint = translateTo || r.language;
-        final = await postProcess(final, req.mode, settings, langHint);
-        console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms`);
+        final = await postProcess(final, req.mode, settings, langHint, () => { postProcessFailed = true; });
+        console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms${postProcessFailed ? ' (FAILED → raw text)' : ''}`);
       }
+      // The mode/translation silently degraded to raw/source text — flag it
+      // so the renderer can warn the user instead of presenting it as success.
+      const empty = !final.trim();
 
       const durationMs = Date.now() - t0;
 
-      addHistory({
+      // Write the clipboard NOW (cheap, sync).
+      if (settings.autoCopy || settings.autoInject) {
+        try { clipboard.writeText(final); } catch {}
+      }
+
+      // Inject DIRECTLY from main when autoInject is on, instead of returning
+      // to the renderer and waiting for it to call back injectText(). This
+      // removes a full renderer round-trip (IPC reply → React processing →
+      // IPC call) from the paste path — the Ctrl+V fires the instant Whisper
+      // + cleanup finish here. The renderer skips its own injectText when it
+      // sees `injected: true`, so there's no double paste.
+      let injected = false;
+      if (settings.autoInject && final.trim()) {
+        try { await injectText(final); injected = true; }
+        catch (e) { console.warn('[transcribe] main-side inject failed, renderer will retry:', e); }
+      }
+
+      // Defer the history write OFF the critical path. addHistory() does a
+      // synchronous load + JSON.parse + JSON.stringify + writeFileSync of the
+      // ENTIRE history file (up to 1000 entries / 500 KB+), which blocks the
+      // main-process event loop for 20-100 ms — including the injectText IPC
+      // the renderer fires right after this response. setImmediate runs it
+      // after the IPC reply is flushed, so the paste is never delayed by disk.
+      const historyEntry = {
         id: randomUUID(),
         createdAt: Date.now(),
         rawText,
@@ -264,11 +298,11 @@ export function registerIpc(): void {
         audioMs: 0,
         tags: [],
         wordCount: wordCount(final),
+      };
+      setImmediate(() => {
+        try { addHistory(historyEntry); }
+        catch (e) { console.warn('[transcribe] deferred addHistory failed:', e); }
       });
-
-      if (settings.autoCopy || settings.autoInject) {
-        try { clipboard.writeText(final); } catch {}
-      }
 
       return {
         ok: true,
@@ -277,6 +311,10 @@ export function registerIpc(): void {
         detectedLanguage: r.language,
         translatedTo: translateTo || undefined,
         durationMs,
+        injected,
+        postProcessFailed: postProcessFailed || undefined,
+        translateFailed: translateFailed || undefined,
+        empty: empty || undefined,
       };
     } catch (err: any) {
       console.error('[transcribe] error:', err?.message || err);
@@ -335,6 +373,9 @@ export function registerIpc(): void {
       // real endpoints, no TCP + TLS handshake → ~40-100 ms saved per
       // host, compounded over Whisper + translate + TTS.
       prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+      // The interpreter's translate step runs on translateBackend() — which
+      // is Cerebras when that provider is selected. Warm it too.
+      prewarmLlm(settings);
       if (settings.ttsProvider === 'cartesia') {
         prewarmCartesia(settings.ttsApiKey?.cartesia || '');
       }
@@ -535,6 +576,10 @@ export function registerIpc(): void {
   ipcMain.on(IPC.PREWARM, () => {
     const settings = getSettings();
     prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+    // Warm the configured post-process LLM origin too (often Cerebras — a
+    // different origin than Groq), so the dictation post-process doesn't pay
+    // a cold TLS handshake on the paste path.
+    prewarmLlm(settings);
     if (settings.ttsProvider === 'cartesia') {
       prewarmCartesia(settings.ttsApiKey?.cartesia || '');
     }
@@ -628,6 +673,7 @@ export function registerIpc(): void {
     translated?: string;
     sourceLang?: string;
     error?: string;
+    translateFailed?: boolean;
   }> => {
     try {
       const req = validateListenerTranscribeRequest(rawReq);
@@ -651,24 +697,28 @@ export function registerIpc(): void {
       // Same cleanup as the dictation/interpret pipelines so the listener
       // transcript stays free of "Merci d'avoir regardé" and "euh".
       const cleaned = cleanupTranscription(wh.text, wh.language || listenerHint);
-      const text = (settings.replacementsEnabled && settings.replacements?.length)
+      // Match the transcribe/interpret pipelines' truthiness exactly
+      // (`!== false` applies when the flag is true OR undefined) so the
+      // listener never silently skips the user's dictionary on a settings
+      // object where the field is absent.
+      const text = (settings.replacementsEnabled !== false && settings.replacements?.length)
         ? applyReplacements(cleaned, settings.replacements)
         : cleaned;
       if (!text.trim()) {
         return { ok: true, text: '', sourceLang: wh.language };
       }
       let translated: string | undefined;
+      let translateFailed = false;
       const tgt = req.targetLang;
-      // Only translate if target differs from detected source.
+      // Only translate if target differs from detected source. translateText
+      // never throws (it catches internally + falls back to source text), so
+      // no try/catch is needed — we use its onFail callback to flag a silent
+      // degradation so the contract matches the dictation pipeline.
       if (tgt && tgt !== wh.language && tgt !== listenerHint) {
-        try {
-          translated = await translateText(text, tgt, settings, wh.language);
-        } catch (err: any) {
-          console.warn('[listener] translate failed:', err?.message);
-          // Graceful degradation — still return the transcription.
-        }
+        translated = await translateText(text, tgt, settings, wh.language, () => { translateFailed = true; });
+        if (translateFailed) console.warn('[listener] translate degraded to source text');
       }
-      return { ok: true, text, translated, sourceLang: wh.language };
+      return { ok: true, text, translated, sourceLang: wh.language, translateFailed: translateFailed || undefined };
     } catch (err: any) {
       console.error('[listener] error:', err?.message || err);
       return { ok: false, text: '', error: err?.message || String(err) };

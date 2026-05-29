@@ -91,7 +91,7 @@ const api = {
 
   /** Listener — transcribe a single audio segment + optional translate. */
   listenerTranscribe: (req: { audioBase64: string; mimeType: string; targetLang: string; sourceLang?: string }): Promise<{
-    ok: boolean; text: string; translated?: string; sourceLang?: string; error?: string;
+    ok: boolean; text: string; translated?: string; sourceLang?: string; error?: string; translateFailed?: boolean;
   }> => ipcRenderer.invoke(IPC.LISTENER_TRANSCRIBE, req),
 
   /** Text-to-speech only — streams MP3 chunks via onInterpretChunk. */

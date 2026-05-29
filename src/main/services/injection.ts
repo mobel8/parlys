@@ -193,24 +193,29 @@ export async function checkMacAccessibility(): Promise<boolean> {
  *
  * No-ops if the target is already foreground.
  */
-async function forceFocus(w: any, hwnd: string): Promise<void> {
+// Returns true if it actually changed the foreground (un-minimised or
+// SetForegroundWindow'd), false if the target was already foreground (the
+// common pill case, where showInactive never stole focus). Callers use this
+// to skip the focus-settle delay when nothing needs to settle.
+async function forceFocus(w: any, hwnd: string): Promise<boolean> {
   try {
     const h = BigInt(hwnd);
-    if (!w.IsWindow(h)) return;
-    if (w.IsIconic(h)) w.ShowWindow(h, 9 /* SW_RESTORE */);
+    if (!w.IsWindow(h)) return false;
+    let changed = false;
+    if (w.IsIconic(h)) { w.ShowWindow(h, 9 /* SW_RESTORE */); changed = true; }
 
     const currentFgPtr = w.GetForegroundWindow();
     const currentFg = pointerToHwnd(currentFgPtr, w);
     if (currentFg === hwnd) {
       diagLog(`already foreground (${hwnd})`);
-      return;
+      return changed;
     }
 
     // Plain SetForegroundWindow first — sometimes it just works (the
     // calling process IS allowed if it just received a hotkey via
     // RegisterHotKey, which globalShortcut uses).
     let ok = w.SetForegroundWindow(h);
-    if (ok) { diagLog(`SetForegroundWindow ok (no attach)`); return; }
+    if (ok) { diagLog(`SetForegroundWindow ok (no attach)`); return true; }
 
     // Failed — attach to the foreground thread's input queue so the OS
     // treats us as the foreground process while we re-issue the call.
@@ -229,14 +234,22 @@ async function forceFocus(w: any, hwnd: string): Promise<void> {
       diagLog(`could not get fg thread id (current=${currentFg})`);
     }
     if (!ok) console.log('[inject] SetForegroundWindow still 0 after attach — input may go to wrong window');
+    return true; // we attempted a foreground change
   } catch (e: any) {
     console.warn('[inject] forceFocus error:', e?.message || e);
+    return false;
   }
 }
 
 async function sendPasteNative(hwnd: string | null): Promise<boolean> {
   const w = getWin32();
   if (!w) { diagLog('koffi unavailable, returning false'); return false; }
+
+  // Track whether we actually changed the foreground window. If the target
+  // was already foreground (the common case — the pill is shown via
+  // showInactive and never steals focus), there's NOTHING to settle and we
+  // can fire Ctrl+V immediately, shaving the focus-settle delay entirely.
+  let focusChanged = false;
 
   try {
     if (hwnd) {
@@ -253,6 +266,7 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
           // "un-minimise without activating any more than necessary".
           if (w.IsIconic(h)) {
             w.ShowWindow(h, SW_RESTORE);
+            focusChanged = true;
           }
           // Only re-foreground the target if it's not already the
           // foreground window. In the common case (user pressed the
@@ -267,6 +281,7 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
           diagLog(`currentFg=${currentFg} target=${hwnd} match=${currentFg === hwnd}`);
           if (currentFg !== hwnd) {
             const ok = w.SetForegroundWindow(h);
+            focusChanged = true;
             diagLog(`SetForegroundWindow(${hwnd}) returned ${ok}`);
             if (!ok) {
               // SetForegroundWindow can fail due to Win32 focus-stealing
@@ -282,8 +297,13 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
       }
     }
 
-    // Let the OS commit the focus change before sending keystrokes.
-    await new Promise((r) => setTimeout(r, 40));
+    // Only pay the focus-settle delay when we actually changed the
+    // foreground. Target already foreground (the pill's normal state) →
+    // zero wait, instant paste. When we did switch, 25 ms is enough on
+    // modern Windows for the activation to commit before the keystroke.
+    if (focusChanged) {
+      await new Promise((r) => setTimeout(r, 25));
+    }
 
     // Re-sample the foreground right before the keystroke fires — this tells
     // us where Ctrl+V is actually going to land, in case SetForegroundWindow
@@ -328,8 +348,9 @@ async function sendTextNative(text: string, hwnd: string | null): Promise<boolea
   if (!w || !w.SendInput) { diagLog('SendInput unavailable, returning false'); return false; }
 
   try {
+    let focusChanged = false;
     if (hwnd) {
-      await forceFocus(w, hwnd);
+      focusChanged = await forceFocus(w, hwnd);
     }
     // Re-sample foreground RIGHT before typing so the diag log shows
     // whether our focus dance actually landed on the target.
@@ -338,7 +359,11 @@ async function sendTextNative(text: string, hwnd: string | null): Promise<boolea
       const fg = pointerToHwnd(ptr, w);
       diagLog(`pre-type foreground=${fg} target=${hwnd}`);
     } catch {}
-    await new Promise((r) => setTimeout(r, 40));
+    // Only pay the focus-settle delay when we actually changed the foreground.
+    // The pill uses showInactive and never steals focus, so for the primary
+    // TUI/Claude-Code use case the target is already foreground → 0 ms wait,
+    // eliminating ~40 ms of dead time on every typed paste.
+    if (focusChanged) await new Promise((r) => setTimeout(r, 25));
 
     const KEYBDINPUT = (w as any)._KEYBDINPUT;
     const VK_RETURN = 0x0D;
