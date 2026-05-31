@@ -2,7 +2,7 @@
 // Stored in Electron userData/history.json.
 
 import { app } from 'electron';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { HistoryEntry, UsageStats } from '../../shared/types';
 
@@ -11,12 +11,33 @@ function filePath(): string {
 }
 
 function load(): HistoryEntry[] {
+  const fp = filePath();
+  // A genuinely absent file legitimately means "no history yet".
+  if (!existsSync(fp)) return [];
+
+  let raw: string;
   try {
-    const fp = filePath();
-    if (!existsSync(fp)) return [];
-    const raw = readFileSync(fp, 'utf-8');
+    raw = readFileSync(fp, 'utf-8');
+  } catch (err) {
+    // Transient/permission read error (e.g. EACCES). Do NOT return [] in a way
+    // that lets the next save() overwrite still-present data — just bail out
+    // without touching the file so the data on disk stays intact.
+    console.warn(`[history] failed to read ${fp}; keeping file untouched:`, err);
+    return [];
+  }
+
+  try {
     return JSON.parse(raw) as HistoryEntry[];
-  } catch {
+  } catch (err) {
+    // File is present but corrupt/truncated (e.g. crash mid-write). Preserve it
+    // before returning [] so the next save() cannot silently destroy it.
+    const backup = `${fp}.corrupt-${Date.now()}`;
+    try {
+      renameSync(fp, backup);
+      console.warn(`[history] ${fp} is corrupt; preserved as ${backup}:`, err);
+    } catch (renameErr) {
+      console.warn(`[history] ${fp} is corrupt and could not be preserved:`, renameErr);
+    }
     return [];
   }
 }
@@ -24,7 +45,23 @@ function load(): HistoryEntry[] {
 function save(entries: HistoryEntry[]): void {
   const fp = filePath();
   mkdirSync(dirname(fp), { recursive: true });
-  writeFileSync(fp, JSON.stringify(entries, null, 2), 'utf-8');
+  // Atomic write: serialise to a temp file in the SAME directory, then rename
+  // over the target. rename is atomic on the same volume, so a crash either
+  // leaves the old file intact or the fully-written new one — never a truncated
+  // half-write.
+  const tmp = `${fp}.${process.pid}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(entries, null, 2), 'utf-8');
+    renameSync(tmp, fp);
+  } catch (err) {
+    // Clean up the temp file on failure so we don't leak partial files.
+    try {
+      if (existsSync(tmp)) unlinkSync(tmp);
+    } catch {
+      /* best-effort cleanup */
+    }
+    throw err;
+  }
 }
 
 /**
