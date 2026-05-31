@@ -63,40 +63,47 @@ const FILLERS: Record<string, string[]> = {
  * YouTube transcripts. Matched case-insensitively; the surrounding
  * punctuation is consumed so removal doesn't leave orphan periods.
  *
- * These are aggressive matches — false positives are essentially zero
- * because the user is dictating, not transcribing a YouTube outro.
+ * TWO TIERS (see `stripWhisperHallucinations` for why):
+ *
+ *  - HALLUCINATIONS_SAFE — highly distinctive LITERAL multi-word phrases
+ *    (and bare-terminator artefacts) that essentially never occur in real
+ *    dictation. These run on ALL text REGARDLESS of detected language,
+ *    because Whisper can emit a French outro on English audio (the trained
+ *    YouTube tail bleeds across languages). Cross-language scrubbing of
+ *    these specific literals is INTENTIONAL and must be preserved.
+ *
+ *  - HALLUCINATIONS_BROAD — patterns anchored on bare common words with
+ *    open tails ("subscribe", "see you soon", "à bientôt", "bye"). A naive
+ *    cross-language sweep here destroyed ordinary dictation ("please
+ *    subscribe to the newsletter and confirm" → ""). These only run when
+ *    their bank matches the DETECTED language, and the riskiest ones have
+ *    been rewritten to require unmistakable YouTube-CTA framing so a lone
+ *    "subscribe"/"like" in a normal clause survives.
  */
-const HALLUCINATIONS: Record<string, RegExp[]> = {
+const HALLUCINATIONS_SAFE: Record<string, RegExp[]> = {
   fr: [
-    // Amara / community subtitles
+    // Amara / community subtitles — distinctive literal phrases.
     /\bsous[-\s]?titres?\s+(?:réalisés?|fait[s]?)\s+par\s+la\s+communauté\s+d['']?amara\.?org\.?/gi,
-    /\bsous[-\s]?titres?\s+(?:réalisés?|fait[s]?)\s+par\s+(?:la\s+)?communauté\s+d['']?amara[\s\S]*?$/gi,
+    // Same Amara tail but with looser ".org" spelling ("amara org"); bound
+    // the tail to the FIRST sentence terminator so it can NEVER swallow a
+    // following legitimate sentence (was `[\s\S]*?$`, which deleted to the
+    // end of the string and destroyed trailing content).
+    /\bsous[-\s]?titres?\s+(?:réalisés?|fait[s]?)\s+par\s+(?:la\s+)?communauté\s+d['']?amara[^.!?…]*[.!?…]?/gi,
     /\bsous[-\s]?titrage\s+(?:mfp|société\s+radio[-\s]?canada|st['\s]?501)\b[^.!?\n]*[.!?…]?/gi,
     /\b❤️?\s*par\s+sous[-\s]?titres?\s+amara\.?org\b/gi,
     /\bsous[-\s]?titres?\s+effectués\s+par[^.!?\n]*[.!?…]?/gi,
-    // YouTube outros
+    // YouTube outros — distinctive literal phrases.
     /\bmerci\s+d['']?avoir\s+regardé[^.!?\n]*[.!?…]?/gi,
     /\bn['']?(?:hésitez|hesitez)\s+pas\s+à\s+(?:vous\s+)?(?:abonner|liker)[^.!?\n]*[.!?…]?/gi,
     /\babonnez[-\s]?vous(?:\s+à\s+(?:ma|notre)\s+chaî?ne)?[^.!?\n]*[.!?…]?/gi,
     /\blike(?:r|z)?\s+et\s+abonnez[-\s]?vous\b[^.!?\n]*[.!?…]?/gi,
-    /\bà\s+la\s+prochaine\s*!?$/gi,
-    /\bà\s+bientôt\s*!?$/gi,
-    // Common dangling artefacts
-    /^\s*\.\.\.\s*$/g,
-    /^\s*\.\s*$/g,
-    /^\s*\?\s*$/g,
   ],
   en: [
     /\bthanks?\s+(?:so\s+much\s+)?for\s+watching[^.!?\n]*[.!?…]?/gi,
     /\bthank\s+you\s+(?:so\s+much\s+)?for\s+watching[^.!?\n]*[.!?…]?/gi,
-    /\b(?:don['']?t\s+forget\s+to\s+|please\s+)?(?:like|subscribe)(?:\s+(?:and|&)\s+(?:like|subscribe))?[^.!?\n]*[.!?…]?/gi,
+    // Standalone "subscribe to my/our/the channel" is specific enough to
+    // keep as a cross-language literal.
     /\bsubscribe\s+to\s+(?:my|our|the)\s+channel[^.!?\n]*[.!?…]?/gi,
-    /\bsee\s+you\s+(?:next\s+time|in\s+the\s+next\s+video|soon)[^.!?\n]*[.!?…]?/gi,
-    /\b(?:peace|bye)\s*!?$/gi,
-    /^\s*\.\.\.\s*$/g,
-    /^\s*\.\s*$/g,
-    /^\s*\?\s*$/g,
-    /^\s*\.5\s*$/g,
   ],
   es: [
     /\bgracias\s+por\s+ver\b[^.!?\n]*[.!?…]?/gi,
@@ -113,6 +120,46 @@ const HALLUCINATIONS: Record<string, RegExp[]> = {
   pt: [
     /\bobrigado\s+por\s+(?:assistir|ver)[^.!?\n]*[.!?…]?/gi,
     /\bse\s+inscreva(?:\s+no\s+canal)?[^.!?\n]*[.!?…]?/gi,
+  ],
+  // Language-agnostic dangling artefacts (whole string is one stray mark).
+  // These are safe everywhere — there is no legitimate dictation that is
+  // ONLY "..." / "." / "?" / ".5".
+  _any: [
+    /^\s*\.\.\.\s*$/g,
+    /^\s*\.\s*$/g,
+    /^\s*\?\s*$/g,
+    /^\s*\.5\s*$/g,
+  ],
+};
+
+/**
+ * BROAD / RISKY patterns — only applied when their bank matches the
+ * DETECTED language. See the tier comment above.
+ */
+const HALLUCINATIONS_BROAD: Record<string, RegExp[]> = {
+  fr: [
+    // End-anchored sign-offs that CAN be legitimate French dictation
+    // ("à bientôt" / "à la prochaine"); only strip when audio is French.
+    /\bà\s+la\s+prochaine\s*!?$/gi,
+    /\bà\s+bientôt\s*!?$/gi,
+  ],
+  en: [
+    // YouTube "like/subscribe" CTA. REWRITTEN so a bare "subscribe"/"like"
+    // in a normal clause is NOT consumed (the old open-tailed `(?:like|
+    // subscribe)[^.!?\n]*` ate "please subscribe to the newsletter and
+    // confirm" → "", "I like the new design…" → "I ", etc.). We now require
+    // the unmistakable PAIRED CTA "like and subscribe" / "subscribe and
+    // like" (optionally with a "don't forget to" / "please" / "make sure to"
+    // lead-in). A LONE "please subscribe"/"like X" is ambiguous real
+    // dictation and is left alone; the genuine channel-pitch outro is still
+    // caught by the SAFE "subscribe to my/our/the channel" literal.
+    /\b(?:don['']?t\s+forget\s+to\s+|please\s+|make\s+sure\s+to\s+)?(?:like\s+(?:and|&)\s+subscribe|subscribe\s+(?:and|&)\s+like)[^.!?\n]*[.!?…]?/gi,
+    // End-anchored sign-offs. The "see you …" tail is bounded to a short
+    // closer ("everyone"/"guys"/"all"/"folks") + terminator and ANCHORED at
+    // end of string, so "I'll see you soon at the office tomorrow" survives
+    // (an open `[^.!?\n]*` tail would have eaten the rest of the clause).
+    /\bsee\s+you\s+(?:next\s+time|in\s+the\s+next\s+video|soon)(?:\s+(?:everyone|guys|all|folks))?\s*[.!?…]*$/gi,
+    /\b(?:peace|bye)\s*!?$/gi,
   ],
 };
 
@@ -207,16 +254,32 @@ export function stripFillers(text: string, lang?: string): string {
 
 /**
  * Remove the known Whisper hallucination phrases ("Sous-titres réalisés
- * par…", "Thanks for watching", …) for every language Whisper might
- * have detected. We try all language banks because Whisper can emit a
- * French hallucination on French audio even when `language` was set to
- * "en" (the YouTube tail bleeds across).
+ * par…", "Thanks for watching", …).
+ *
+ * Two tiers (see HALLUCINATIONS_SAFE / HALLUCINATIONS_BROAD):
+ *  - SAFE banks run for EVERY language, regardless of `lang`. These are
+ *    distinctive literal phrases that bleed across languages (Whisper can
+ *    emit a French outro on English audio), so cross-language scrubbing is
+ *    intentional and preserved.
+ *  - BROAD banks (bare common words / open tails) run ONLY when their bank
+ *    matches the DETECTED `lang`, so an English-only "like/subscribe" CTA
+ *    pattern can't shred ordinary French/Spanish dictation and vice-versa.
+ *    If `lang` is unknown, BROAD banks are skipped entirely (conservative).
  */
-export function stripWhisperHallucinations(text: string): string {
+export function stripWhisperHallucinations(text: string, lang?: string): string {
   if (!text || !text.trim()) return text;
   let out = text;
-  for (const langPatterns of Object.values(HALLUCINATIONS)) {
+  // Tier 1 — SAFE literals + language-agnostic artefacts: run on ALL text.
+  for (const langPatterns of Object.values(HALLUCINATIONS_SAFE)) {
     for (const pattern of langPatterns) {
+      out = out.replace(pattern, '');
+    }
+  }
+  // Tier 2 — BROAD/RISKY: only the bank for the detected language.
+  const code = (lang || '').toLowerCase().slice(0, 2);
+  const broad = HALLUCINATIONS_BROAD[code];
+  if (broad) {
+    for (const pattern of broad) {
       out = out.replace(pattern, '');
     }
   }
@@ -236,7 +299,7 @@ export function stripWhisperHallucinations(text: string): string {
  */
 export function cleanupTranscription(text: string, lang?: string): string {
   if (!text || !text.trim()) return '';
-  let out = stripWhisperHallucinations(text);
+  let out = stripWhisperHallucinations(text, lang);
   out = stripFillers(out, lang);
   return out.trim();
 }
