@@ -22,6 +22,34 @@ const MAX_AUDIO_BASE64_LEN = 32 * 1024 * 1024; // ~24 MB decoded, enough for lon
 const MAX_TEXT_LEN = 256 * 1024; // 256 kB
 /** Upper bound on API keys / free-form settings strings. */
 const MAX_KEY_LEN = 2048;
+/**
+ * Upper bound on how many custom replacement rules we persist. Each rule is
+ * compiled to a fresh RegExp and run sequentially over EVERY transcription,
+ * so an unbounded list is a CPU-amplification vector. 500 is far above any
+ * realistic dictionary while keeping the per-transcription cost negligible.
+ */
+const MAX_REPLACEMENTS = 500;
+/** Upper bound on a replacement trigger (`from`). Mirrors short-id limits. */
+const MAX_REPLACEMENT_FROM_LEN = 256;
+/** Upper bound on a replacement output (`to`). Same cap as sttModel/sttPrompt. */
+const MAX_REPLACEMENT_TO_LEN = 4096;
+/** Upper bound on the JSON serialization of a structured sub-object. */
+const MAX_STRUCT_JSON_BYTES = 4096;
+
+/**
+ * Reject an object whose JSON serialization is implausibly large. Used as a
+ * cheap belt-and-braces guard on structured fields whose individual sub-keys
+ * we also clamp below: stops a forged renderer from bloating the store with a
+ * giant object full of unexpected keys.
+ */
+function jsonByteLength(x: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(x) ?? '', 'utf8');
+  } catch {
+    // Circular / non-serializable → treat as oversized so the caller rejects.
+    return Number.POSITIVE_INFINITY;
+  }
+}
 
 export function isString(x: unknown): x is string {
   return typeof x === 'string';
@@ -266,13 +294,66 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     out.pillScale = Math.max(0.5, Math.min(1.5, p.pillScale));
   }
 
-  // Structured fields — pass through as-is if shape looks plausible.
-  // We rely on the downstream code to be defensive about unexpected shapes
-  // rather than re-validating every sub-field here.
-  if (Array.isArray(p.replacements)) out.replacements = p.replacements as any;
-  if (isObject(p.themeEffects)) out.themeEffects = p.themeEffects as any;
-  if (isObject(p.widgetBounds)) out.widgetBounds = p.widgetBounds as any;
-  else if (p.widgetBounds === null) out.widgetBounds = null;
+  // Structured fields — re-validate every sub-field. These reach disk and,
+  // for `replacements`, get compiled to RegExp + run over every transcription,
+  // so a forged renderer must not be able to blow up the store or the CPU.
+  //
+  // `replacements`: cap the list length, keep only well-formed objects, clamp
+  // `from`/`to`, coerce the boolean flags, and drop rules with a blank `from`
+  // (a blank trigger matches everywhere / compiles to a degenerate RegExp).
+  if (Array.isArray(p.replacements)) {
+    const rules: Array<{
+      id: string; from: string; to: string;
+      caseSensitive: boolean; wholeWord: boolean; enabled: boolean;
+    }> = [];
+    for (const r of (p.replacements as unknown[]).slice(0, MAX_REPLACEMENTS)) {
+      if (!isObject(r)) continue;
+      const from = (clampString(r.from, MAX_REPLACEMENT_FROM_LEN) ?? '').trim();
+      if (!from) continue; // drop blank/whitespace triggers
+      const to = clampString(r.to, MAX_REPLACEMENT_TO_LEN) ?? '';
+      const id = clampString(r.id, 128) || '';
+      rules.push({
+        id,
+        from,
+        to,
+        caseSensitive: isBoolean(r.caseSensitive) ? r.caseSensitive : false,
+        wholeWord: isBoolean(r.wholeWord) ? r.wholeWord : true,
+        enabled: isBoolean(r.enabled) ? r.enabled : true,
+      });
+    }
+    out.replacements = rules as any;
+  }
+
+  // `themeEffects`: pin the two known numeric sub-fields to their documented
+  // ranges (glowIntensity 0..100, blurStrength 0..30) and coerce the four
+  // boolean toggles. Unknown keys are dropped. Reject outright if the raw
+  // object is implausibly large.
+  if (isObject(p.themeEffects) && jsonByteLength(p.themeEffects) <= MAX_STRUCT_JSON_BYTES) {
+    const e = p.themeEffects;
+    const fx: Record<string, number | boolean> = {};
+    if (isNumber(e.glowIntensity)) fx.glowIntensity = Math.max(0, Math.min(100, e.glowIntensity));
+    if (isNumber(e.blurStrength)) fx.blurStrength = Math.max(0, Math.min(30, e.blurStrength));
+    if (isBoolean(e.animateAura)) fx.animateAura = e.animateAura;
+    if (isBoolean(e.auraEnabled)) fx.auraEnabled = e.auraEnabled;
+    if (isBoolean(e.shimmer)) fx.shimmer = e.shimmer;
+    if (isBoolean(e.grain)) fx.grain = e.grain;
+    out.themeEffects = fx as any;
+  }
+
+  // `widgetBounds`: only `{ x, y }` finite pixel coordinates, or null to clear.
+  // Clamp to a generous on-screen range so a forged value can't park the pill
+  // millions of pixels off-screen where the user can never recover it.
+  if (isObject(p.widgetBounds)) {
+    const b = p.widgetBounds;
+    if (isNumber(b.x) && isNumber(b.y)) {
+      out.widgetBounds = {
+        x: Math.max(-32768, Math.min(32768, b.x)),
+        y: Math.max(-32768, Math.min(32768, b.y)),
+      } as any;
+    }
+  } else if (p.widgetBounds === null) {
+    out.widgetBounds = null;
+  }
 
   // TTS voice ids and API keys — keyed by provider. Sanitize each entry.
   if (isObject(p.ttsVoiceId)) {
