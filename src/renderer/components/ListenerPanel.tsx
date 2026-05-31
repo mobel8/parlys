@@ -92,6 +92,10 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
         console.warn('[listener:speak]', err.message);
         queue.advance(player);
       },
+      // Non-fatal output-routing failure. The listener has no dedicated
+      // warning surface, so log it clearly — playback continues on the
+      // default device and we must NOT advance/dispose the queue here.
+      onSinkError: (err) => console.warn('[listener:sink]', err.message),
     }, { sinkId: settings.ttsSinkId || undefined, autoStart: false });
     queue.add(player);
     (window as any).voiceink?.speak({

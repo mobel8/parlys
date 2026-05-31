@@ -50,6 +50,14 @@ export interface ContinuousInterpreterOptions {
   onPhraseDone?: (res: InterpretResponse) => void;
   /** Fired on any hard error (permission denied, stream broken, TTS…). */
   onError?: (err: Error) => void;
+  /**
+   * Fired on a NON-fatal degradation that must be shown to the user but
+   * must NOT skip/tear down the phrase — currently an audio-output
+   * routing failure (`setSinkId` rejected, so the translated voice plays
+   * on the default device instead of the requested virtual mic). Unlike
+   * `onError`, this does NOT advance the playback queue.
+   */
+  onWarning?: (msg: string) => void;
 }
 
 export interface ContinuousInterpreterHandle {
@@ -162,6 +170,9 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
           optsRef.current.onError?.(err);
           if (player) queue.advance(player);
         },
+        // Non-fatal output-routing failure — warn the user but keep the
+        // phrase playing (on the default device). Do NOT advance/dispose.
+        onSinkError: (err) => optsRef.current.onWarning?.(err.message),
       }, { sinkId: optsRef.current.sinkId?.(), autoStart: false });
       queue.add(player);
     }

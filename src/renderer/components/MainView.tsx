@@ -76,6 +76,9 @@ export function MainView() {
             const player = new InterpretPlayer(requestId, {
               onFirstChunk: (clientMs) => setLastTtfbMs(clientMs),
               onError: (err) => { console.warn('[interpret-player]', err.message); setLastWarning('Voix indisponible : ' + err.message); },
+              // Non-fatal: the voice still plays (default device) but didn't
+              // reach the requested output — surface without stopping playback.
+              onSinkError: (err) => setLastWarning('Sortie audio : ' + err.message),
             }, { sinkId: settings.ttsSinkId });
             playerRef.current = player;
           } else {
@@ -182,6 +185,10 @@ export function MainView() {
       console.warn('[continuous-interpreter]', err.message);
       setLastWarning('Interprète : ' + err.message);
     },
+    // Non-fatal degradation (e.g. audio-output routing failed) — surfaced
+    // as a dismissible warning chip; playback keeps going on the default
+    // device, capture is NOT interrupted.
+    onWarning: (msg) => setLastWarning('Interprète — ' + msg),
   });
 
   const toggle = async () => {

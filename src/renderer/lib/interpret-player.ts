@@ -21,6 +21,15 @@ export interface InterpretPlayerEvents {
   onFirstChunk?: (ttfbClientMs: number) => void;
   onEnd?: () => void;
   onError?: (err: Error) => void;
+  /**
+   * Non-fatal output-routing failure: `setSinkId()` rejected, so the
+   * translated voice is playing on the DEFAULT device instead of the
+   * requested one (e.g. the virtual mic for Discord/Zoom). Playback is
+   * NOT interrupted — this is a warning channel only. Callers MUST NOT
+   * dispose/advance on it (that would skip a phrase the user can still
+   * hear); they should surface it to the user instead.
+   */
+  onSinkError?: (err: Error) => void;
 }
 
 export interface InterpretPlayerOptions {
@@ -97,7 +106,13 @@ export class InterpretPlayer {
       const a = this.audio as HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> };
       if (typeof a.setSinkId === 'function') {
         a.setSinkId(options.sinkId).catch((err) => {
-          console.warn('[interpret-player] setSinkId failed:', err?.message || err);
+          const msg = err?.message || String(err);
+          console.warn('[interpret-player] setSinkId failed:', msg);
+          // Non-fatal: playback continues on the default device. We surface
+          // this so the user knows the translated voice did NOT reach the
+          // requested output (e.g. the virtual mic). NOT onError — that
+          // would skip/tear down a phrase that is in fact still audible.
+          this.events.onSinkError?.(new Error(`Périphérique de sortie indisponible (lecture sur la sortie par défaut) : ${msg}`));
         });
       }
     }
