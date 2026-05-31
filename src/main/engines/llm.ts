@@ -61,6 +61,7 @@ export async function postProcess(
   settings: Settings,
   languageHint?: string,
   onFail?: () => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (mode === 'raw' || !text.trim()) return text;
   if (!isLlmAvailable(settings)) {
@@ -92,17 +93,17 @@ export async function postProcess(
       out = await callOpenAICompat(text, prompt, 'https://api.groq.com/openai/v1/chat/completions',
         settings.groqApiKey || settings.llmApiKey,
         settings.llmModel || 'llama-3.3-70b-versatile',
-        'groq');
+        'groq', signal);
     } else if (provider === 'openai') {
       out = await callOpenAICompat(text, prompt, 'https://api.openai.com/v1/chat/completions',
-        settings.llmApiKey, settings.llmModel || 'gpt-4o-mini', 'openai');
+        settings.llmApiKey, settings.llmModel || 'gpt-4o-mini', 'openai', signal);
     } else if (provider === 'cerebras') {
       out = await callOpenAICompat(text, prompt, 'https://api.cerebras.ai/v1/chat/completions',
-        settings.llmApiKey, settings.llmModel || 'gpt-oss-120b', 'cerebras');
+        settings.llmApiKey, settings.llmModel || 'gpt-oss-120b', 'cerebras', signal);
     } else if (provider === 'ollama') {
-      out = await callOllama(text, prompt, settings);
+      out = await callOllama(text, prompt, settings, signal);
     } else if (provider === 'anthropic') {
-      out = await callAnthropic(text, prompt, settings);
+      out = await callAnthropic(text, prompt, settings, signal);
     }
     console.log(`[llm] postProcess done → ${out.length}ch`);
     return out;
@@ -120,6 +121,7 @@ async function callOpenAICompat(
   apiKey: string,
   model: string,
   label: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!apiKey) {
     console.warn(`[llm:${label}] no API key — cannot post-process`);
@@ -150,6 +152,8 @@ async function callOpenAICompat(
         'Content-Type': 'application/json',
       },
       body,
+      // Per-call deadline / external cancellation (undefined → unchanged).
+      signal,
     });
     if (res.ok) {
       const data = (await res.json()) as any;
@@ -163,6 +167,10 @@ async function callOpenAICompat(
 
     const retryable = res.status === 429 || (res.status >= 500 && res.status < 600);
     const errBody = await res.text().catch(() => '');
+    // Aborted (timeout fired or superseded) → stop retrying and rethrow.
+    if (signal?.aborted) {
+      throw (signal as any).reason ?? new Error('aborted');
+    }
     if (!retryable || attempt === backoff.length) {
       console.warn(`[llm:${label}] HTTP ${res.status}: ${errBody.slice(0, 300)}`);
       throw new Error(`${label} HTTP ${res.status}`);
@@ -178,7 +186,7 @@ async function callOpenAICompat(
   throw new Error(`${label} failed after retries`);
 }
 
-async function callOllama(text: string, system: string, settings: Settings): Promise<string> {
+async function callOllama(text: string, system: string, settings: Settings, signal?: AbortSignal): Promise<string> {
   const res = await fetch('http://localhost:11434/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -190,6 +198,7 @@ async function callOllama(text: string, system: string, settings: Settings): Pro
         { role: 'user', content: text },
       ],
     }),
+    signal,
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -201,7 +210,7 @@ async function callOllama(text: string, system: string, settings: Settings): Pro
   return out ? stripCodeFences(out) : text;
 }
 
-async function callAnthropic(text: string, system: string, settings: Settings): Promise<string> {
+async function callAnthropic(text: string, system: string, settings: Settings, signal?: AbortSignal): Promise<string> {
   if (!settings.llmApiKey) {
     console.warn('[llm:anthropic] no API key');
     return text;
@@ -219,6 +228,7 @@ async function callAnthropic(text: string, system: string, settings: Settings): 
       system,
       messages: [{ role: 'user', content: text }],
     }),
+    signal,
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
@@ -301,6 +311,7 @@ export async function translateText(
   settings: Settings,
   sourceCode?: string,
   onFail?: () => void,
+  signal?: AbortSignal,
 ): Promise<string> {
   if (!text.trim() || !targetCode) return text;
   if (sourceCode && sourceCode.toLowerCase() === targetCode.toLowerCase()) return text;
@@ -338,6 +349,10 @@ export async function translateText(
           { role: 'user', content: text },
         ],
       }),
+      // Per-call deadline / external cancellation (undefined → unchanged).
+      // An aborted fetch rejects and is caught below → onFail + source text,
+      // matching the existing "any error → fall back to source" contract.
+      signal,
     });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
@@ -471,7 +486,7 @@ export async function* streamTranslate(
   if (!res.ok || !res.body) {
     const body = res.ok ? '(no body)' : await res.text().catch(() => '');
     console.warn(`[translate:stream] ${res.status}: ${body.slice(0, 200)} — falling back to full translate`);
-    const out = await translateText(text, targetCode, settings, sourceCode);
+    const out = await translateText(text, targetCode, settings, sourceCode, undefined, signal);
     yield out;
     return;
   }

@@ -93,6 +93,7 @@ export async function transcribeWithGroq(
   audio: Buffer,
   mimeType: string,
   settings: Settings,
+  signal?: AbortSignal,
 ): Promise<WhisperResult> {
   if (!settings.groqApiKey) {
     throw new Error(
@@ -163,6 +164,10 @@ export async function transcribeWithGroq(
         Connection: 'keep-alive',
       },
       body: buildForm() as any,
+      // Per-call deadline / external cancellation. undefined → no signal,
+      // i.e. byte-for-byte the historical behaviour. An aborted fetch
+      // rejects (AbortError/TimeoutError) and propagates to the caller.
+      signal,
     });
 
     if (res.ok) {
@@ -180,6 +185,12 @@ export async function transcribeWithGroq(
     }
 
     const body = await res.text().catch(() => '');
+    // If the request was aborted (per-call timeout fired, or a newer utterance
+    // superseded this one), stop retrying and surface the abort immediately —
+    // retrying an aborted request would just burn the whole deadline again.
+    if (signal?.aborted) {
+      throw (signal as any).reason ?? new Error('aborted');
+    }
     const retryable = res.status === 429 || (res.status >= 500 && res.status < 600);
     if (!retryable || attempt === backoff.length) {
       // Map known statuses to actionable French messages. The raw provider
@@ -193,7 +204,20 @@ export async function transcribeWithGroq(
     const hint = body.match(/try again in ([0-9.]+)s/i);
     if (hint) wait = Math.max(wait, Math.ceil(parseFloat(hint[1]) * 1000));
     console.warn(`[whisper] Groq ${res.status} — retry ${attempt + 1}/${backoff.length} in ${wait}ms`);
-    await new Promise((r) => setTimeout(r, wait));
+    // Abortable back-off: a supersede/timeout during the sleep rejects
+    // immediately instead of burning the remaining wait before the next
+    // fetch observes the aborted signal.
+    await new Promise<void>((resolve, reject) => {
+      // Aborted in the tiny window since the check above? Reject now — an
+      // 'abort' listener attached to an already-fired signal never runs, which
+      // would otherwise burn the full back-off before the next fetch sees it.
+      if (signal?.aborted) { reject((signal as any).reason ?? new Error('aborted')); return; }
+      const t = setTimeout(resolve, wait);
+      signal?.addEventListener('abort', () => {
+        clearTimeout(t);
+        reject((signal as any).reason ?? new Error('aborted'));
+      }, { once: true });
+    });
   }
   // Unreachable (the loop either returns or throws), but satisfies the type checker.
   throw new Error('Groq transcription failed after retries');

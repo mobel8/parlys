@@ -20,6 +20,7 @@ import {
 } from './services/history';
 import { injectText, copyToClipboard } from './services/injection';
 import { applyReplacements, wordCount } from './services/replacements';
+import { abortableSignal } from './services/abort';
 import { reRegisterShortcuts } from './shortcuts';
 import { checkForUpdates, installAndRestart, getUpdaterState } from './updater';
 import {
@@ -48,6 +49,48 @@ import {
  * re-detecting once per session is imperceptible.
  */
 const LANG_HINTS: { interpret?: string; listener?: string } = {};
+
+/**
+ * Per-stage deadlines for external (STT / LLM / TTS) calls.
+ *
+ * Before this, every external fetch ran with NO timeout: a stalled upstream
+ * (Groq/Cartesia holding the socket open without sending bytes) hung the IPC
+ * handler forever, and the streaming handlers never emitted their done
+ * sentinel so the renderer's MediaSource leaked. These are GENEROUS on
+ * purpose — a slow-but-valid call (large audio, a cold 70B model, a long
+ * translation) must never trip the deadline. They exist only to bound a
+ * truly-dead connection. Tune up if real calls ever legitimately exceed them.
+ *
+ * NOTE (streaming refinement, future): INTERPRET/SPEAK use a SINGLE per-stage
+ * deadline covering the whole stream. A nicer model would reset the deadline
+ * on every received chunk (so a long-but-healthy stream can't trip it) — left
+ * out here to keep the change minimal; the generous value makes it a non-issue
+ * in practice for utterance-length audio.
+ */
+const STT_TIMEOUT_MS = 60_000; // Whisper transcription (incl. up to 3 back-offs).
+const LLM_TIMEOUT_MS = 90_000; // post-process / translate (streaming or one-shot).
+const TTS_TIMEOUT_MS = 60_000; // full TTS stream for one utterance/sentence.
+
+/**
+ * In-flight abort controllers for the STREAMING handlers (#6). When a NEW
+ * interpret/speak request arrives we abort the PREVIOUS one with reason
+ * 'superseded' so its still-running fetch stops wasting credits and we don't
+ * hear two utterances overlap. Each handler clears its slot in `finally` iff
+ * it is still the current owner (a newer request may have already replaced it).
+ */
+let currentInterpretAbort: AbortController | null = null;
+let currentSpeakAbort: AbortController | null = null;
+
+/**
+ * Distinguish a "superseded" abort (a newer request quietly replaced this
+ * one — the renderer should just finish the phrase, NO error) from a timeout
+ * or genuine failure (the UI should warn). Keyed off the reason we pass to
+ * controller.abort('superseded').
+ */
+function isSupersededReason(reason: unknown): boolean {
+  return reason === 'superseded'
+    || (typeof reason === 'object' && reason !== null && (reason as any).message === 'superseded');
+}
 
 export function registerIpc(): void {
   ipcMain.handle(IPC.GET_SETTINGS, (): Settings => getSettings());
@@ -206,7 +249,15 @@ export function registerIpc(): void {
       }
 
       const t1 = Date.now();
-      const r = await transcribeWithGroq(buf, req.mimeType, settings);
+      // Per-stage deadline so a stalled Groq socket can't hang this handler
+      // forever. dispose() in finally guarantees the timer never leaks.
+      const sttAb = abortableSignal(STT_TIMEOUT_MS);
+      let r: Awaited<ReturnType<typeof transcribeWithGroq>>;
+      try {
+        r = await transcribeWithGroq(buf, req.mimeType, settings, sttAb.signal);
+      } finally {
+        sttAb.dispose();
+      }
       const t2 = Date.now();
       console.log(`[transcribe] groq whisper: ${t2 - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'})`);
 
@@ -239,7 +290,12 @@ export function registerIpc(): void {
       let translateFailed = false;
       if (translateTo && rawText.trim()) {
         const ts = Date.now();
-        translated = await translateText(rawText, translateTo, settings, r.language, () => { translateFailed = true; });
+        const trAb = abortableSignal(LLM_TIMEOUT_MS);
+        try {
+          translated = await translateText(rawText, translateTo, settings, r.language, () => { translateFailed = true; }, trAb.signal);
+        } finally {
+          trAb.dispose();
+        }
         console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms${translateFailed ? ' (FAILED → source text)' : ''}`);
       }
 
@@ -254,7 +310,12 @@ export function registerIpc(): void {
       if (req.mode !== 'raw') {
         const ps = Date.now();
         const langHint = translateTo || r.language;
-        final = await postProcess(final, req.mode, settings, langHint, () => { postProcessFailed = true; });
+        const ppAb = abortableSignal(LLM_TIMEOUT_MS);
+        try {
+          final = await postProcess(final, req.mode, settings, langHint, () => { postProcessFailed = true; }, ppAb.signal);
+        } finally {
+          ppAb.dispose();
+        }
         console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms${postProcessFailed ? ' (FAILED → raw text)' : ''}`);
       }
       // The mode/translation silently degraded to raw/source text — flag it
@@ -356,6 +417,15 @@ export function registerIpc(): void {
       }
     };
 
+    // ABORT-PREVIOUS (#6): a new interpret supersedes any still-streaming one.
+    // We abort the prior controller with reason 'superseded' (its handler will
+    // emit a CLEAN done sentinel for ITS OWN requestId and bail) and install
+    // ours. Every per-stage deadline below chains to `reqAbort.signal` as its
+    // external signal, so a supersede cancels whatever stage we're currently in.
+    currentInterpretAbort?.abort('superseded');
+    const reqAbort = new AbortController();
+    currentInterpretAbort = reqAbort;
+
     const t0 = Date.now();
     let seq = 0;
     let ttfbMs: number | undefined;
@@ -396,7 +466,13 @@ export function registerIpc(): void {
       const whisperSettings = hintLang
         ? { ...settings, language: hintLang }
         : settings;
-      const r = await transcribeWithGroq(buf, req.mimeType, whisperSettings);
+      const sttAb = abortableSignal(STT_TIMEOUT_MS, reqAbort.signal);
+      let r: Awaited<ReturnType<typeof transcribeWithGroq>>;
+      try {
+        r = await transcribeWithGroq(buf, req.mimeType, whisperSettings, sttAb.signal);
+      } finally {
+        sttAb.dispose();
+      }
       // Refresh the cache with whatever Whisper actually detected so
       // the NEXT call benefits from the hint. Normalized to lower-case.
       if (r.language && typeof r.language === 'string') {
@@ -431,19 +507,29 @@ export function registerIpc(): void {
       // overlaps with the final tokens of the translator instead of
       // happening after them.
       const t2 = Date.now();
+      // Each sentence-sized TTS call gets its OWN deadline (so a long first
+      // sentence can't starve the tail) chained to reqAbort.signal (so a
+      // supersede cancels the in-flight stream). dispose() in finally always
+      // clears the timer. An aborted TTS fetch throws → caught by the handler's
+      // outer catch, which emits the (clean or error) done sentinel.
       const dispatchTTS = async (partial: string): Promise<void> => {
-        for await (const { chunk, mime } of streamTTS(settings, partial, { language: req.targetLang })) {
-          if (ttfbMs === undefined) {
-            ttfbMs = Date.now() - t2;
-            console.log(`[interpret] first audio chunk after ${ttfbMs}ms from translate start`);
+        const ttsAb = abortableSignal(TTS_TIMEOUT_MS, reqAbort.signal);
+        try {
+          for await (const { chunk, mime } of streamTTS(settings, partial, { language: req.targetLang, signal: ttsAb.signal })) {
+            if (ttfbMs === undefined) {
+              ttfbMs = Date.now() - t2;
+              console.log(`[interpret] first audio chunk after ${ttfbMs}ms from translate start`);
+            }
+            send({
+              requestId: req.requestId,
+              seq: seq++,
+              chunkBase64: chunk.toString('base64'),
+              mime,
+              done: false,
+            });
           }
-          send({
-            requestId: req.requestId,
-            seq: seq++,
-            chunkBase64: chunk.toString('base64'),
-            mime,
-            done: false,
-          });
+        } finally {
+          ttsAb.dispose();
         }
       };
 
@@ -454,6 +540,15 @@ export function registerIpc(): void {
       // more than one TTS at a time — sequential playback is the
       // desired UX (otherwise the user hears two voices overlap).
       let ttsQueue: Promise<void> = Promise.resolve();
+      // First error from any ordered TTS task. Each enqueue attaches a
+      // .catch so a rejected dispatch can never become an ORPHANED unhandled
+      // rejection when the translate loop throws first (e.g. on supersede) and
+      // the drain below is skipped. The captured error is re-thrown after the
+      // drain so a genuine TTS failure still reaches the catch (→ error sentinel).
+      let ttsError: unknown = null;
+      const enqueueTTS = (text: string) => {
+        ttsQueue = ttsQueue.then(() => dispatchTTS(text)).catch((e) => { if (ttsError === null) ttsError = e; });
+      };
       let firstSentenceSent = false;
 
       // Global master switch — when OFF, we skip every TTS call (saves
@@ -462,24 +557,31 @@ export function registerIpc(): void {
       // the text.
       const speakOn = settings.speakTranslations !== false;
 
-      for await (const delta of streamTranslate(rawText, req.targetLang, settings, r.language)) {
-        translatedFull += delta;
-        pending += delta;
-        if (!speakOn) continue;
-        // Scan the pending buffer for a natural sentence boundary.
-        // We look for the LAST terminal mark so a single multi-sentence
-        // delta gets split into two TTS calls if the model emits it in
-        // one shot (rare but possible on 8B).
-        const match = pending.match(/^([\s\S]*[.!?…])(\s+|$)/);
-        if (match && !firstSentenceSent) {
-          const firstChunk = match[1].trim();
-          pending = pending.slice(match[0].length);
-          if (firstChunk.length >= 2) {
-            firstSentenceSent = true;
-            const toSpeak = firstChunk;
-            ttsQueue = ttsQueue.then(() => dispatchTTS(toSpeak));
+      // Deadline for the whole translate stream, chained to reqAbort so a
+      // supersede tears it down. dispose() after the loop in all paths.
+      const trAb = abortableSignal(LLM_TIMEOUT_MS, reqAbort.signal);
+      try {
+        for await (const delta of streamTranslate(rawText, req.targetLang, settings, r.language, trAb.signal)) {
+          translatedFull += delta;
+          pending += delta;
+          if (!speakOn) continue;
+          // Scan the pending buffer for a natural sentence boundary.
+          // We look for the LAST terminal mark so a single multi-sentence
+          // delta gets split into two TTS calls if the model emits it in
+          // one shot (rare but possible on 8B).
+          const match = pending.match(/^([\s\S]*[.!?…])(\s+|$)/);
+          if (match && !firstSentenceSent) {
+            const firstChunk = match[1].trim();
+            pending = pending.slice(match[0].length);
+            if (firstChunk.length >= 2) {
+              firstSentenceSent = true;
+              const toSpeak = firstChunk;
+              enqueueTTS(toSpeak);
+            }
           }
         }
+      } finally {
+        trAb.dispose();
       }
       console.log(`[interpret] translate stream done in ${Date.now() - t2}ms → "${translatedFull.slice(0, 80)}"${speakOn ? '' : ' (TTS disabled)'}`);
 
@@ -489,7 +591,7 @@ export function registerIpc(): void {
         // sentence mark — one-word inputs, abbreviations, etc.).
         const tail = pending.trim();
         if (tail.length > 0) {
-          ttsQueue = ttsQueue.then(() => dispatchTTS(tail));
+          enqueueTTS(tail);
         }
       }
       // If the stream produced nothing useful, fall back to the one-shot
@@ -497,17 +599,26 @@ export function registerIpc(): void {
       // Should be rare.
       if (!translatedFull.trim()) {
         console.warn('[interpret] translate stream produced empty output, falling back to one-shot');
-        const oneShot = await translateText(rawText, req.targetLang, settings, r.language);
+        const fbAb = abortableSignal(LLM_TIMEOUT_MS, reqAbort.signal);
+        let oneShot: string;
+        try {
+          oneShot = await translateText(rawText, req.targetLang, settings, r.language, undefined, fbAb.signal);
+        } finally {
+          fbAb.dispose();
+        }
         if (oneShot.trim()) {
           translatedFull = oneShot;
           if (speakOn) {
-            ttsQueue = ttsQueue.then(() => dispatchTTS(oneShot));
+            enqueueTTS(oneShot);
           }
         }
       }
 
       // Drain every TTS call we kicked off before signalling completion.
       await ttsQueue;
+      // Re-throw a TTS failure captured on the ordered chain so it reaches
+      // the catch below (→ error sentinel) instead of being silently dropped.
+      if (ttsError) throw ttsError;
 
       const translated = translatedFull.trim();
 
@@ -543,6 +654,26 @@ export function registerIpc(): void {
         ttfbMs,
       };
     } catch (err: any) {
+      // DISTINGUISH the abort cause via OUR request controller (more reliable
+      // than sniffing the thrown error, whose shape varies by runtime):
+      //   - superseded → a NEWER interpret replaced this one. Emit a CLEAN
+      //     done sentinel (NO error) for THIS requestId so the renderer just
+      //     finishes the old phrase quietly. Sentinels are keyed by requestId,
+      //     so this never disturbs the new request's player.
+      //   - timeout / any other error → emit done WITH an error so the UI warns.
+      const superseded = reqAbort.signal.aborted && isSupersededReason(reqAbort.signal.reason);
+      if (superseded) {
+        console.warn('[interpret] superseded by a newer request — finishing old phrase quietly');
+        send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
+        return {
+          ok: false,
+          requestId: req.requestId,
+          rawText: '',
+          translatedText: '',
+          durationMs: Date.now() - t0,
+          error: 'superseded',
+        };
+      }
       const msg = err?.message || String(err);
       console.error('[interpret] error:', msg);
       // Tell the renderer to tear down its player.
@@ -562,6 +693,11 @@ export function registerIpc(): void {
         durationMs: Date.now() - t0,
         error: msg,
       };
+    } finally {
+      // Clear our module slot iff still the current owner — a newer request
+      // may have already replaced (and superseded) us, in which case it owns
+      // the slot now and must not be cleared.
+      if (currentInterpretAbort === reqAbort) currentInterpretAbort = null;
     }
   });
 
@@ -626,6 +762,14 @@ export function registerIpc(): void {
     const send = (payload: InterpretChunkEvent) => {
       if (!sender.isDestroyed()) sender.send(IPC.ON_INTERPRET_CHUNK, payload);
     };
+
+    // ABORT-PREVIOUS (#6): a new speak supersedes any still-streaming one so we
+    // don't pay for / hear two overlapping TTS streams. The prior controller is
+    // aborted with reason 'superseded'; its handler emits a CLEAN done sentinel.
+    currentSpeakAbort?.abort('superseded');
+    const reqAbort = new AbortController();
+    currentSpeakAbort = reqAbort;
+
     let seq = 0;
     let ttfbMs: number | undefined;
     try {
@@ -638,24 +782,43 @@ export function registerIpc(): void {
         return { ok: true, requestId: req.requestId };
       }
       const t0 = Date.now();
-      const iter = streamTTS(settings, req.text, { language: req.language });
-      for await (const { chunk, mime } of iter) {
-        if (ttfbMs === undefined) ttfbMs = Date.now() - t0;
-        send({
-          requestId: req.requestId,
-          seq: seq++,
-          chunkBase64: chunk.toString('base64'),
-          mime,
-          done: false,
-        });
+      // Per-call TTS deadline chained to reqAbort (so a supersede cancels the
+      // in-flight stream). dispose() in finally clears the timer.
+      const ttsAb = abortableSignal(TTS_TIMEOUT_MS, reqAbort.signal);
+      try {
+        const iter = streamTTS(settings, req.text, { language: req.language, signal: ttsAb.signal });
+        for await (const { chunk, mime } of iter) {
+          if (ttfbMs === undefined) ttfbMs = Date.now() - t0;
+          send({
+            requestId: req.requestId,
+            seq: seq++,
+            chunkBase64: chunk.toString('base64'),
+            mime,
+            done: false,
+          });
+        }
+      } finally {
+        ttsAb.dispose();
       }
       send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
       return { ok: true, ttfbMs, requestId: req.requestId };
     } catch (err: any) {
+      // Superseded → CLEAN done sentinel (no error) for THIS requestId so the
+      // renderer finishes the old phrase quietly. Otherwise (timeout / failure)
+      // emit done WITH an error so the UI warns. See INTERPRET for the rationale.
+      const superseded = reqAbort.signal.aborted && isSupersededReason(reqAbort.signal.reason);
+      if (superseded) {
+        console.warn('[speak] superseded by a newer request — finishing old phrase quietly');
+        send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true });
+        return { ok: false, error: 'superseded', requestId: req.requestId };
+      }
       const msg = err?.message || String(err);
       console.error('[speak] error:', msg);
       send({ requestId: req.requestId, seq: seq++, chunkBase64: '', mime: 'audio/mpeg', done: true, error: msg });
       return { ok: false, error: msg, requestId: req.requestId };
+    } finally {
+      // Clear our slot iff still the current owner (a newer request may already own it).
+      if (currentSpeakAbort === reqAbort) currentSpeakAbort = null;
     }
   });
 
@@ -690,7 +853,13 @@ export function registerIpc(): void {
         || LANG_HINTS.listener
         || (settings.language && settings.language !== 'auto' ? settings.language : '');
       const whisperSettings = listenerHint ? { ...settings, language: listenerHint } : settings;
-      const wh = await transcribeWithGroq(buf, req.mimeType, whisperSettings);
+      const sttAb = abortableSignal(STT_TIMEOUT_MS);
+      let wh: Awaited<ReturnType<typeof transcribeWithGroq>>;
+      try {
+        wh = await transcribeWithGroq(buf, req.mimeType, whisperSettings, sttAb.signal);
+      } finally {
+        sttAb.dispose();
+      }
       if (wh.language && typeof wh.language === 'string') {
         LANG_HINTS.listener = wh.language.toLowerCase();
       }
@@ -715,7 +884,12 @@ export function registerIpc(): void {
       // no try/catch is needed — we use its onFail callback to flag a silent
       // degradation so the contract matches the dictation pipeline.
       if (tgt && tgt !== wh.language && tgt !== listenerHint) {
-        translated = await translateText(text, tgt, settings, wh.language, () => { translateFailed = true; });
+        const trAb = abortableSignal(LLM_TIMEOUT_MS);
+        try {
+          translated = await translateText(text, tgt, settings, wh.language, () => { translateFailed = true; }, trAb.signal);
+        } finally {
+          trAb.dispose();
+        }
         if (translateFailed) console.warn('[listener] translate degraded to source text');
       }
       return { ok: true, text, translated, sourceLang: wh.language, translateFailed: translateFailed || undefined };
