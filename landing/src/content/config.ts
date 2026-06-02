@@ -21,7 +21,7 @@ const blog = defineCollection({
     slug: z.string().optional(),
     date: z.coerce.date(),
     updated: z.coerce.date().optional(),
-    author: z.string().default('VoiceInk Team'),
+    author: z.string().default('Parlys Team'),
     category: z.enum([
       'guide', 'comparison', 'vertical-health', 'vertical-legal',
       'vertical-creators', 'vertical-teams', 'announcement', 'tutorial',

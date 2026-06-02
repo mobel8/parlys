@@ -187,7 +187,7 @@ export function useAudioRecorder(opts: {
       source.connect(proc);
       proc.connect(sink);
       sink.connect(ctx.destination);
-      try { (window as any).voiceink?.prewarm?.(); } catch { /* best-effort */ }
+      try { (window as any).parlys?.prewarm?.(); } catch { /* best-effort */ }
     })();
     try {
       await warmingRef.current;

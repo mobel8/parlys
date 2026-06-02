@@ -1,4 +1,4 @@
--- VoiceInk backend schema v1
+-- Parlys backend schema v1
 -- ─────────────────────────────────────────────────────────────────────
 -- Tables:
 --   users            — one row per authenticated user (Clerk sub = id)

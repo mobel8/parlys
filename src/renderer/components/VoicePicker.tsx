@@ -42,7 +42,7 @@ function shortHash(s: string): string {
 }
 
 function cacheKey(provider: TTSProvider): string {
-  return `voiceink:voices:${provider}`;
+  return `parlys:voices:${provider}`;
 }
 
 function readCache(provider: TTSProvider, apiKey: string): VoiceInfo[] | null {
@@ -107,7 +107,7 @@ export function VoicePicker({ provider, apiKey, value, onChange, fallback = [], 
     }
     let cancelled = false;
     setLoading(true);
-    (window as any).voiceink?.listVoices(provider)
+    (window as any).parlys?.listVoices(provider)
       .then((list: VoiceInfo[]) => {
         if (cancelled) return;
         if (list && list.length > 0) {
@@ -125,7 +125,7 @@ export function VoicePicker({ provider, apiKey, value, onChange, fallback = [], 
   const refresh = () => {
     localStorage.removeItem(cacheKey(provider));
     setLoading(true);
-    (window as any).voiceink?.listVoices(provider)
+    (window as any).parlys?.listVoices(provider)
       .then((list: VoiceInfo[]) => {
         if (list && list.length > 0) {
           setVoices(list);

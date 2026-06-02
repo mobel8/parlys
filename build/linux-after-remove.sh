@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# VoiceInk — Linux .deb / .rpm post-remove hook.
+# Parlys — Linux .deb / .rpm post-remove hook.
 # Clean up the per-user desktop shortcuts we dropped on install.
 # ============================================================
 
@@ -15,7 +15,7 @@ while IFS=: read -r _ _ uid _ _ home shell; do
   [ -z "$home" ] && continue
 
   for d in "$home/Desktop" "$home/Bureau"; do
-    [ -f "$d/VoiceInk.desktop" ] && rm -f "$d/VoiceInk.desktop"
+    [ -f "$d/Parlys.desktop" ] && rm -f "$d/Parlys.desktop"
   done
 done < /etc/passwd
 

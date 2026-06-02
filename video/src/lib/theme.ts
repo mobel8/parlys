@@ -8,7 +8,7 @@
 
 export const BRAND = {
   // Hex values double-checked against the landing page's Tailwind
-  // config at d:\voiceink\landing\tailwind.config.mjs.
+  // config at d:\parlys\landing\tailwind.config.mjs.
   purple: '#a78bfa',
   cyan:   '#22d3ee',
   pink:   '#f472b6',

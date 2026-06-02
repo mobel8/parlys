@@ -1,5 +1,5 @@
 /**
- * VoiceInkPromo — the full 60-second composition.
+ * ParlysPromo — the full 60-second composition.
  *
  * We build the timeline with Remotion's <Sequence> primitive, placing
  * each scene on the master timeline via its `from` frame. Scenes are
@@ -30,7 +30,7 @@ import { SceneStats }            from './scenes/SceneStats';
 import { ScenePricing }          from './scenes/ScenePricing';
 import { SceneFinalCTA }         from './scenes/SceneFinalCTA';
 
-export const VoiceInkPromo: React.FC<{ lang?: Lang }> = ({ lang = 'en' }) => {
+export const ParlysPromo: React.FC<{ lang?: Lang }> = ({ lang = 'en' }) => {
   return (
     <LangProvider lang={lang}>
     <AbsoluteFill style={{ backgroundColor: '#020410' }}>

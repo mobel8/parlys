@@ -26,10 +26,10 @@ const faqs = [
     aFr: 'Nous avons mesuré le délai entre le tap et le premier octet audio sur une fibre 50 Mbps à Paris. Whisper Turbo sur Groq renvoie le premier token en ~170 ms, Cartesia TTS stream le premier chunk MP3 en ~180 ms, et notre routage ajoute ~30 ms. Vous entendez la première syllabe avant que la plupart des apps aient réagi à votre touche.',
   },
   {
-    qEn: 'Does VoiceInk work offline?',
-    qFr: 'VoiceInk fonctionne-t-il hors-ligne ?',
-    aEn: 'Not the cloud mode — transcription and TTS need Groq / Cartesia. But with BYOK (Bring Your Own Key) turned on, you can point VoiceInk at your own Whisper running locally via llama.cpp. The pipeline is modular: we\u2019ll ship a local-only mode in v2.0 with whisper.cpp + Piper TTS.',
-    aFr: 'Pas en mode cloud \u2014 la transcription et le TTS ont besoin de Groq / Cartesia. Mais avec le mode BYOK (Bring Your Own Key) activé, vous pouvez pointer VoiceInk vers votre propre Whisper local via llama.cpp. Le pipeline est modulaire : un mode 100% local arrive en v2.0 avec whisper.cpp + Piper TTS.',
+    qEn: 'Does Parlys work offline?',
+    qFr: 'Parlys fonctionne-t-il hors-ligne ?',
+    aEn: 'Not the cloud mode — transcription and TTS need Groq / Cartesia. But with BYOK (Bring Your Own Key) turned on, you can point Parlys at your own Whisper running locally via llama.cpp. The pipeline is modular: we\u2019ll ship a local-only mode in v2.0 with whisper.cpp + Piper TTS.',
+    aFr: 'Pas en mode cloud \u2014 la transcription et le TTS ont besoin de Groq / Cartesia. Mais avec le mode BYOK (Bring Your Own Key) activé, vous pouvez pointer Parlys vers votre propre Whisper local via llama.cpp. Le pipeline est modulaire : un mode 100% local arrive en v2.0 avec whisper.cpp + Piper TTS.',
   },
   {
     qEn: 'Is my voice recorded and used for training?',
@@ -62,10 +62,10 @@ const faqs = [
     aFr: 'Pas publique \u2014 pour l\u2019instant. Les mêmes endpoints qui servent l\u2019app bureau peuvent être exposés aux développeurs tiers sur le plan Entreprise. Contactez-nous pour un accès API anticipé.',
   },
   {
-    qEn: 'How does VoiceInk compare to Otter / Dragon?',
-    qFr: 'Comment VoiceInk se compare à Otter / Dragon ?',
-    aEn: 'Otter is a great meeting transcriber but doesn\u2019t translate or speak. Dragon Medical is accurate but costs 500+ €/yr and hasn\u2019t updated its UI since 2014. VoiceInk is the only one that does dictation + live translation + voice cloning in a single tiny app, for a fraction of the price.',
-    aFr: 'Otter est un excellent transcripteur de réunions mais ne traduit pas et ne parle pas. Dragon Medical est précis mais coûte 500+ €/an et n\u2019a pas mis à jour son UI depuis 2014. VoiceInk est le seul qui fait dictée + traduction live + clonage vocal dans une seule petite app, pour une fraction du prix.',
+    qEn: 'How does Parlys compare to Otter / Dragon?',
+    qFr: 'Comment Parlys se compare à Otter / Dragon ?',
+    aEn: 'Otter is a great meeting transcriber but doesn\u2019t translate or speak. Dragon Medical is accurate but costs 500+ €/yr and hasn\u2019t updated its UI since 2014. Parlys is the only one that does dictation + live translation + voice cloning in a single tiny app, for a fraction of the price.',
+    aFr: 'Otter est un excellent transcripteur de réunions mais ne traduit pas et ne parle pas. Dragon Medical est précis mais coûte 500+ €/an et n\u2019a pas mis à jour son UI depuis 2014. Parlys est le seul qui fait dictée + traduction live + clonage vocal dans une seule petite app, pour une fraction du prix.',
   },
 ];
 
@@ -90,10 +90,10 @@ const schema = {
       </h2>
       <p class="mt-4 text-ink-300 md:text-lg">
         <span data-i18n-lang="en">Can't find what you're looking for?{' '}
-          <a href="mailto:hi@voiceink.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Ask us anything</a>.
+          <a href="mailto:hi@parlys.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Ask us anything</a>.
         </span>
         <span data-i18n-lang="fr">Vous ne trouvez pas votre bonheur ?{' '}
-          <a href="mailto:hi@voiceink.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Posez-nous n'importe quoi</a>.
+          <a href="mailto:hi@parlys.app" class="underline decoration-aurora-purple/40 underline-offset-4 hover:text-white">Posez-nous n'importe quoi</a>.
         </span>
       </p>
     </div>

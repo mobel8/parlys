@@ -23,42 +23,42 @@ type ExportFormat = 'json' | 'markdown' | 'txt' | 'csv';
  * cannot resolve local modules.
  */
 const IPC = {
-  TRANSCRIBE: 'voiceink:transcribe',
-  INTERPRET: 'voiceink:interpret',
-  ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
-  LIST_VOICES: 'voiceink:listVoices',
-  LISTENER_TRANSCRIBE: 'voiceink:listenerTranscribe',
-  SPEAK: 'voiceink:speak',
-  PREWARM: 'voiceink:prewarm',
-  GET_SETTINGS: 'voiceink:getSettings',
-  SET_SETTINGS: 'voiceink:setSettings',
-  GET_HISTORY: 'voiceink:getHistory',
-  ADD_HISTORY: 'voiceink:addHistory',
-  DELETE_HISTORY: 'voiceink:deleteHistory',
-  CLEAR_HISTORY: 'voiceink:clearHistory',
-  INJECT_TEXT: 'voiceink:injectText',
-  COPY_TEXT: 'voiceink:copyText',
-  EXPORT: 'voiceink:export',
-  ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
-  ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
-  ON_SETTINGS_CHANGED: 'voiceink:onSettingsChanged',
-  WINDOW_MINIMIZE: 'voiceink:windowMinimize',
-  WINDOW_CLOSE: 'voiceink:windowClose',
-  WINDOW_MAXIMIZE: 'voiceink:windowMaximize',
-  WINDOW_SET_ALWAYS_ON_TOP: 'voiceink:windowSetAlwaysOnTop',
-  WINDOW_RESIZE_FOR_DENSITY: 'voiceink:windowResizeForDensity',
-  WIDGET_CONTEXT_MENU: 'voiceink:widgetContextMenu',
-  TOGGLE_PIN_HISTORY: 'voiceink:togglePinHistory',
-  EXPORT_HISTORY: 'voiceink:exportHistory',
-  GET_USAGE_STATS: 'voiceink:getUsageStats',
-  SET_AUTO_START: 'voiceink:setAutoStart',
-  ON_PTT_DOWN: 'voiceink:onPttDown',
-  ON_PTT_UP: 'voiceink:onPttUp',
-  LOG: 'voiceink:log',
-  UPDATER_CHECK: 'voiceink:updaterCheck',
-  UPDATER_INSTALL: 'voiceink:updaterInstall',
-  UPDATER_GET_STATE: 'voiceink:updaterGetState',
-  ON_UPDATER_STATE: 'voiceink:onUpdaterState',
+  TRANSCRIBE: 'parlys:transcribe',
+  INTERPRET: 'parlys:interpret',
+  ON_INTERPRET_CHUNK: 'parlys:interpretChunk',
+  LIST_VOICES: 'parlys:listVoices',
+  LISTENER_TRANSCRIBE: 'parlys:listenerTranscribe',
+  SPEAK: 'parlys:speak',
+  PREWARM: 'parlys:prewarm',
+  GET_SETTINGS: 'parlys:getSettings',
+  SET_SETTINGS: 'parlys:setSettings',
+  GET_HISTORY: 'parlys:getHistory',
+  ADD_HISTORY: 'parlys:addHistory',
+  DELETE_HISTORY: 'parlys:deleteHistory',
+  CLEAR_HISTORY: 'parlys:clearHistory',
+  INJECT_TEXT: 'parlys:injectText',
+  COPY_TEXT: 'parlys:copyText',
+  EXPORT: 'parlys:export',
+  ON_TOGGLE_RECORDING: 'parlys:onToggleRecording',
+  ON_SETTINGS_OPEN: 'parlys:onSettingsOpen',
+  ON_SETTINGS_CHANGED: 'parlys:onSettingsChanged',
+  WINDOW_MINIMIZE: 'parlys:windowMinimize',
+  WINDOW_CLOSE: 'parlys:windowClose',
+  WINDOW_MAXIMIZE: 'parlys:windowMaximize',
+  WINDOW_SET_ALWAYS_ON_TOP: 'parlys:windowSetAlwaysOnTop',
+  WINDOW_RESIZE_FOR_DENSITY: 'parlys:windowResizeForDensity',
+  WIDGET_CONTEXT_MENU: 'parlys:widgetContextMenu',
+  TOGGLE_PIN_HISTORY: 'parlys:togglePinHistory',
+  EXPORT_HISTORY: 'parlys:exportHistory',
+  GET_USAGE_STATS: 'parlys:getUsageStats',
+  SET_AUTO_START: 'parlys:setAutoStart',
+  ON_PTT_DOWN: 'parlys:onPttDown',
+  ON_PTT_UP: 'parlys:onPttUp',
+  LOG: 'parlys:log',
+  UPDATER_CHECK: 'parlys:updaterCheck',
+  UPDATER_INSTALL: 'parlys:updaterInstall',
+  UPDATER_GET_STATE: 'parlys:updaterGetState',
+  ON_UPDATER_STATE: 'parlys:onUpdaterState',
 } as const;
 
 const api = {
@@ -144,8 +144,8 @@ const api = {
 
   onOpenSettings: (cb: () => void) => {
     const listener = () => cb();
-    ipcRenderer.on('voiceink:openSettings', listener);
-    return () => ipcRenderer.removeListener('voiceink:openSettings', listener);
+    ipcRenderer.on('parlys:openSettings', listener);
+    return () => ipcRenderer.removeListener('parlys:openSettings', listener);
   },
 
   /**
@@ -168,7 +168,7 @@ const api = {
    * density hot-swap, so the new window never appears while it's still
    * painting the (possibly wrong-for-its-size) shell frame.
    */
-  rendererReady: () => ipcRenderer.send('voiceink:renderer-ready'),
+  rendererReady: () => ipcRenderer.send('parlys:renderer-ready'),
 
   /**
    * Main fires this signal on the OUTGOING renderer just before it
@@ -179,8 +179,8 @@ const api = {
    */
   onDensitySwapOut: (cb: () => void) => {
     const listener = () => cb();
-    ipcRenderer.on('voiceink:densitySwapOut', listener);
-    return () => ipcRenderer.removeListener('voiceink:densitySwapOut', listener);
+    ipcRenderer.on('parlys:densitySwapOut', listener);
+    return () => ipcRenderer.removeListener('parlys:densitySwapOut', listener);
   },
 
   // Main process broadcasts this whenever the user moves the pill-scale
@@ -188,8 +188,8 @@ const api = {
   // `data-window` in the same frame as the native setBounds.
   onPillScaleChanged: (cb: (scale: number) => void) => {
     const listener = (_e: unknown, scale: number) => cb(scale);
-    ipcRenderer.on('voiceink:pillScaleChanged', listener);
-    return () => ipcRenderer.removeListener('voiceink:pillScaleChanged', listener);
+    ipcRenderer.on('parlys:pillScaleChanged', listener);
+    return () => ipcRenderer.removeListener('parlys:pillScaleChanged', listener);
   },
 
   /**
@@ -209,6 +209,6 @@ const api = {
   },
 };
 
-contextBridge.exposeInMainWorld('voiceink', api);
+contextBridge.exposeInMainWorld('parlys', api);
 
-export type VoiceInkAPI = typeof api;
+export type ParlysAPI = typeof api;

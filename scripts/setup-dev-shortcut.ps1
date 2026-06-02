@@ -1,7 +1,7 @@
 #
-# Update the VoiceInk desktop + start-menu shortcuts so they target the
-# live dev launcher (D:\voiceink\dev.bat) instead of the installed
-# VoiceInk.exe snapshot. Each click then runs against current source
+# Update the Parlys desktop + start-menu shortcuts so they target the
+# live dev launcher (D:\parlys\dev.bat) instead of the installed
+# Parlys.exe snapshot. Each click then runs against current source
 # with HMR + auto-restart on every modification.
 #
 # A backup of the original shortcut(s) is saved next to each as
@@ -28,8 +28,8 @@ if (-not (Test-Path $DevBat)) {
 }
 
 $Targets = @(
-  (Join-Path ([Environment]::GetFolderPath('Desktop')) 'VoiceInk.lnk'),
-  (Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\VoiceInk.lnk')
+  (Join-Path ([Environment]::GetFolderPath('Desktop')) 'Parlys.lnk'),
+  (Join-Path ([Environment]::GetFolderPath('StartMenu')) 'Programs\Parlys.lnk')
 )
 
 $Sh = New-Object -ComObject WScript.Shell
@@ -59,7 +59,7 @@ foreach ($lnkPath in $Targets) {
   $lnk.Arguments = "/c """"$DevBat"""""
   $lnk.WorkingDirectory = $ProjectRoot
   if (Test-Path $IconPath) { $lnk.IconLocation = "$IconPath,0" }
-  $lnk.Description = 'VoiceInk — live dev (Vite HMR + tsc-watch + Electron auto-restart)'
+  $lnk.Description = 'Parlys — live dev (Vite HMR + tsc-watch + Electron auto-restart)'
   # 7 = minimised window so the launcher console doesn't grab focus.
   # Change to 1 for normal window if you want to read logs as they stream.
   $lnk.WindowStyle = 7
@@ -69,5 +69,5 @@ foreach ($lnkPath in $Targets) {
 }
 
 Write-Host ''
-Write-Host 'Done. Click the desktop "VoiceInk" shortcut — it will spin up Vite + tsc --watch + Electron.'
+Write-Host 'Done. Click the desktop "Parlys" shortcut — it will spin up Vite + tsc --watch + Electron.'
 Write-Host 'Edit any file under src\, save, and the app updates automatically.'

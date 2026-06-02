@@ -16,7 +16,7 @@ import sitemap from '@astrojs/sitemap';
 // Local development runs `npm run watch:css` in parallel with the
 // Astro dev server so Tailwind rebuilds the file on every change.
 export default defineConfig({
-  site: 'https://voiceink.app',
+  site: 'https://parlys.app',
   integrations: [react(), sitemap()],
   // Static output — Cloudflare Pages / Vercel edge deploys it as-is.
   output: 'static',

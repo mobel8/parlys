@@ -9,8 +9,8 @@ const path = require('path');
 const os   = require('os');
 const asar = require('@electron/asar');
 
-const INSTALLED = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'resources', 'app.asar');
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voiceink-hover-'));
+const INSTALLED = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'resources', 'app.asar');
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'parlys-hover-'));
 asar.extractAll(INSTALLED, tmp);
 const assetsDir = path.join(tmp, 'dist', 'renderer', 'assets');
 const cssName = fs.readdirSync(assetsDir).find((f) => f.endsWith('.css'));

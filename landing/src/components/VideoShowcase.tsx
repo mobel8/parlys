@@ -23,8 +23,8 @@ import { useLang } from '../i18n/useLang';
 import type { Lang } from '../i18n/lang';
 
 const VIDEOS: Record<Lang, { src: string; label: string }> = {
-  en: { src: '/videos/voiceink-promo-en.mp4', label: 'English — 60 s' },
-  fr: { src: '/videos/voiceink-promo-fr.mp4', label: 'Français — 60 s' },
+  en: { src: '/videos/parlys-promo-en.mp4', label: 'English — 60 s' },
+  fr: { src: '/videos/parlys-promo-fr.mp4', label: 'Français — 60 s' },
 };
 
 export default function VideoShowcase() {
@@ -209,7 +209,7 @@ export default function VideoShowcase() {
             playsInline
             preload="metadata"
             poster="/videos/poster.svg"
-            aria-label={`VoiceInk promo video (${VIDEOS[lang].label})`}
+            aria-label={`Parlys promo video (${VIDEOS[lang].label})`}
           />
 
           {/* Play overlay — shown while paused */}

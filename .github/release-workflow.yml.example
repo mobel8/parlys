@@ -23,7 +23,7 @@ jobs:
           - os: windows-latest
             name: Windows
             artifact: |
-              release/VoiceInk-Setup-*.exe
+              release/Parlys-Setup-*.exe
           - os: ubuntu-latest
             name: Linux
             artifact: |
@@ -93,7 +93,7 @@ jobs:
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voiceink-${{ matrix.name }}
+          name: parlys-${{ matrix.name }}
           path: ${{ matrix.artifact }}
           if-no-files-found: error
           retention-days: 30
@@ -103,7 +103,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/VoiceInk-Setup-*.exe
+            release/Parlys-Setup-*.exe
             release/*.AppImage
             release/*.deb
             release/*.rpm

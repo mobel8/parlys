@@ -160,7 +160,7 @@ export interface Settings {
   autoInject: boolean;
   autoCopy: boolean;
   /**
-   * How VoiceInk delivers the dictated text into the focused app:
+   * How Parlys delivers the dictated text into the focused app:
    *
    *   - 'paste' (default) — write to clipboard then synthesise Ctrl+V.
    *     Fast (≈1 keystroke regardless of length) and works in every
@@ -187,7 +187,7 @@ export interface Settings {
    */
   shortcutInterpreter: string;
   /**
-   * UI language of the VoiceInk app itself (menus, labels, buttons).
+   * UI language of the Parlys app itself (menus, labels, buttons).
    * Completely independent of `language` (which hints Whisper what
    * language the USER is speaking). `'auto'` resolves at runtime to
    * the OS/browser locale — see `src/shared/i18n.ts::resolveUILanguage`.
@@ -205,7 +205,7 @@ export interface Settings {
   density: Density;             // 'comfortable' (main window) or 'compact' (floating pill)
   alwaysOnTop: boolean;         // Always-on-top in comfortable mode (pill is always on top)
   widgetBounds: WidgetBounds | null; // Last pill position (persisted across launches)
-  /** Launch VoiceInk at Windows startup. */
+  /** Launch Parlys at Windows startup. */
   autoStart: boolean;
   /** Start minimized to tray (no window visible on launch). */
   startMinimized: boolean;
@@ -536,24 +536,24 @@ export interface ListenerSegment {
 }
 
 export const IPC = {
-  TRANSCRIBE: 'voiceink:transcribe',
-  INTERPRET: 'voiceink:interpret',
-  ON_INTERPRET_CHUNK: 'voiceink:interpretChunk',
-  LIST_VOICES: 'voiceink:listVoices',
-  LISTENER_TRANSCRIBE: 'voiceink:listenerTranscribe',
-  SPEAK: 'voiceink:speak',
-  PREWARM: 'voiceink:prewarm',
-  GET_SETTINGS: 'voiceink:getSettings',
-  SET_SETTINGS: 'voiceink:setSettings',
-  GET_HISTORY: 'voiceink:getHistory',
-  ADD_HISTORY: 'voiceink:addHistory',
-  DELETE_HISTORY: 'voiceink:deleteHistory',
-  CLEAR_HISTORY: 'voiceink:clearHistory',
-  INJECT_TEXT: 'voiceink:injectText',
-  COPY_TEXT: 'voiceink:copyText',
-  EXPORT: 'voiceink:export',
-  ON_TOGGLE_RECORDING: 'voiceink:onToggleRecording',
-  ON_SETTINGS_OPEN: 'voiceink:onSettingsOpen',
+  TRANSCRIBE: 'parlys:transcribe',
+  INTERPRET: 'parlys:interpret',
+  ON_INTERPRET_CHUNK: 'parlys:interpretChunk',
+  LIST_VOICES: 'parlys:listVoices',
+  LISTENER_TRANSCRIBE: 'parlys:listenerTranscribe',
+  SPEAK: 'parlys:speak',
+  PREWARM: 'parlys:prewarm',
+  GET_SETTINGS: 'parlys:getSettings',
+  SET_SETTINGS: 'parlys:setSettings',
+  GET_HISTORY: 'parlys:getHistory',
+  ADD_HISTORY: 'parlys:addHistory',
+  DELETE_HISTORY: 'parlys:deleteHistory',
+  CLEAR_HISTORY: 'parlys:clearHistory',
+  INJECT_TEXT: 'parlys:injectText',
+  COPY_TEXT: 'parlys:copyText',
+  EXPORT: 'parlys:export',
+  ON_TOGGLE_RECORDING: 'parlys:onToggleRecording',
+  ON_SETTINGS_OPEN: 'parlys:onSettingsOpen',
   /**
    * Broadcast from main to every renderer whenever a setting changes —
    * whether via the UI (SET_SETTINGS round-trip) or via a global
@@ -561,29 +561,29 @@ export const IPC = {
    * Payload: the FULL new Settings object so the receiver can just
    * `set({ settings: next })` without another round-trip.
    */
-  ON_SETTINGS_CHANGED: 'voiceink:onSettingsChanged',
-  WINDOW_MINIMIZE: 'voiceink:windowMinimize',
-  WINDOW_CLOSE: 'voiceink:windowClose',
-  WINDOW_MAXIMIZE: 'voiceink:windowMaximize',
-  WINDOW_SET_ALWAYS_ON_TOP: 'voiceink:windowSetAlwaysOnTop',
-  WINDOW_RESIZE_FOR_DENSITY: 'voiceink:windowResizeForDensity',
-  WIDGET_CONTEXT_MENU: 'voiceink:widgetContextMenu',
-  TOGGLE_PIN_HISTORY: 'voiceink:togglePinHistory',
-  EXPORT_HISTORY: 'voiceink:exportHistory',
-  GET_USAGE_STATS: 'voiceink:getUsageStats',
-  SET_AUTO_START: 'voiceink:setAutoStart',
-  ON_PTT_DOWN: 'voiceink:onPttDown',
-  ON_PTT_UP: 'voiceink:onPttUp',
-  LOG: 'voiceink:log',
+  ON_SETTINGS_CHANGED: 'parlys:onSettingsChanged',
+  WINDOW_MINIMIZE: 'parlys:windowMinimize',
+  WINDOW_CLOSE: 'parlys:windowClose',
+  WINDOW_MAXIMIZE: 'parlys:windowMaximize',
+  WINDOW_SET_ALWAYS_ON_TOP: 'parlys:windowSetAlwaysOnTop',
+  WINDOW_RESIZE_FOR_DENSITY: 'parlys:windowResizeForDensity',
+  WIDGET_CONTEXT_MENU: 'parlys:widgetContextMenu',
+  TOGGLE_PIN_HISTORY: 'parlys:togglePinHistory',
+  EXPORT_HISTORY: 'parlys:exportHistory',
+  GET_USAGE_STATS: 'parlys:getUsageStats',
+  SET_AUTO_START: 'parlys:setAutoStart',
+  ON_PTT_DOWN: 'parlys:onPttDown',
+  ON_PTT_UP: 'parlys:onPttUp',
+  LOG: 'parlys:log',
   /* ─── Auto-updater (see src/main/updater.ts) ─────────────────── */
   /** Renderer → main : check for updates manually (button in Settings). */
-  UPDATER_CHECK: 'voiceink:updaterCheck',
+  UPDATER_CHECK: 'parlys:updaterCheck',
   /** Renderer → main : accept & install a downloaded update (quit & install). */
-  UPDATER_INSTALL: 'voiceink:updaterInstall',
+  UPDATER_INSTALL: 'parlys:updaterInstall',
   /** Renderer → main : poll current updater state (after app reload). */
-  UPDATER_GET_STATE: 'voiceink:updaterGetState',
+  UPDATER_GET_STATE: 'parlys:updaterGetState',
   /** Main → renderer : state transitions (idle / checking / available / downloading / ready / error). */
-  ON_UPDATER_STATE: 'voiceink:onUpdaterState',
+  ON_UPDATER_STATE: 'parlys:onUpdaterState',
 } as const;
 
 /**

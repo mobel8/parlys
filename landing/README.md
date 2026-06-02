@@ -1,6 +1,6 @@
-# VoiceInk Landing
+# Parlys Landing
 
-Marketing site — `voiceink.app`. Astro + Tailwind + React islands + Framer Motion.
+Marketing site — `parlys.app`. Astro + Tailwind + React islands + Framer Motion.
 
 ## Run locally
 
@@ -24,7 +24,7 @@ src/
 │   ├── LogoMarquee.astro     Auto-scroll trust badges strip.
 │   ├── FeaturesBento.astro   6-tile bento grid (Apple-style).
 │   ├── HowItWorks.astro      4-step narrative timeline.
-│   ├── Comparison.astro      VoiceInk vs Dragon vs Otter vs Translate.
+│   ├── Comparison.astro      Parlys vs Dragon vs Otter vs Translate.
 │   ├── Pricing.tsx           3 tiers + monthly/yearly toggle (React island).
 │   ├── Testimonials.astro    6-quote grid with hover glow.
 │   ├── FAQ.astro             Native <details> accordion + JSON-LD schema.
@@ -65,7 +65,7 @@ Any static host works. Recommended:
 
 ```bash
 npm run build              # emits dist/
-npx wrangler pages deploy dist --project-name voiceink-landing
+npx wrangler pages deploy dist --project-name parlys-landing
 ```
 
 ## Performance targets

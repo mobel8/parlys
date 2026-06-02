@@ -8,8 +8,8 @@
  *     reflects it in the button's `aria-pressed` + visual state.
  *   - On click:
  *       1. Sets `<html lang>` + `<html data-lang>`
- *       2. Persists to localStorage under key 'voiceink_lang'
- *       3. Dispatches the custom `voiceink:langchange` event on window
+ *       2. Persists to localStorage under key 'parlys_lang'
+ *       3. Dispatches the custom `parlys:langchange` event on window
  *         so React islands (VideoShowcase, Pricing, etc.) rerender.
  *
  * Accessibility: the two buttons form an ARIA toggle pair. The
@@ -88,8 +88,8 @@ import { LANGS, LANG_LABELS, type Lang } from '../i18n/lang';
       if (next !== 'en' && next !== 'fr') return;
       document.documentElement.setAttribute('lang', next);
       document.documentElement.setAttribute('data-lang', next);
-      try { localStorage.setItem('voiceink_lang', next); } catch (e) {}
-      window.dispatchEvent(new CustomEvent('voiceink:langchange', { detail: { lang: next } }));
+      try { localStorage.setItem('parlys_lang', next); } catch (e) {}
+      window.dispatchEvent(new CustomEvent('parlys:langchange', { detail: { lang: next } }));
       paint();
     }
 

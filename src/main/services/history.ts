@@ -177,13 +177,13 @@ export function exportHistory(format: ExportFormat): { filename: string; content
 
   if (format === 'json') {
     return {
-      filename: `voiceink-history-${stamp}.json`,
+      filename: `parlys-history-${stamp}.json`,
       content: JSON.stringify(entries, null, 2),
     };
   }
   if (format === 'txt') {
     return {
-      filename: `voiceink-history-${stamp}.txt`,
+      filename: `parlys-history-${stamp}.txt`,
       content: entries.map((e) => e.finalText).filter(Boolean).join('\n\n---\n\n'),
     };
   }
@@ -202,7 +202,7 @@ export function exportHistory(format: ExportFormat): { filename: string; content
         csvEscape(e.finalText || ''),
       ].join(','),
     ).join('\n');
-    return { filename: `voiceink-history-${stamp}.csv`, content: header + rows };
+    return { filename: `parlys-history-${stamp}.csv`, content: header + rows };
   }
   // markdown (default)
   const md = entries.map((e) => {
@@ -212,7 +212,7 @@ export function exportHistory(format: ExportFormat): { filename: string; content
       .join(' · ');
     return `## ${date}\n\n*${tags}*\n\n${e.finalText || ''}\n`;
   }).join('\n---\n\n');
-  return { filename: `voiceink-history-${stamp}.md`, content: `# VoiceInk — Historique (${stamp})\n\n${md}` };
+  return { filename: `parlys-history-${stamp}.md`, content: `# Parlys — Historique (${stamp})\n\n${md}` };
 }
 
 function csvEscape(s: string): string {

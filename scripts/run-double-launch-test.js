@@ -1,6 +1,6 @@
 /**
  * Regression test for the two bugs the user reported against the
- * installed VoiceInk build:
+ * installed Parlys build:
  *
  *   Bug 1 — double-click on the desktop shortcut launched a SECOND
  *           Electron process. Two pills floated on top of each other,
@@ -21,12 +21,12 @@
  *     handler, removing a stale-closure risk on rapid toggles.
  *
  * This script verifies ALL OF THE ABOVE against the installed exe by:
- *   1. killing every VoiceInk.exe,
- *   2. launching a FIRST instance with VOICEINK_CDP=1 (forced compact),
- *   3. attaching CDP and counting VoiceInk.exe processes (must be 1),
+ *   1. killing every Parlys.exe,
+ *   2. launching a FIRST instance with PARLYS_CDP=1 (forced compact),
+ *   3. attaching CDP and counting Parlys.exe processes (must be 1),
  *   4. spawning a SECOND instance WITHOUT CDP — it should be rejected
  *      by the lock and exit within ~2 s,
- *   5. re-counting VoiceInk.exe (must still be 1),
+ *   5. re-counting Parlys.exe (must still be 1),
  *   6. dispatching Space (the pill's in-window toggle path, same
  *      toggle() React callback the IPC path uses) and asserting the
  *      .pill-root element flips to `state-recording is-forced-expanded`,
@@ -43,24 +43,24 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
 
-const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'VoiceInk.exe');
+const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'Parlys.exe');
 const CDP_PORT = 9222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function killAll() {
-  for (const n of ['VoiceInk.exe', 'electron.exe']) {
+  for (const n of ['Parlys.exe', 'electron.exe']) {
     try { execSync(`taskkill /F /IM ${n}`, { stdio: 'ignore' }); } catch {}
   }
 }
 
-function countVoiceInk() {
+function countParlys() {
   try {
-    const out = execSync('tasklist /FI "IMAGENAME eq VoiceInk.exe" /FO CSV /NH', { stdio: ['ignore', 'pipe', 'ignore'] });
+    const out = execSync('tasklist /FI "IMAGENAME eq Parlys.exe" /FO CSV /NH', { stdio: ['ignore', 'pipe', 'ignore'] });
     const s = out.toString();
     // When no process matches, tasklist prints "INFO: No tasks..." and exits 0.
     if (/No tasks/i.test(s)) return 0;
     // Otherwise count CSV lines that begin with a quoted image name.
-    return s.trim().split(/\r?\n/).filter((l) => l.startsWith('"VoiceInk.exe"')).length;
+    return s.trim().split(/\r?\n/).filter((l) => l.startsWith('"Parlys.exe"')).length;
   } catch {
     return 0;
   }
@@ -134,8 +134,8 @@ async function runOnce(runNum, totalRuns) {
 
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  env.VOICEINK_CDP = '1';
-  env.VOICEINK_FORCE_DENSITY = 'compact';
+  env.PARLYS_CDP = '1';
+  env.PARLYS_FORCE_DENSITY = 'compact';
 
   // Step 1 — primary launch with CDP.
   console.log('[launch] primary (CDP enabled)');
@@ -177,10 +177,10 @@ async function runOnce(runNum, totalRuns) {
   let fails = 0;
 
   // Step 2 — snapshot the primary process tree (main + GPU + utility
-  // + renderer helpers all run as VoiceInk.exe, so we don't hard-code
+  // + renderer helpers all run as Parlys.exe, so we don't hard-code
   // a count; we just remember the baseline).
-  const preCount = countVoiceInk();
-  fails += assert(preCount >= 1, `primary tree alive (VoiceInk.exe count=${preCount})`);
+  const preCount = countParlys();
+  fails += assert(preCount >= 1, `primary tree alive (Parlys.exe count=${preCount})`);
 
   // Step 3 — attempt to spawn a second instance.
   console.log('[launch] secondary (should be rejected by single-instance lock)');
@@ -194,14 +194,14 @@ async function runOnce(runNum, totalRuns) {
   fails += assert(didExit === true, 'secondary exited within 6 s (single-instance lock worked)');
 
   await sleep(1000);
-  const postCount = countVoiceInk();
+  const postCount = countParlys();
   // The primary process tree must not have grown. A correctly
   // single-instance-locked app exits its losing process before any
   // renderer / GPU helpers spawn — postCount must equal preCount
   // (± 0). We tolerate a transient -1 in case a helper crashed and
   // is respawning, but any NEW persistent process is a red flag.
   fails += assert(postCount <= preCount,
-    `no new VoiceInk process tree after double-launch (pre=${preCount} post=${postCount})`);
+    `no new Parlys process tree after double-launch (pre=${preCount} post=${postCount})`);
 
   // Step 4 — verify pill reacts to a Space toggle (same React toggle()
   // the IPC handler fans out to).

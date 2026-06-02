@@ -1,10 +1,10 @@
 {
-  "name": "voiceink",
+  "name": "parlys",
   "version": "1.8.0",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
   "author": {
-    "name": "VoiceInk",
-    "email": "voiceink@users.noreply.github.com"
+    "name": "Parlys",
+    "email": "parlys@users.noreply.github.com"
   },
   "license": "MIT",
   "main": "dist/main/index.js",
@@ -54,9 +54,9 @@
     "zustand": "^5.0.2"
   },
   "build": {
-    "appId": "com.voiceink.app",
-    "productName": "VoiceInk",
-    "copyright": "Copyright 2025 VoiceInk",
+    "appId": "com.parlys.app",
+    "productName": "Parlys",
+    "copyright": "Copyright 2025 Parlys",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release",
@@ -85,11 +85,11 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,
-      "shortcutName": "VoiceInk",
+      "shortcutName": "Parlys",
       "menuCategory": false,
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "uninstallDisplayName": "VoiceInk ${version}"
+      "uninstallDisplayName": "Parlys ${version}"
     },
     "mac": {
       "target": [
@@ -116,7 +116,7 @@
       "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
     },
     "dmg": {
-      "title": "VoiceInk ${version}",
+      "title": "Parlys ${version}",
       "icon": "assets/icon.png",
       "window": {
         "width": 540,
@@ -167,16 +167,16 @@
       "category": "Utility;AudioVideo;Audio",
       "description": "Intelligent voice-to-text dictation app with LLM post-processing",
       "synopsis": "Voice dictation with LLM post-processing",
-      "maintainer": "voiceink@users.noreply.github.com",
-      "vendor": "VoiceInk",
+      "maintainer": "parlys@users.noreply.github.com",
+      "vendor": "Parlys",
       "desktop": {
-        "Name": "VoiceInk",
+        "Name": "Parlys",
         "Comment": "Voice dictation with LLM post-processing",
         "GenericName": "Voice Dictation",
         "Categories": "Utility;AudioVideo;Audio",
         "Keywords": "voice;dictation;speech;transcription;whisper;groq",
         "StartupNotify": "true",
-        "StartupWMClass": "VoiceInk"
+        "StartupWMClass": "Parlys"
       }
     },
     "appImage": {
@@ -214,7 +214,7 @@
       {
         "provider": "github",
         "owner": "mobel8",
-        "repo": "voiceink",
+        "repo": "parlys",
         "releaseType": "release"
       }
     ]

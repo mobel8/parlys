@@ -28,7 +28,7 @@ function initialDensity(): Settings['density'] {
 
 /**
  * Smoke-test hook: if the main process put `;view=settings` (or
- * `history`) into the URL hash — driven by the `VOICEINK_START_VIEW`
+ * `history`) into the URL hash — driven by the `PARLYS_START_VIEW`
  * env var — land the renderer directly on that view instead of the
  * default 'main'. Lets external test scripts verify the view mounts
  * cleanly without needing to simulate a sidebar click.
@@ -139,7 +139,7 @@ interface State {
   setAudioLevel: (n: number) => void;
 }
 
-declare global { interface Window { voiceink: any } }
+declare global { interface Window { parlys: any } }
 
 export const useStore = create<State>()((set, get) => ({
   view: initialView(),
@@ -147,7 +147,7 @@ export const useStore = create<State>()((set, get) => ({
 
   settings: INITIAL_SETTINGS,
   loadSettings: async () => {
-    const s = await window.voiceink.getSettings();
+    const s = await window.parlys.getSettings();
     // Preserve the URL-hash-derived density — it is the single source
     // of truth for which window this renderer is running in. If we let
     // a persisted 'comfortable' / 'compact' leak in here, React will
@@ -161,7 +161,7 @@ export const useStore = create<State>()((set, get) => ({
     set({ settings: { ...s, density: initialDensity() } });
   },
   updateSettings: async (patch) => {
-    const next = await window.voiceink.setSettings(patch);
+    const next = await window.parlys.setSettings(patch);
     // Same contract as loadSettings — never let density flip under
     // a live renderer.
     set({ settings: { ...next, density: initialDensity() } });
@@ -184,15 +184,15 @@ export const useStore = create<State>()((set, get) => ({
 
   history: [],
   loadHistory: async () => {
-    const h = await window.voiceink.getHistory();
+    const h = await window.parlys.getHistory();
     set({ history: h });
   },
   removeHistory: async (id) => {
-    await window.voiceink.deleteHistory(id);
+    await window.parlys.deleteHistory(id);
     await get().loadHistory();
   },
   clearHistory: async () => {
-    await window.voiceink.clearHistory();
+    await window.parlys.clearHistory();
     set({ history: [] });
   },
 

@@ -33,7 +33,7 @@ if (!fs.existsSync(RELEASE_DIR)) {
 
 const all = fs.readdirSync(RELEASE_DIR);
 const expected = {
-  win32:  [/^VoiceInk-Setup-.*\.exe$/],
+  win32:  [/^Parlys-Setup-.*\.exe$/],
   linux:  [/\.AppImage$/, /\.deb$/],
   darwin: [/\.dmg$/],
 }[OS] || [];
@@ -81,7 +81,7 @@ for (const pattern of optional) {
 // Windows-specific: try to peek inside the NSIS installer. The magic
 // header starts with 'MZ' (PE executable) — basic sanity check.
 if (OS === 'win32') {
-  const exe = all.find(f => /^VoiceInk-Setup-.*\.exe$/.test(f));
+  const exe = all.find(f => /^Parlys-Setup-.*\.exe$/.test(f));
   if (exe) {
     const fd = fs.openSync(path.join(RELEASE_DIR, exe), 'r');
     const buf = Buffer.alloc(2);
@@ -112,8 +112,8 @@ if (OS === 'linux') {
   if (deb) {
     try {
       const header = execSync(`dpkg-deb -I "${path.join(RELEASE_DIR, deb)}"`, { stdio: ['ignore', 'pipe', 'ignore'] });
-      if (!header.toString().includes('Package: voiceink')) {
-        fail(`${deb}: dpkg-deb info doesn't mention Package: voiceink`);
+      if (!header.toString().includes('Package: parlys')) {
+        fail(`${deb}: dpkg-deb info doesn't mention Package: parlys`);
         ok = false;
       }
     } catch (e) {

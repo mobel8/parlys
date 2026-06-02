@@ -12,10 +12,10 @@ const GROQ_ENDPOINT = 'https://api.groq.com/openai/v1/audio/transcriptions';
  * IMPORTANT — we deliberately do NOT pack a wordlist here.
  *
  * Earlier versions of this file shipped a comma-separated technical
- * glossary ("VoiceInk, API, MCP, LLM, GPT, Claude, Anthropic, Groq…").
+ * glossary ("Parlys, API, MCP, LLM, GPT, Claude, Anthropic, Groq…").
  * That was actively harmful: on trailing silence Whisper falls back on
  * the prompt's distribution to "continue" the utterance, and when the
- * distribution is a wordlist the model emits stuff like "VoiceInk API
+ * distribution is a wordlist the model emits stuff like "Parlys API
  * MCP Groq" out of thin air. We saw this hallucination in production
  * on short clips with ~500 ms of post-speech silence.
  *

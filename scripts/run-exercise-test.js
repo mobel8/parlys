@@ -1,6 +1,6 @@
 /**
  * Exercise test — simulate a realistic user session against the
- * INSTALLED VoiceInk build and capture every console log, error,
+ * INSTALLED Parlys build and capture every console log, error,
  * exception, and network failure that happens along the way. Fails
  * if anything unexpected shows up.
  *
@@ -25,12 +25,12 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
 
-const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'VoiceInk.exe');
+const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'Parlys.exe');
 const CDP_PORT = 9222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function killAll() {
-  for (const n of ['VoiceInk.exe', 'electron.exe']) {
+  for (const n of ['Parlys.exe', 'electron.exe']) {
     try { execSync(`taskkill /F /IM ${n}`, { stdio: 'ignore' }); } catch {}
   }
 }
@@ -136,8 +136,8 @@ async function main() {
 
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  env.VOICEINK_CDP = '1';
-  env.VOICEINK_FORCE_DENSITY = 'compact';
+  env.PARLYS_CDP = '1';
+  env.PARLYS_FORCE_DENSITY = 'compact';
 
   const child = spawn(INSTALL, [], {
     shell: false, detached: false, windowsHide: false, env,
@@ -231,7 +231,7 @@ async function main() {
   // target.
   try {
     compact.send('Runtime.evaluate', {
-      expression: `window.voiceink.windowResizeForDensity('comfortable')`,
+      expression: `window.parlys.windowResizeForDensity('comfortable')`,
       returnByValue: false, awaitPromise: false,
     }).catch(() => {});
   } catch {}
@@ -279,7 +279,7 @@ async function main() {
     // to recreate the pill window, then move on.
     try {
       comfy.send('Runtime.evaluate', {
-        expression: `window.voiceink.windowResizeForDensity('compact')`,
+        expression: `window.parlys.windowResizeForDensity('compact')`,
         returnByValue: false, awaitPromise: false,
       }).catch(() => {});
     } catch {}

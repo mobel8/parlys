@@ -1,7 +1,7 @@
 /**
  * End-to-end hover/drag regression harness via Chrome DevTools Protocol.
  *
- * Electron is launched with VOICEINK_CDP=1, which opens a CDP server on
+ * Electron is launched with PARLYS_CDP=1, which opens a CDP server on
  * :9222. We attach to the pill window, stream the renderer console live,
  * and dispatch Input.dispatchMouseEvent — the ONLY reliable way to move
  * the mouse inside a transparent alwaysOnTop window on Windows.
@@ -31,7 +31,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function killElectron() {
   try { execSync('taskkill /F /IM electron.exe', { stdio: 'ignore' }); } catch {}
-  try { execSync('taskkill /F /IM VoiceInk.exe',  { stdio: 'ignore' }); } catch {}
+  try { execSync('taskkill /F /IM Parlys.exe',  { stdio: 'ignore' }); } catch {}
 }
 
 // ---- HTTP helper --------------------------------------------------------
@@ -108,9 +108,9 @@ async function launch() {
     ...process.env,
     // The sampler would spam console 10 Hz and drown our probe output.
     // We do the probing ourselves via Runtime.evaluate here.
-    VOICEINK_PILL_SAMPLER: '',
-    VOICEINK_CDP: '1',
-    VOICEINK_FORCE_DENSITY: 'compact',
+    PARLYS_PILL_SAMPLER: '',
+    PARLYS_CDP: '1',
+    PARLYS_FORCE_DENSITY: 'compact',
     ELECTRON_ENABLE_LOGGING: '1',
   };
   // ELECTRON_RUN_AS_NODE=1 is set globally on this machine; it forces

@@ -6,7 +6,7 @@ import { Speaker, Mic, Headphones, RefreshCw, Check } from 'lucide-react';
  * and lets the user pick an input (microphone) or output (speakers /
  * virtual-mic) device by deviceId.
  *
- * Why this matters for VoiceInk:
+ * Why this matters for Parlys:
  *
  *   - **TTS output routing** (`kind: audiooutput`) — route the
  *     interpreter's synthesized voice to a virtual microphone (VB-Cable,

@@ -17,7 +17,7 @@
 
 import { TTSChunk, TTSStreamOptions } from './index';
 
-const ENDPOINT = process.env.VOICEINK_OPENAI_TTS_URL || 'https://api.openai.com/v1/audio/speech';
+const ENDPOINT = process.env.PARLYS_OPENAI_TTS_URL || 'https://api.openai.com/v1/audio/speech';
 
 /** Built-in voices for gpt-4o-mini-tts. */
 const KNOWN_VOICES = new Set([

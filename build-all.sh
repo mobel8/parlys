@@ -1,12 +1,12 @@
 #!/bin/bash
 # ============================================================
-# VoiceInk — Build all installers (Linux / macOS hosts).
+# Parlys — Build all installers (Linux / macOS hosts).
 # ============================================================
 set -e
 cd "$(dirname "$0")"
 
 echo ""
-echo " VoiceInk - Build All Installers"
+echo " Parlys - Build All Installers"
 echo " ================================"
 echo "   Native build for the current OS,"
 echo "   plus whatever cross-builds electron-builder supports."

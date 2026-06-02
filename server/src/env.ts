@@ -42,7 +42,7 @@ export const env = {
   corsOrigin: read('CORS_ORIGIN', false, 'http://localhost:5173'),
 
   // Database is the only hard requirement even for a minimal boot.
-  databaseUrl: read('DATABASE_URL', !isTest, 'postgres://postgres:dev@localhost:5432/voiceink'),
+  databaseUrl: read('DATABASE_URL', !isTest, 'postgres://postgres:dev@localhost:5432/parlys'),
 
   // Auth — if unset, the auth middleware falls back to a dev bypass
   // that trusts an `X-Dev-User: <userId>` header. NEVER in production.

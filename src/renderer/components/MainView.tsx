@@ -40,7 +40,7 @@ export function MainView() {
   // Subscription to main-process chunk events. Installed once, routed
   // to the active player by requestId.
   useEffect(() => {
-    const api = (window as any).voiceink;
+    const api = (window as any).parlys;
     if (!api?.onInterpretChunk) return;
     const unsub = api.onInterpretChunk((chunk: any) => {
       playerRef.current?.push(chunk);
@@ -84,7 +84,7 @@ export function MainView() {
           } else {
             playerRef.current = null;
           }
-          const res = await window.voiceink.interpret({
+          const res = await window.parlys.interpret({
             requestId,
             audioBase64,
             mimeType,
@@ -106,7 +106,7 @@ export function MainView() {
         }
 
         // ----- Classic dictation path ---------------------------------------
-        const res = await window.voiceink.transcribe({
+        const res = await window.parlys.transcribe({
           audioBase64,
           mimeType,
           language: settings.language === 'auto' ? undefined : settings.language,
@@ -122,7 +122,7 @@ export function MainView() {
         // Main already injected directly (no renderer round-trip) — only
         // paste here if it didn't. Avoids a double paste.
         if (settings.autoInject && res.finalText && !res.injected) {
-          await window.voiceink.injectText(res.finalText);
+          await window.parlys.injectText(res.finalText);
         }
         setLastTranscript(res.finalText);
         setRecState('idle');
@@ -216,7 +216,7 @@ export function MainView() {
         // Fire TLS warm-up for Groq + TTS the moment recording begins —
         // by the time the user stops speaking (2-30 s later) the HTTPS
         // sockets are hot, shaving ~50-80 ms off Whisper + translate + TTS.
-        try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
+        try { (window.parlys as any).prewarm?.(); } catch { /* best-effort */ }
         try {
           await continuous.start();
         } catch (err: any) {
@@ -237,7 +237,7 @@ export function MainView() {
       setRecState('recording');
       // Same trick as the continuous branch above: warm the HTTPS
       // sockets while the user is still speaking.
-      try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
+      try { (window.parlys as any).prewarm?.(); } catch { /* best-effort */ }
       await recorder.start();
     }
   };
@@ -246,7 +246,7 @@ export function MainView() {
   // a gap between unsubscribe-old and subscribe-new during rapid state
   // transitions; the toggle() above reads the ref, not the closure.
   useEffect(() => {
-    const unsub = window.voiceink.onToggleRecording(() => toggle());
+    const unsub = window.parlys.onToggleRecording(() => toggle());
     return () => unsub?.();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -274,13 +274,13 @@ export function MainView() {
 
   const copy = async () => {
     if (!lastTranscript) return;
-    await window.voiceink.copyText(lastTranscript);
+    await window.parlys.copyText(lastTranscript);
     setCopied(true);
     setTimeout(() => setCopied(false), 1400);
   };
   const inject = async () => {
     if (!lastTranscript) return;
-    await window.voiceink.injectText(lastTranscript);
+    await window.parlys.injectText(lastTranscript);
   };
 
   const bars = useWaveform(audioLevel, recState === 'recording');

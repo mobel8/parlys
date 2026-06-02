@@ -1,4 +1,4 @@
-// VoiceInk dev launcher — orchestrates a fully-live development session.
+// Parlys dev launcher — orchestrates a fully-live development session.
 //
 // What it does:
 //   1. Starts Vite dev server (renderer HMR @ http://localhost:5173).
@@ -12,8 +12,8 @@
 //      app restarts automatically with the new code.
 //
 // Why this is the answer to "0 modifications when I click the desktop
-// shortcut": the original shortcut targeted the *installed* VoiceInk.exe
-// at C:\Users\…\AppData\Local\Programs\VoiceInk\VoiceInk.exe — a frozen
+// shortcut": the original shortcut targeted the *installed* Parlys.exe
+// at C:\Users\…\AppData\Local\Programs\Parlys\Parlys.exe — a frozen
 // snapshot from electron-builder. By repointing the shortcut at this
 // launcher (via dev.bat), every click runs against live source.
 //
@@ -327,7 +327,7 @@ function checkExistingInstance() {
   log('launcher', `Electron = ${ELECTRON_BIN}`);
 
   if (await checkExistingInstance()) {
-    log('launcher', `port ${VITE_PORT} already in use — another VoiceInk dev launcher is already running.`);
+    log('launcher', `port ${VITE_PORT} already in use — another Parlys dev launcher is already running.`);
     log('launcher', 'doing nothing — focus the existing app window or close it before launching again.');
     // Exit 0 so dev.bat does NOT show "Press any key to close" (that's
     // reserved for genuine launcher failures the user should see).

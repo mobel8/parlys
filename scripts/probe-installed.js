@@ -1,7 +1,7 @@
 /**
- * Probe the INSTALLED VoiceInk.exe via CDP (not the dev launch).
+ * Probe the INSTALLED Parlys.exe via CDP (not the dev launch).
  *
- * Starts the installed binary with VOICEINK_CDP=1 so a CDP server comes
+ * Starts the installed binary with PARLYS_CDP=1 so a CDP server comes
  * up on :9222, attaches to the pill page, and reports — in this order:
  *
  *   1. Viewport + geometry of the pill's .pill / .pill-idle-capsule /
@@ -26,12 +26,12 @@ const http = require('http');
 const CDP_PORT = 9222;
 const INSTALL  = path.join(
   process.env.LOCALAPPDATA,
-  'Programs', 'VoiceInk', 'VoiceInk.exe',
+  'Programs', 'Parlys', 'Parlys.exe',
 );
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function killAll() {
-  try { execSync('taskkill /F /IM VoiceInk.exe',  { stdio: 'ignore' }); } catch {}
+  try { execSync('taskkill /F /IM Parlys.exe',  { stdio: 'ignore' }); } catch {}
   try { execSync('taskkill /F /IM electron.exe',  { stdio: 'ignore' }); } catch {}
 }
 function httpJson(url) {
@@ -93,20 +93,20 @@ async function evalExpr(cdp, expr) {
 }
 
 (async () => {
-  console.log('[probe] killing VoiceInk …');
+  console.log('[probe] killing Parlys …');
   killAll();
   await sleep(800);
 
   console.log('[probe] launching', INSTALL, 'with CDP=1 …');
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;                // sabotages Electron entry point
-  env.VOICEINK_CDP = '1';
+  env.PARLYS_CDP = '1';
   // Force compact so we reproduce the exact bug: persisted settings
   // say 'comfortable' but main creates a 176×55 pill. Pre-fix, React
   // replaced the CompactView with MainView inside the pill on first
   // loadSettings(). Post-fix, density is pinned to the URL hash and
   // the CompactView stays mounted.
-  env.VOICEINK_FORCE_DENSITY = 'compact';
+  env.PARLYS_FORCE_DENSITY = 'compact';
   env.ELECTRON_ENABLE_LOGGING = '1';
 
   const child = spawn(INSTALL, [], {
@@ -118,7 +118,7 @@ async function evalExpr(cdp, expr) {
   });
   child.stdout.on('data', (b) => process.stdout.write('  [app.out] ' + b));
   child.stderr.on('data', (b) => process.stdout.write('  [app.err] ' + b));
-  child.on('exit', (c) => console.log('[probe] VoiceInk.exe exited with', c));
+  child.on('exit', (c) => console.log('[probe] Parlys.exe exited with', c));
 
   let targets = [];
   for (let i = 0; i < 240; i++) {
@@ -245,6 +245,6 @@ async function evalExpr(cdp, expr) {
       ' hovFull=' + snap.hovFull + ' hovFace=' + snap.hovFace + ' fullOp=' + snap.fullOp + ' capOp=' + snap.capOp);
   }
 
-  console.log('\n[probe] done. Leaving VoiceInk running. Kill it with: taskkill /F /IM VoiceInk.exe');
+  console.log('\n[probe] done. Leaving Parlys running. Kill it with: taskkill /F /IM Parlys.exe');
   process.exit(0);
 })().catch((e) => { console.error('[probe] fatal:', e); process.exit(3); });

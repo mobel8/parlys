@@ -39,19 +39,19 @@ Do this once, store the resulting voice ID, reuse for every future video.
 
 ### Step 3 — Transcribe and translate
 
-VoiceInk's batch mode (in Pro) takes a WAV/MP4 and returns a transcript + multi-language translation in one call. If you prefer a script:
+Parlys's batch mode (in Pro) takes a WAV/MP4 and returns a transcript + multi-language translation in one call. If you prefer a script:
 
 ```bash
 # Upload audio, get English transcript
-curl -X POST https://api.voiceink.app/api/v1/transcribe \
-  -H "Authorization: Bearer $VOICEINK_TOKEN" \
+curl -X POST https://api.parlys.app/api/v1/transcribe \
+  -H "Authorization: Bearer $PARLYS_TOKEN" \
   -F "file=@video-audio.wav" \
   -F "language=en"
 
 # Translate to 10 target languages
 for lang in fr es pt de it nl pl ja ko zh; do
-  curl -X POST https://api.voiceink.app/api/v1/translate \
-    -H "Authorization: Bearer $VOICEINK_TOKEN" \
+  curl -X POST https://api.parlys.app/api/v1/translate \
+    -H "Authorization: Bearer $PARLYS_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"text\":\"$TRANSCRIPT\",\"targetLang\":\"$lang\"}" \
     > "translations/$lang.txt"
@@ -62,8 +62,8 @@ done
 
 ```bash
 for lang in fr es pt de it nl pl ja ko zh; do
-  curl -X POST https://api.voiceink.app/api/v1/speak \
-    -H "Authorization: Bearer $VOICEINK_TOKEN" \
+  curl -X POST https://api.parlys.app/api/v1/speak \
+    -H "Authorization: Bearer $PARLYS_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"text\":\"$(cat translations/$lang.txt)\",\"voiceId\":\"$MY_VOICE_ID\",\"language\":\"$lang\",\"provider\":\"cartesia\"}" \
     --output "audio/$lang.mp3"
@@ -94,7 +94,7 @@ We dubbed the same 5-minute English video via four tools. Blind-tested with 20 n
 
 | Tool | Sounds human? (1-5) | Voice similarity to original? | Total cost (10 languages) |
 |---|---|---|---|
-| Cartesia Sonic (via VoiceInk) | 4.3 | 4.2 | 27 € |
+| Cartesia Sonic (via Parlys) | 4.3 | 4.2 | 27 € |
 | ElevenLabs Turbo v2.5 | 4.6 | 4.5 | 72 € |
 | HeyGen Studio | 4.4 | 4.3 | 299 $/mo subscription |
 | Rask AI | 4.1 | 3.8 | 35 $ for 60 min output |
@@ -118,4 +118,4 @@ ElevenLabs still wins on outright quality, but Cartesia is the cost leader and t
 
 A mid-tier YouTube creator with 100k English subs can realistically add 2-3 million international views per month by dubbing their top 10 videos. If their CPM is $5, that's $10-15k incremental monthly revenue for $20-40 of TTS cost. The ROI is grotesque. Expect every creator > 50k subs to do this by end of 2026.
 
-[Start your voice clone → VoiceInk Pro (9.90 €/mo)](/#pricing)
+[Start your voice clone → Parlys Pro (9.90 €/mo)](/#pricing)

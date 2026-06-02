@@ -26,7 +26,7 @@ export function SettingsView() {
   const [showLlmKey, setShowLlmKey] = useState(false);
   const [savedPulse, setSavedPulse] = useState(false);
 
-  const api = (window as any).voiceink;
+  const api = (window as any).parlys;
 
   const save = async (patch: Partial<Settings>) => {
     await updateSettings(patch);
@@ -495,7 +495,7 @@ export function SettingsView() {
           <h2 className="font-semibold text-lg">Système</h2>
         </div>
         <ToggleRow
-          label="Lancer VoiceInk au démarrage de Windows"
+          label="Lancer Parlys au démarrage de Windows"
           desc="L'app se lancera automatiquement à chaque ouverture de session."
           icon={<Power size={14} />}
           value={!!settings.autoStart}
@@ -686,7 +686,7 @@ function VadCalibrationSection() {
       <p className="text-white/50 text-sm">
         La détection vocale (Voice Activity Detection) décide quand votre voix commence et s'arrête.
         Mal calibrée, elle coupe le début de vos phrases ou enregistre votre clavier.
-        Cliquez sur « Calibrer » pendant 1 seconde en silence — VoiceInk en déduit les bons seuils.
+        Cliquez sur « Calibrer » pendant 1 seconde en silence — Parlys en déduit les bons seuils.
       </p>
 
       <div className="flex items-center gap-2">
@@ -936,7 +936,7 @@ function InterpreterSection() {
         />
       </div>
       <p className="text-white/50 text-sm">
-        Parlez dans votre langue — VoiceInk traduit instantanément et prononce le résultat
+        Parlez dans votre langue — Parlys traduit instantanément et prononce le résultat
         avec une voix IA réaliste. Idéal pour réunions multilingues, appels visio, ou tester
         une tournure dans une autre langue. Indépendant des 4 modes de dictée classiques.
       </p>

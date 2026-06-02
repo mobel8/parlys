@@ -3,7 +3,7 @@
  * the auto-updater state machine to the user.
  *
  * The component is intentionally small (< 150 LOC) and self-contained:
- * it owns its subscription to `window.voiceink.onUpdaterState` and
+ * it owns its subscription to `window.parlys.onUpdaterState` and
  * hydrates once on mount via `updaterGetState()`. No Zustand coupling
  * — the updater is a sidecar concern that doesn't need to live in the
  * main app state.
@@ -17,7 +17,7 @@
  *   the user to click Download first is a waste (download while
  *   they read the changelog).
  * - When "ready", we show a persistent banner with "Install & restart".
- *   One click quits VoiceInk cleanly, NSIS swaps the binaries,
+ *   One click quits Parlys cleanly, NSIS swaps the binaries,
  *   relaunches, user's back to work.
  * - Errors are shown once with an "Ignore" action — most updater
  *   errors are network-transient and will recover on the next 4h
@@ -35,7 +35,7 @@ export function UpdateBanner() {
 
   // Hydrate on mount + subscribe to transitions.
   useEffect(() => {
-    const api = (window as any).voiceink;
+    const api = (window as any).parlys;
     if (!api) return;
     let alive = true;
 
@@ -136,7 +136,7 @@ export function UpdateBanner() {
             <div className="flex items-center gap-2 mt-2.5">
               <button
                 className="btn btn-sm btn-primary"
-                onClick={() => (window as any).voiceink?.updaterInstall?.()}
+                onClick={() => (window as any).parlys?.updaterInstall?.()}
               >
                 {t('updater.installNow')}
               </button>

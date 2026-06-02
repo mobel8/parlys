@@ -42,10 +42,10 @@ const electronBin = path.join(root, 'node_modules', 'electron', 'dist', 'electro
 const mainEntry = 'dist\\main\\index.js';
 
 function killExisting() {
-  // Packaged app (installer) spawns VoiceInk.exe; dev spawn uses electron.exe.
+  // Packaged app (installer) spawns Parlys.exe; dev spawn uses electron.exe.
   // Either will hold the single-instance lock, so we nuke both.
   try { spawnSync('taskkill', ['/F', '/IM', 'electron.exe', '/T'], { stdio: 'ignore' }); } catch (e) { /* ignore */ }
-  try { spawnSync('taskkill', ['/F', '/IM', 'VoiceInk.exe', '/T'], { stdio: 'ignore' }); } catch (e) { /* ignore */ }
+  try { spawnSync('taskkill', ['/F', '/IM', 'Parlys.exe', '/T'], { stdio: 'ignore' }); } catch (e) { /* ignore */ }
   // Give Windows a breath to release the single-instance lock.
   try { spawnSync(process.execPath, ['-e', 'setTimeout(function(){}, 1500)'], { stdio: 'ignore' }); } catch (e) { /* ignore */ }
 }
@@ -56,7 +56,7 @@ function runOne(view) {
     const cleanEnv = Object.assign({}, process.env);
     delete cleanEnv.ELECTRON_RUN_AS_NODE;
     delete cleanEnv.ELECTRON_NO_ATTACH_CONSOLE;
-    cleanEnv.VOICEINK_START_VIEW = view;
+    cleanEnv.PARLYS_START_VIEW = view;
 
     const started = Date.now();
     const child = spawn(electronBin, [mainEntry], {

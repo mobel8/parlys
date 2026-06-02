@@ -75,20 +75,20 @@ export function HistoryView() {
   }, [history, q, modeFilter, langFilter, dateFilter]);
 
   const copy = async (id: string, text: string) => {
-    await window.voiceink.copyText(text);
+    await window.parlys.copyText(text);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 1200);
   };
 
   const togglePin = async (id: string) => {
-    await window.voiceink.togglePinHistory?.(id);
+    await window.parlys.togglePinHistory?.(id);
     await loadHistory();
   };
 
   const doExport = async (format: 'json' | 'markdown' | 'txt' | 'csv') => {
     setExporting(true);
     try {
-      const res = await window.voiceink.exportHistory?.(format);
+      const res = await window.parlys.exportHistory?.(format);
       if (res?.ok && res.path) {
         // Brief confirmation — keep it subtle, no modal.
         console.log('[history] exported to', res.path);

@@ -1,4 +1,4 @@
-# VoiceInk — Dictée Intelligente IA
+# Parlys — Dictée Intelligente IA
 
 > Application desktop de dictée intelligente avec transcription temps réel, post-traitement LLM et injection universelle. Clone fonctionnel de Superwhisper.
 
@@ -56,7 +56,7 @@ npm run dist
 
 ### Premier lancement
 
-1. Lancer VoiceInk
+1. Lancer Parlys
 2. Aller dans **Paramètres** → **Modèles**
 3. Télécharger un modèle Whisper (recommandé : `base` pour commencer)
 4. (Optionnel) Configurer un fournisseur LLM pour le post-traitement

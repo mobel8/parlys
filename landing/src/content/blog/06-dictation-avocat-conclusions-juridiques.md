@@ -1,7 +1,7 @@
 ---
 title: "Dictée juridique pour avocats : rédiger 3x plus vite en 2026"
-description: "Conclusions, contrats, actes : de 4h à 90 min de rédaction. Dragon Legal vs VoiceInk, Secib/Cicero, vocabulaire latin et formules consacrées."
-keywords: ["dictée juridique", "dictée avocat", "dragon legal français", "rédaction conclusions", "cabinet avocat productivité", "secib dictée", "cicero dictée", "voiceink avocat"]
+description: "Conclusions, contrats, actes : de 4h à 90 min de rédaction. Dragon Legal vs Parlys, Secib/Cicero, vocabulaire latin et formules consacrées."
+keywords: ["dictée juridique", "dictée avocat", "dragon legal français", "rédaction conclusions", "cabinet avocat productivité", "secib dictée", "cicero dictée", "parlys avocat"]
 date: 2026-04-22
 category: vertical-legal
 readingTime: "9 min read"
@@ -34,7 +34,7 @@ Avec ces trois briques, la dictée juridique française a rejoint l'état de l'a
 
 Verdict : garde son avance pour les droits **spécialisés** (fiscalité, bancaire, propriété industrielle) où le vocabulaire technique est dense et rare. Le prix individuel est tenable, la licence de cabinet (50+ postes) devient rapidement prohibitive.
 
-### 2. VoiceInk Pro + vocabulaire juridique custom
+### 2. Parlys Pro + vocabulaire juridique custom
 
 - **Prix** : 9.90 €/mois (119 €/an)
 - **Accuracy français général** : 97-98 %
@@ -72,23 +72,23 @@ Chiffres compilés sur une cohorte de 25 avocats français ayant switché vers l
 
 ## La qualité : le sujet sensible
 
-Un avocat ne signe PAS un document sans relecture. Même avec Dragon, même avec VoiceInk. Une accuracy à 97 % signifie **3 erreurs pour 100 mots** — et un article mal cité peut faire perdre un procès.
+Un avocat ne signe PAS un document sans relecture. Même avec Dragon, même avec Parlys. Une accuracy à 97 % signifie **3 erreurs pour 100 mots** — et un article mal cité peut faire perdre un procès.
 
 Les 4 règles d'hygiène à installer dès le jour 1 :
 
 1. **Toujours relire à voix haute le texte dicté**. Le cerveau "remplit" mieux les trous à la lecture si l'on entend le texte.
 2. **Vérifier chaque numéro d'article et chaque date**. Les chiffres sont la première source d'erreur dans la dictée vocale.
-3. **Ajouter son vocabulaire custom** (abréviations du cabinet, noms de clients récurrents, formules préférées). VoiceInk Pro a un éditeur dédié dans Paramètres → Dictionnaire.
+3. **Ajouter son vocabulaire custom** (abréviations du cabinet, noms de clients récurrents, formules préférées). Parlys Pro a un éditeur dédié dans Paramètres → Dictionnaire.
 4. **Double-coucher sur les formules latines**. Les moteurs comprennent le latin mais l'écrivent parfois phonétiquement. Ajoutez "in fine", "ab initio", "stricto sensu", "pacta sunt servanda" etc. dans votre vocabulaire.
 
 ## RGPD et secret professionnel
 
 **Dragon Legal Individual** fonctionne en local : aucune fuite possible, vous êtes couvert.
 
-**VoiceInk** et les moteurs cloud (Google, Microsoft) envoient l'audio sur des serveurs tiers. Pour le secret professionnel, cela pose question. Deux réponses :
+**Parlys** et les moteurs cloud (Google, Microsoft) envoient l'audio sur des serveurs tiers. Pour le secret professionnel, cela pose question. Deux réponses :
 
-1. **BYOK mode** (VoiceInk Pro) : vous utilisez vos propres clés Groq et Cartesia. Le cabinet signe un contrat direct avec Groq (hébergement Europe, DPA standard), VoiceInk ne voit jamais vos données. C'est la configuration la plus propre juridiquement.
-2. **Hébergement dédié HDS/ISO27001** : VoiceInk Enterprise propose un déploiement cloud dédié avec contrat cabinet spécifique. Disponible Q4 2026.
+1. **BYOK mode** (Parlys Pro) : vous utilisez vos propres clés Groq et Cartesia. Le cabinet signe un contrat direct avec Groq (hébergement Europe, DPA standard), Parlys ne voit jamais vos données. C'est la configuration la plus propre juridiquement.
+2. **Hébergement dédié HDS/ISO27001** : Parlys Enterprise propose un déploiement cloud dédié avec contrat cabinet spécifique. Disponible Q4 2026.
 
 En attendant la formule Enterprise, **pour les pièces sensibles (instructions criminelles, dossiers sous secret défense, fiscalité hors-UE)** : Dragon Legal Individual local reste le seul choix validable sans effort juridique supplémentaire.
 
@@ -96,7 +96,7 @@ En attendant la formule Enterprise, **pour les pièces sensibles (instructions c
 
 ### Solo (1-3 avocats)
 
-1. **Téléchargez VoiceInk** (Free, 30 min/jour)
+1. **Téléchargez Parlys** (Free, 30 min/jour)
 2. Dictez vos courriers de correspondance pendant 1 semaine.
 3. Passez aux conclusions simples en semaine 2.
 4. Si vous gagnez > 5h/semaine, upgradez Pro (9.90 €/mois).
@@ -104,15 +104,15 @@ En attendant la formule Enterprise, **pour les pièces sensibles (instructions c
 
 ### Cabinet structuré (10+ avocats)
 
-1. Testez **VoiceInk Team** (19 €/mois/siège) sur 3 associés volontaires pendant 1 mois.
+1. Testez **Parlys Team** (19 €/mois/siège) sur 3 associés volontaires pendant 1 mois.
 2. Mesurez le temps gagné hebdomadaire et la qualité des productions.
 3. Négociez avec le Dragon Legal Individual comparatif (il existe une licence "cabinet" Nuance qu'il faut demander explicitement).
 4. Décidez en fonction du TCO total (licence + formation + support).
 
 ## Le verdict
 
-Pour **la grande majorité des avocats français en 2026**, la dictée vocale est un levier de productivité supérieur à l'embauche d'une assistante juridique — à un coût 50 à 100 fois inférieur. VoiceInk est le meilleur rapport qualité/prix sur le marché ; Dragon Legal reste inévitable pour les spécialités techniques les plus denses.
+Pour **la grande majorité des avocats français en 2026**, la dictée vocale est un levier de productivité supérieur à l'embauche d'une assistante juridique — à un coût 50 à 100 fois inférieur. Parlys est le meilleur rapport qualité/prix sur le marché ; Dragon Legal reste inévitable pour les spécialités techniques les plus denses.
 
-[Télécharger VoiceInk (gratuit) →](/#download)
+[Télécharger Parlys (gratuit) →](/#download)
 
 *Cet article sera mis à jour quand la certification HDS et l'offre Enterprise seront actives, et qu'un dictionnaire juridique vertical sera livré. Inscrivez-vous à la newsletter pour être prévenu des MAJ.*

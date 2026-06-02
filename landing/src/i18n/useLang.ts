@@ -6,7 +6,7 @@
  * `BaseLayout.astro` is responsible for setting this attribute on boot
  * (reading localStorage, falling back to DEFAULT_LANG). The
  * `LangToggle.astro` component mutates it on click AND dispatches the
- * `voiceink:langchange` custom event, which this hook subscribes to.
+ * `parlys:langchange` custom event, which this hook subscribes to.
  *
  * We avoid touching localStorage from the hook itself — keeping side
  * effects in exactly one place (the toggle and the pre-paint script)

@@ -13,7 +13,7 @@
  *
  * The layer renders nothing visual (`<></>`), it just registers audio
  * sources on the timeline. Mount it as a sibling of the scene
- * `<Sequence>`s in `VoiceInkPromo.tsx`.
+ * `<Sequence>`s in `ParlysPromo.tsx`.
  */
 import React from 'react';
 import { Audio, Sequence, staticFile } from 'remotion';

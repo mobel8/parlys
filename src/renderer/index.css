@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* =========================================================
-   VoiceInk — Design System
+   Parlys — Design System
    Theme: dark, glassmorphism, violet/fuchsia/cyan gradients
    ========================================================= */
 
@@ -190,7 +190,7 @@ html[data-density="compact"] {
         bootstrap script in index.html clears the class at
         the 2nd rAF → CSS transitions in over 180 ms.
      2. Just before disposing the old window, main sends
-        `voiceink:densitySwapOut` → the old renderer adds
+        `parlys:densitySwapOut` → the old renderer adds
         html.is-leaving → opacity fades out over 120 ms.
    Total perceived cross-fade: ≈ 250-300 ms, feels fluid.
    ========================================================= */

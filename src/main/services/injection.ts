@@ -9,13 +9,13 @@ import { sanitizeInjectionText } from './validate';
 import { getSettings } from './config';
 
 // Opt-in trace log for the paste pipeline. Off by default. Set
-// VOICEINK_DEBUG_INJECT=1 in the environment to dump one line per inject
-// call to %APPDATA%\voiceink\inject-debug.log — useful when a user
+// PARLYS_DEBUG_INJECT=1 in the environment to dump one line per inject
+// call to %APPDATA%\parlys\inject-debug.log — useful when a user
 // reports "ne colle pas dans X" so we can confirm exactly which HWND
 // was targeted, which was foreground at keystroke time, and whether
 // keybd_event was reached. Electron stdout isn't reliably flushed to
 // the redirected runtime.log on Windows, hence the file fallback.
-const DEBUG_INJECT = process.env.VOICEINK_DEBUG_INJECT === '1';
+const DEBUG_INJECT = process.env.PARLYS_DEBUG_INJECT === '1';
 function diagLog(...parts: unknown[]): void {
   if (!DEBUG_INJECT) return;
   try {
@@ -153,7 +153,7 @@ export async function checkMacAccessibility(): Promise<boolean> {
         if (denied) {
           console.warn(
             '[inject] macOS Accessibility permission NOT granted — paste will fail silently. ' +
-              'Enable VoiceInk in System Settings → Privacy & Security → Accessibility.',
+              'Enable Parlys in System Settings → Privacy & Security → Accessibility.',
           );
           resolve(false);
           return;
@@ -179,7 +179,7 @@ export async function checkMacAccessibility(): Promise<boolean> {
  */
 /**
  * Force `targetHwnd` to the foreground even when the calling process
- * isn't itself foreground (which is the normal VoiceInk state — the
+ * isn't itself foreground (which is the normal Parlys state — the
  * pill is shown via `showInactive` and the main process never owns
  * focus). A naked `SetForegroundWindow` from a non-foreground process
  * is blocked by Windows' focus-stealing prevention.
@@ -434,11 +434,11 @@ async function sendTextNative(text: string, hwnd: string | null): Promise<boolea
 function sendPastePowerShell(hwnd: string | null): Promise<void> {
   return new Promise((resolve) => {
     const setFg = hwnd
-      ? `$null = [VoiceInk.U]::SetForegroundWindow([IntPtr]${hwnd}); Start-Sleep -Milliseconds 60;`
+      ? `$null = [Parlys.U]::SetForegroundWindow([IntPtr]${hwnd}); Start-Sleep -Milliseconds 60;`
       : 'Start-Sleep -Milliseconds 80;';
 
     const script = [
-      `Add-Type -Namespace VoiceInk -Name U -MemberDefinition '[System.Runtime.InteropServices.DllImport(\\"user32.dll\\")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);' -ErrorAction SilentlyContinue;`,
+      `Add-Type -Namespace Parlys -Name U -MemberDefinition '[System.Runtime.InteropServices.DllImport(\\"user32.dll\\")] public static extern bool SetForegroundWindow(System.IntPtr hWnd);' -ErrorAction SilentlyContinue;`,
       `Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue;`,
       setFg,
       `[System.Windows.Forms.SendKeys]::SendWait('^v');`,

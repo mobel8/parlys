@@ -11,7 +11,7 @@ When humans talk to each other, there's a rhythm. You say something, the other p
 
 Most voice AI products today — Siri, Alexa, Google Assistant, most translation apps — hit **1.5 to 2.5 seconds** of end-to-end latency. That's an eternity. It's why nobody uses these tools for real conversation; they're button-press query-response interactions at best.
 
-**VoiceInk's target is 400 ms voice-to-voice**, and we hit it on 95 % of requests. Here's why that specific number matters, and how we got there.
+**Parlys's target is 400 ms voice-to-voice**, and we hit it on 95 % of requests. Here's why that specific number matters, and how we got there.
 
 ## The psychology
 
@@ -87,7 +87,7 @@ You speak, the text appears almost immediately in your document. No "lag panic" 
 400 ms is fast for voice-to-voice, but it's still **slower than a native turn-taking 200 ms**. In a very tight conversational context (arguing, rapid-fire Q&A), you can still feel the AI is a hair behind. Closing that last 200 ms requires either:
 
 - **Speculative execution**: begin translating after 3 seconds of speech even before the speaker finishes their sentence. Promising, error-prone.
-- **On-device inference**: kill the network leg entirely. Apple's M3/M4 chips can run whisper-tiny + a small Llama at acceptable quality and <100 ms latency. Coming to VoiceInk v2.0.
+- **On-device inference**: kill the network leg entirely. Apple's M3/M4 chips can run whisper-tiny + a small Llama at acceptable quality and <100 ms latency. Coming to Parlys v2.0.
 - **Predictive TTS warm-up**: pre-synthesise "I don't know" and "OK" responses so they're ready to stream instantly. Works for voice assistants, not open-ended translation.
 
 The next frontier is **< 200 ms**, and a handful of research labs (Kyutai, Inflection, Meta FAIR) are already benchmarking in that range. Expect production availability by 2027.
@@ -107,6 +107,6 @@ So it's a defensible moat for whoever bothers: 400 ms is a **product-market-fit 
 
 ---
 
-Benchmarks and raw traces available in [the VoiceInk engineering changelog](https://github.com/mobel8/voiceink/tree/main/docs). If you want to read the actual measurement code, it's in `scripts/latency-bench.js`.
+Benchmarks and raw traces available in [the Parlys engineering changelog](https://github.com/mobel8/parlys/tree/main/docs). If you want to read the actual measurement code, it's in `scripts/latency-bench.js`.
 
-[Try 400 ms yourself — VoiceInk Free →](/#download)
+[Try 400 ms yourself — Parlys Free →](/#download)

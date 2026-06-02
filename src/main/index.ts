@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron';
 import { join } from 'path';
+import { existsSync, cpSync, renameSync } from 'fs';
 import { IPC, Density } from '../shared/types';
 import { registerIpc } from './ipc';
 import { registerShortcuts, unregisterShortcuts } from './shortcuts';
@@ -19,8 +20,30 @@ import { getTheme, DEFAULT_EFFECTS } from '../shared/themes';
 // 'Electron' name → userData lands in %APPDATA%\Electron\ and creates a
 // parallel settings file, orphaned from what the packaged .exe reads.
 // Must stay the first executable statement of this module.
-app.setName('voiceink');
-app.setPath('userData', join(app.getPath('appData'), 'voiceink'));
+// One-time rebrand migration (VoiceInk → Parlys): if the new Parlys userData
+// directory does not exist yet but the legacy 'voiceink' one does, copy it over
+// (settings, history.json, dictionary…) and rename the settings file, so existing
+// users keep their API keys, history and preferences across the rename.
+// Best-effort: any failure falls through to fresh defaults rather than crashing.
+const _appData = app.getPath('appData');
+const _newDir = join(_appData, 'parlys');
+const _oldDir = join(_appData, 'voiceink');
+try {
+  if (!existsSync(_newDir) && existsSync(_oldDir)) {
+    cpSync(_oldDir, _newDir, { recursive: true });
+    const _oldSettings = join(_newDir, 'voiceink-settings.json');
+    const _newSettings = join(_newDir, 'parlys-settings.json');
+    if (existsSync(_oldSettings) && !existsSync(_newSettings)) {
+      renameSync(_oldSettings, _newSettings);
+    }
+    console.log('[migration] copied legacy VoiceInk userData → Parlys');
+  }
+} catch (err) {
+  console.warn('[migration] VoiceInk → Parlys userData migration failed:', err);
+}
+
+app.setName('parlys');
+app.setPath('userData', _newDir);
 
 // Single-instance lock. Without this, double-clicking the desktop
 // shortcut spawns a second Electron process that:
@@ -37,7 +60,7 @@ app.setPath('userData', join(app.getPath('appData'), 'voiceink'));
 // dir. Non-primary processes get back `false`, forward their CLI args
 // to the primary via the 'second-instance' event, and quit immediately.
 // The primary surfaces its window so a repeated shortcut click always
-// "focuses VoiceInk" instead of opening a duplicate.
+// "focuses Parlys" instead of opening a duplicate.
 const _gotLock = app.requestSingleInstanceLock();
 if (!_gotLock) {
   app.quit();
@@ -323,18 +346,18 @@ function buildWindow(density: Density): WindowCtx {
  */
 async function loadRenderer(ctx: WindowCtx): Promise<void> {
   // Base hash is the density; append a `-sampler` suffix when
-  // VOICEINK_PILL_SAMPLER=1 is set so the renderer's regression sampler
+  // PARLYS_PILL_SAMPLER=1 is set so the renderer's regression sampler
   // runs. The suffix is harmless otherwise — the density bootstrap just
   // ignores anything it doesn't recognise.
-  const sampler = process.env.VOICEINK_PILL_SAMPLER === '1' ? '-sampler' : '';
-  // Smoke-test hook: `VOICEINK_START_VIEW=<view>` forces the renderer
+  const sampler = process.env.PARLYS_PILL_SAMPLER === '1' ? '-sampler' : '';
+  // Smoke-test hook: `PARLYS_START_VIEW=<view>` forces the renderer
   // to land on that view on first render (bypasses the default 'main'
   // in the Zustand store). Used by `scripts/_smoke-settings.js` to
   // verify SettingsView actually mounts without throwing a
   // ReferenceError — the kind of bug the type-check in _build-renderer
   // already catches at build time, but we double-check at runtime too.
   // The suffix is parsed by `initialView()` in `useStore.ts`.
-  const startView = process.env.VOICEINK_START_VIEW;
+  const startView = process.env.PARLYS_START_VIEW;
   const viewSuffix = (startView === 'main' || startView === 'history' || startView === 'settings')
     ? `;view=${startView}`
     : '';
@@ -363,7 +386,7 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
-    if (process.env.VOICEINK_DEVTOOLS === '1' && ctx.density === 'comfortable') {
+    if (process.env.PARLYS_DEVTOOLS === '1' && ctx.density === 'comfortable') {
       ctx.win.webContents.openDevTools({ mode: 'detach' });
     }
   } else {
@@ -395,7 +418,7 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
     const maybeResolve = () => {
       if (settled || !nativeReady || !rendererReady) return;
       settled = true;
-      ipcMain.off('voiceink:renderer-ready', onRendererReady);
+      ipcMain.off('parlys:renderer-ready', onRendererReady);
       clearTimeout(cap);
       clearTimeout(softCap);
       resolve();
@@ -414,7 +437,7 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
     };
 
     ctx.win.once('ready-to-show', onReadyToShow);
-    ipcMain.on('voiceink:renderer-ready', onRendererReady);
+    ipcMain.on('parlys:renderer-ready', onRendererReady);
 
     // Soft cap: if the native ready-to-show fired but rendererReady is
     // still pending after 400 ms, proceed anyway. Happens on cold cache
@@ -426,7 +449,7 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
       if (settled) return;
       if (nativeReady) {
         settled = true;
-        ipcMain.off('voiceink:renderer-ready', onRendererReady);
+        ipcMain.off('parlys:renderer-ready', onRendererReady);
         clearTimeout(cap);
         resolve();
       }
@@ -437,7 +460,7 @@ function waitForFirstPaint(ctx: WindowCtx): Promise<void> {
     const cap = setTimeout(() => {
       if (settled) return;
       settled = true;
-      ipcMain.off('voiceink:renderer-ready', onRendererReady);
+      ipcMain.off('parlys:renderer-ready', onRendererReady);
       clearTimeout(softCap);
       resolve();
     }, 1500);
@@ -461,7 +484,7 @@ function disposeCtx(ctx: WindowCtx): void {
 }
 
 async function createWindow(): Promise<void> {
-  const forced = process.env.VOICEINK_FORCE_DENSITY as Density | undefined;
+  const forced = process.env.PARLYS_FORCE_DENSITY as Density | undefined;
   const density: Density =
     forced === 'compact' || forced === 'comfortable' ? forced : getSettings().density;
   const ctx = buildWindow(density);
@@ -540,7 +563,7 @@ async function swapDensity(density: Density): Promise<void> {
     //    new window appeared, perceived as a visible "step" in the swap.
     const wasVisible = prev ? prev.win.isVisible() : true;
     if (prev && !prev.win.isDestroyed() && wasVisible) {
-      try { prev.win.webContents.send('voiceink:densitySwapOut'); } catch { /* ignore */ }
+      try { prev.win.webContents.send('parlys:densitySwapOut'); } catch { /* ignore */ }
       await new Promise<void>((r) => setTimeout(r, 160));
     }
 
@@ -587,7 +610,7 @@ function showWidgetContextMenu(): void {
       click: async () => {
         await swapDensity('comfortable');
         const nw = getWin();
-        nw?.webContents.send('voiceink:openSettings');
+        nw?.webContents.send('parlys:openSettings');
       },
     },
     { type: 'separator' },
@@ -596,7 +619,7 @@ function showWidgetContextMenu(): void {
       click: () => w.hide(),
     },
     {
-      label: 'Quitter VoiceInk',
+      label: 'Quitter Parlys',
       click: () => {
         (app as any).isQuitting = true;
         app.quit();
@@ -690,7 +713,7 @@ function installNavigationGuards(): void {
 // only reliable way to trigger mouse events in a transparent
 // alwaysOnTop window on Windows — SendInput is silently dropped) and
 // read the renderer console in real time. Never set in production.
-if (process.env.VOICEINK_CDP === '1') {
+if (process.env.PARLYS_CDP === '1') {
   app.commandLine.appendSwitch('remote-debugging-port', '9222');
   app.commandLine.appendSwitch('remote-allow-origins', '*');
 }

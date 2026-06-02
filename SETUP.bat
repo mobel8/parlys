@@ -6,15 +6,15 @@ exit /b %errorlevel%
 
 :: (script historique conserve ci-dessous mais non execute)
 setlocal ENABLEDELAYEDEXPANSION
-title VoiceInk - Setup
+title Parlys - Setup
 
 set "LOG=%~dp0run.log"
 echo =========================================================== > "%LOG%"
-echo VoiceInk SETUP - %date% %time% >> "%LOG%"
+echo Parlys SETUP - %date% %time% >> "%LOG%"
 echo =========================================================== >> "%LOG%"
 
 echo.
-echo  VoiceInk - Setup complet
+echo  Parlys - Setup complet
 echo  ========================
 echo.
 
@@ -83,7 +83,7 @@ xcopy /y /q assets\*.* dist\assets\ >nul 2>nul
 
 :: ---- 7. Launch Electron ----
 echo.
-echo  Lancement de VoiceInk...
+echo  Lancement de Parlys...
 echo  =========================
 echo.
 echo --- launch --- >> "%LOG%"

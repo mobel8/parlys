@@ -1,20 +1,20 @@
 /**
- * Push the current `dist/` + `assets/` into the installed VoiceInk's
+ * Push the current `dist/` + `assets/` into the installed Parlys's
  * app.asar so the desktop shortcut picks up code changes without going
  * through the NSIS installer. Intended as a dev-loop command: run it
  * after `scripts\build.bat` (or call `scripts\sync-install.bat` which
  * chains build → sync → relaunch).
  *
  * Steps
- *   1. Locate the installed VoiceInk.exe + app.asar.
- *   2. Kill every running VoiceInk / electron process so Windows
+ *   1. Locate the installed Parlys.exe + app.asar.
+ *   2. Kill every running Parlys / electron process so Windows
  *      releases the file lock on app.asar.
  *   3. Extract the current app.asar to a temp directory (preserves
  *      bundled node_modules, package.json, etc.).
  *   4. Overwrite `<tmp>/dist/` and `<tmp>/assets/` with the freshly
  *      built versions from the repo.
  *   5. Repack the temp directory back to app.asar.
- *   6. Relaunch VoiceInk.exe.
+ *   6. Relaunch Parlys.exe.
  *
  * We use @electron/asar programmatically (already a transitive
  * dependency via electron-builder) instead of `npx asar` to avoid the
@@ -30,25 +30,25 @@ const ROOT = path.resolve(__dirname, '..');
 
 // ---- 1. Locate the installed app --------------------------------------
 const CANDIDATES = [
-  process.env.LOCALAPPDATA        && path.join(process.env.LOCALAPPDATA,        'Programs', 'VoiceInk'),
-  process.env.ProgramFiles        && path.join(process.env.ProgramFiles,        'VoiceInk'),
-  process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'VoiceInk'),
+  process.env.LOCALAPPDATA        && path.join(process.env.LOCALAPPDATA,        'Programs', 'Parlys'),
+  process.env.ProgramFiles        && path.join(process.env.ProgramFiles,        'Parlys'),
+  process.env['ProgramFiles(x86)'] && path.join(process.env['ProgramFiles(x86)'], 'Parlys'),
 ].filter(Boolean);
 
 let installDir = null;
 for (const c of CANDIDATES) {
-  if (fs.existsSync(path.join(c, 'VoiceInk.exe'))) {
+  if (fs.existsSync(path.join(c, 'Parlys.exe'))) {
     installDir = c;
     break;
   }
 }
 if (!installDir) {
-  console.error('[sync-install] VoiceInk.exe not found. Searched:');
+  console.error('[sync-install] Parlys.exe not found. Searched:');
   for (const c of CANDIDATES) console.error('  - ' + c);
   console.error('Run the NSIS installer once, then re-run this script.');
   process.exit(2);
 }
-const exe          = path.join(installDir, 'VoiceInk.exe');
+const exe          = path.join(installDir, 'Parlys.exe');
 const installedAsar = path.join(installDir, 'resources', 'app.asar');
 if (!fs.existsSync(installedAsar)) {
   console.error('[sync-install] missing', installedAsar);
@@ -58,13 +58,13 @@ console.log('[sync-install] target :', exe);
 console.log('[sync-install] asar   :', installedAsar,
   '(', (fs.statSync(installedAsar).size / 1e6).toFixed(2), 'MB)');
 
-// ---- 2. Stop running VoiceInk so Windows releases the asar lock -------
+// ---- 2. Stop running Parlys so Windows releases the asar lock -------
 function killTree(name) {
   // Redirect both streams because taskkill prints to stderr when the
   // process it's looking for is not running.
   spawnSync('taskkill', ['/F', '/IM', name], { stdio: 'ignore' });
 }
-killTree('VoiceInk.exe');
+killTree('Parlys.exe');
 killTree('electron.exe');
 
 // Give Windows a moment to finish the handle release — 300 ms is
@@ -75,7 +75,7 @@ function sleepSync(ms) {
 sleepSync(800);
 
 // ---- 3. Extract the current asar --------------------------------------
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voiceink-sync-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'parlys-sync-'));
 console.log('[sync-install] extract →', tmp);
 asar.extractAll(installedAsar, tmp);
 

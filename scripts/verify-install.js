@@ -12,7 +12,7 @@ const path = require('path');
 const os   = require('os');
 const asar = require('@electron/asar');
 
-const INSTALL_DIR   = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk');
+const INSTALL_DIR   = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys');
 const INSTALLED_ASAR = path.join(INSTALL_DIR, 'resources', 'app.asar');
 
 if (!fs.existsSync(INSTALLED_ASAR)) {
@@ -22,7 +22,7 @@ if (!fs.existsSync(INSTALLED_ASAR)) {
 console.log('[verify] asar    :', INSTALLED_ASAR,
   '(', (fs.statSync(INSTALLED_ASAR).size / 1e6).toFixed(2), 'MB)');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voiceink-verify-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'parlys-verify-'));
 asar.extractAll(INSTALLED_ASAR, tmp);
 console.log('[verify] extract →', tmp);
 

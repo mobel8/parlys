@@ -1,5 +1,5 @@
 /**
- * Regression test that runs against the ACTUAL INSTALLED VoiceInk.exe,
+ * Regression test that runs against the ACTUAL INSTALLED Parlys.exe,
  * not the dev loopback.
  *
  * Current UX contract — "Superwhisper-style wide-pill hover":
@@ -16,7 +16,7 @@
  * We discover the capsule rect at runtime via getBoundingClientRect
  * so the probes survive future resize tweaks without edits.
  *
- * VOICEINK_FORCE_DENSITY=compact forces a 176×55 pill regardless of
+ * PARLYS_FORCE_DENSITY=compact forces a 176×55 pill regardless of
  * the persisted `density` — that also exercises the density-pinning
  * fix in useStore.
  */
@@ -24,12 +24,12 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
 
-const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'VoiceInk.exe');
+const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'Parlys.exe');
 const CDP_PORT = 9222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function killAll() {
-  for (const n of ['VoiceInk.exe', 'electron.exe']) {
+  for (const n of ['Parlys.exe', 'electron.exe']) {
     try { execSync(`taskkill /F /IM ${n}`, { stdio: 'ignore' }); } catch {}
   }
 }
@@ -95,8 +95,8 @@ async function evalJS(cdp, js) {
 
     const env = { ...process.env };
     delete env.ELECTRON_RUN_AS_NODE;
-    env.VOICEINK_CDP = '1';
-    env.VOICEINK_FORCE_DENSITY = 'compact';
+    env.PARLYS_CDP = '1';
+    env.PARLYS_FORCE_DENSITY = 'compact';
 
     const child = spawn(INSTALL, [], {
       shell: false, detached: false, windowsHide: false, env,

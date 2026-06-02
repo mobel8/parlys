@@ -89,4 +89,4 @@ _flash-*.png
 _pill-scale-*.png
 probe-cdp.js
 *.bak
-voiceink-settings.json.pre-*.bak
+parlys-settings.json.pre-*.bak

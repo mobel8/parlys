@@ -3,18 +3,18 @@
  *
  * Every composition we want to render must be registered here via
  * <Composition />. The CLI picks them up by `id` when calling
- *   npx remotion render VoiceInkPromo out.mp4
+ *   npx remotion render ParlysPromo out.mp4
  *
  * Three compositions ship by default:
- *   1. VoiceInkPromo          — 1920×1080, 60s @ 60fps (master deliverable)
- *   2. VoiceInkPromoShort     — 1920×1080, 15s @ 60fps (Twitter / GIF)
- *   3. VoiceInkPromoVertical  — 1080×1920, 30s @ 60fps (Reels / TikTok)
+ *   1. ParlysPromo          — 1920×1080, 60s @ 60fps (master deliverable)
+ *   2. ParlysPromoShort     — 1920×1080, 15s @ 60fps (Twitter / GIF)
+ *   3. ParlysPromoVertical  — 1080×1920, 30s @ 60fps (Reels / TikTok)
  */
 import React from 'react';
 import { Composition } from 'remotion';
-import { VoiceInkPromo }        from './VoiceInkPromo';
-import { VoiceInkPromoShort }   from './VoiceInkPromoShort';
-import { VoiceInkPromoVertical} from './VoiceInkPromoVertical';
+import { ParlysPromo }        from './ParlysPromo';
+import { ParlysPromoShort }   from './ParlysPromoShort';
+import { ParlysPromoVertical} from './ParlysPromoVertical';
 import { FPS, WIDTH, HEIGHT, TOTAL_FRAMES } from './lib/theme';
 import './styles.css';
 
@@ -22,8 +22,8 @@ import './styles.css';
  * Composition registry.
  *
  * Each language ships as its own Composition id so the CLI can render
- * them independently: `npx remotion render VoiceInkPromo` vs
- * `npx remotion render VoiceInkPromoFR`. Behind the scenes both use
+ * them independently: `npx remotion render ParlysPromo` vs
+ * `npx remotion render ParlysPromoFR`. Behind the scenes both use
  * the same React tree — only the `lang` prop differs, which switches
  * the i18n context in LangProvider at the top.
  */
@@ -32,8 +32,8 @@ export const RemotionRoot: React.FC = () => {
     <>
       {/* English — master */}
       <Composition
-        id="VoiceInkPromo"
-        component={VoiceInkPromo}
+        id="ParlysPromo"
+        component={ParlysPromo}
         defaultProps={{ lang: 'en' as const }}
         durationInFrames={TOTAL_FRAMES}
         fps={FPS}
@@ -42,8 +42,8 @@ export const RemotionRoot: React.FC = () => {
       />
       {/* French — master */}
       <Composition
-        id="VoiceInkPromoFR"
-        component={VoiceInkPromo}
+        id="ParlysPromoFR"
+        component={ParlysPromo}
         defaultProps={{ lang: 'fr' as const }}
         durationInFrames={TOTAL_FRAMES}
         fps={FPS}
@@ -52,8 +52,8 @@ export const RemotionRoot: React.FC = () => {
       />
       {/* English — short */}
       <Composition
-        id="VoiceInkPromoShort"
-        component={VoiceInkPromoShort}
+        id="ParlysPromoShort"
+        component={ParlysPromoShort}
         defaultProps={{ lang: 'en' as const }}
         durationInFrames={900}
         fps={FPS}
@@ -62,8 +62,8 @@ export const RemotionRoot: React.FC = () => {
       />
       {/* French — short */}
       <Composition
-        id="VoiceInkPromoShortFR"
-        component={VoiceInkPromoShort}
+        id="ParlysPromoShortFR"
+        component={ParlysPromoShort}
         defaultProps={{ lang: 'fr' as const }}
         durationInFrames={900}
         fps={FPS}
@@ -71,8 +71,8 @@ export const RemotionRoot: React.FC = () => {
         height={HEIGHT}
       />
       <Composition
-        id="VoiceInkPromoVertical"
-        component={VoiceInkPromoVertical}
+        id="ParlysPromoVertical"
+        component={ParlysPromoVertical}
         durationInFrames={1800}
         fps={FPS}
         width={1080}

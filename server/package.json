@@ -1,7 +1,7 @@
 {
-  "name": "voiceink-server",
+  "name": "parlys-server",
   "version": "0.1.0",
-  "description": "VoiceInk SaaS backend — auth, billing, quotas, broker for Groq/Cartesia/ElevenLabs",
+  "description": "Parlys SaaS backend — auth, billing, quotas, broker for Groq/Cartesia/ElevenLabs",
   "private": true,
   "type": "module",
   "main": "dist/server.js",

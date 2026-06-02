@@ -1,7 +1,7 @@
 # Code Signing — Windows & macOS
 
 This document walks through the procurement and wiring of the certificates
-VoiceInk needs to ship **without** SmartScreen / Gatekeeper warnings and to
+Parlys needs to ship **without** SmartScreen / Gatekeeper warnings and to
 enable the auto-updater to verify binaries at install time.
 
 Without signing, two things break:
@@ -55,14 +55,14 @@ Certificate Manager (`certmgr.msc`) should now list the cert.
 Add to your **local** machine's environment (never commit these):
 
 ```bat
-REM ~/.voiceink-signing.cmd  (NOT in git)
+REM ~/.parlys-signing.cmd  (NOT in git)
 set CSC_LINK=
 set CSC_KEY_PASSWORD=
 set WIN_CSC_LINK=
 set WIN_CSC_KEY_PASSWORD=
 REM For hardware-token signing, use signtool directly rather than a PFX:
-set VOICEINK_SIGNTOOL_PATH=C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe
-set VOICEINK_TOKEN_THUMBPRINT=<your cert SHA-1 thumbprint, lowercase no spaces>
+set PARLYS_SIGNTOOL_PATH=C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe
+set PARLYS_TOKEN_THUMBPRINT=<your cert SHA-1 thumbprint, lowercase no spaces>
 ```
 
 Then patch `scripts/_run-dist-win.js` to post-sign with signtool after
@@ -71,10 +71,10 @@ electron-builder emits the `.exe`:
 ```js
 // After electron-builder completes
 const { execFileSync } = require('child_process');
-const signtool = process.env.VOICEINK_SIGNTOOL_PATH;
-const thumb = process.env.VOICEINK_TOKEN_THUMBPRINT;
+const signtool = process.env.PARLYS_SIGNTOOL_PATH;
+const thumb = process.env.PARLYS_TOKEN_THUMBPRINT;
 if (signtool && thumb) {
-  const exe = `release/VoiceInk-Setup-${version}-x64.exe`;
+  const exe = `release/Parlys-Setup-${version}-x64.exe`;
   execFileSync(signtool, [
     'sign', '/fd', 'SHA256',
     '/tr', 'http://time.certum.pl',   // RFC-3161 timestamp server
@@ -121,7 +121,7 @@ Export both as `.p12` files with a strong password.
 ### 2.2 Environment variables (macOS build machine or CI)
 
 ```bash
-# ~/.voiceink-signing.sh  (NOT in git)
+# ~/.parlys-signing.sh  (NOT in git)
 export CSC_LINK="/Users/you/Certificates/DeveloperID.p12"
 export CSC_KEY_PASSWORD="..."
 export APPLE_ID="you@example.com"
@@ -175,15 +175,15 @@ After `npm run dist:mac`:
 
 ```bash
 # Is the .app signed?
-codesign -dv --verbose=4 release/mac-arm64/VoiceInk.app
+codesign -dv --verbose=4 release/mac-arm64/Parlys.app
 # Expected: "Authority=Developer ID Application: <Your Name> (<Team ID>)"
 
 # Is notarization stapled?
-xcrun stapler validate release/VoiceInk-1.7.0-mac-arm64.dmg
+xcrun stapler validate release/Parlys-1.7.0-mac-arm64.dmg
 # Expected: "The validate action worked!"
 
 # Does Gatekeeper accept it on a fresh Mac?
-spctl --assess --type execute --verbose release/mac-arm64/VoiceInk.app
+spctl --assess --type execute --verbose release/mac-arm64/Parlys.app
 # Expected: "accepted" + "source=Notarized Developer ID"
 ```
 
@@ -197,7 +197,7 @@ Linux packages don't have system-wide signature enforcement, but:
   appimagepool / appimagehub.
 - `.deb` / `.rpm` can be signed with `dpkg-sig` / `rpmsign` and published
   to an APT/YUM repo for `apt update`-style installation. This is not
-  strictly needed for VoiceInk's initial launch — shipping raw `.deb` +
+  strictly needed for Parlys's initial launch — shipping raw `.deb` +
   `.AppImage` from GitHub Releases is the pragmatic path.
 
 ---
@@ -208,13 +208,13 @@ Linux packages don't have system-wide signature enforcement, but:
 
 ```
 release/
-  VoiceInk-Setup-1.7.0-x64.exe          ← installer (signed)
-  VoiceInk-Setup-1.7.0-x64.exe.blockmap ← differential update metadata
+  Parlys-Setup-1.7.0-x64.exe          ← installer (signed)
+  Parlys-Setup-1.7.0-x64.exe.blockmap ← differential update metadata
   latest.yml                             ← the feed electron-updater reads
 ```
 
 `latest.yml` contains the version, SHA-512 of the EXE, and URL hint. The
-auto-updater fetches `https://github.com/mobel8/voiceink/releases/download/v1.7.0/latest.yml`
+auto-updater fetches `https://github.com/mobel8/parlys/releases/download/v1.7.0/latest.yml`
 at startup.
 
 ### 4.1 Publishing steps
@@ -222,7 +222,7 @@ at startup.
 **Option A — Manual (recommended for solo launch):**
 
 1. `npm run dist:win`
-2. Create a GitHub Release at https://github.com/mobel8/voiceink/releases/new
+2. Create a GitHub Release at https://github.com/mobel8/parlys/releases/new
    with tag `v1.7.0`
 3. Upload ALL files from `release/` **except** the `win-unpacked/` folder,
    `builder-debug.yml`, and `builder-effective-config.yaml`. The critical
@@ -247,7 +247,7 @@ REM → manually promote the draft to 'published' on GitHub UI
 Once published:
 
 ```bat
-curl -sL https://github.com/mobel8/voiceink/releases/latest/download/latest.yml
+curl -sL https://github.com/mobel8/parlys/releases/latest/download/latest.yml
 ```
 
 Expected output:
@@ -255,10 +255,10 @@ Expected output:
 ```yaml
 version: 1.7.0
 files:
-  - url: VoiceInk-Setup-1.7.0-x64.exe
+  - url: Parlys-Setup-1.7.0-x64.exe
     sha512: <base64>
     size: 87837569
-path: VoiceInk-Setup-1.7.0-x64.exe
+path: Parlys-Setup-1.7.0-x64.exe
 sha512: <base64>
 releaseDate: '2026-04-22T07:00:00.000Z'
 ```

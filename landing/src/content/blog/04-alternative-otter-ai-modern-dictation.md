@@ -1,7 +1,7 @@
 ---
 title: "5 modern alternatives to Otter.ai in 2026"
 description: "Otter is excellent at meeting notes but terrible at dictation or translation. Here's when to stay on Otter and when to pick a modern multi-purpose tool instead."
-keywords: ["otter.ai alternative", "meeting transcription", "ai note-taking app", "dictation alternative otter", "voiceink vs otter", "fireflies alternative", "krisp notes", "voice to text notes"]
+keywords: ["otter.ai alternative", "meeting transcription", "ai note-taking app", "dictation alternative otter", "parlys vs otter", "fireflies alternative", "krisp notes", "voice to text notes"]
 date: 2026-04-22
 category: comparison
 readingTime: "8 min read"
@@ -32,12 +32,12 @@ If those four bullets describe exactly your workflow, stay on Otter. Nothing bel
 
 ## 5 alternatives worth considering
 
-### 1. VoiceInk — multi-purpose, desktop-native
+### 1. Parlys — multi-purpose, desktop-native
 
 - **Price**: Free / 9.90 €/mo Pro
 - **Replaces**: Otter for dictation and translation. Not meeting notes (yet).
 
-VoiceInk is a desktop pill that dictates, translates, and synthesises voice in under 400 ms. It shines when you're the one doing the talking — emails, documents, Discord calls, reports. The Listener feature captures incoming audio and transcribes it, which overlaps with Otter's meeting use case, but VoiceInk doesn't (yet) auto-join Zoom bots.
+Parlys is a desktop pill that dictates, translates, and synthesises voice in under 400 ms. It shines when you're the one doing the talking — emails, documents, Discord calls, reports. The Listener feature captures incoming audio and transcribes it, which overlaps with Otter's meeting use case, but Parlys doesn't (yet) auto-join Zoom bots.
 
 Switch if: you're paying Otter to transcribe your own talking, not group meetings.
 
@@ -75,8 +75,8 @@ Tactiq is a Chrome extension that lives inside Google Meet. No bot joining. It c
 |---|---|
 | Transcribing meetings you attend | **Otter** or **Fireflies** |
 | Transcribing meetings under regulatory constraints | **Krisp Notes** |
-| Dictating emails / documents / messages | **VoiceInk** |
-| Live voice translation on calls | **VoiceInk** |
+| Dictating emails / documents / messages | **Parlys** |
+| Live voice translation on calls | **Parlys** |
 | Google Meet only, budget-conscious | **Tactiq** |
 | Founder / PM active in meetings | **Granola** |
 
@@ -85,12 +85,12 @@ Tactiq is a Chrome extension that lives inside Google Meet. No bot joining. It c
 Most people don't have one need, they have two or three. A realistic 2026 workflow:
 
 - **Granola** for meetings (you stay active, the AI cleans up later).
-- **VoiceInk** for everything else: dictating emails, replying on Discord in another language, doubling a podcast episode.
+- **Parlys** for everything else: dictating emails, replying on Discord in another language, doubling a podcast episode.
 
 Total: 19 + 9.90 = **28.90 €/month** for a setup that beats Otter Business's 30 $ on almost every dimension. Two apps, clean split of concerns.
 
-Or if you're all-in on meetings: Otter Business + VoiceInk Pro. Same money, both bases covered.
+Or if you're all-in on meetings: Otter Business + Parlys Pro. Same money, both bases covered.
 
 ---
 
-Skeptical? [Try VoiceInk free](/#download) for 30 days. The Pro limit is 50 hours/month — easily enough to replace 80% of what you currently use Otter for. Keep or drop, no commitment.
+Skeptical? [Try Parlys free](/#download) for 30 days. The Pro limit is 50 hours/month — easily enough to replace 80% of what you currently use Otter for. Keep or drop, no commitment.

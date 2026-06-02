@@ -1,9 +1,9 @@
 #!/bin/bash
 # ============================================================
-# VoiceInk — Linux .deb / .rpm post-install hook.
+# Parlys — Linux .deb / .rpm post-install hook.
 #
 # electron-builder runs this after the package has written its
-# files to /opt/VoiceInk and /usr/share/applications/voiceink.desktop.
+# files to /opt/Parlys and /usr/share/applications/parlys.desktop.
 #
 # We additionally copy the .desktop launcher onto every existing
 # user's Desktop (and also add a per-user symlink, so the icon
@@ -12,7 +12,7 @@
 
 set -e
 
-DESKTOP_SRC="/usr/share/applications/voiceink.desktop"
+DESKTOP_SRC="/usr/share/applications/parlys.desktop"
 
 if [ ! -f "$DESKTOP_SRC" ]; then
   exit 0
@@ -43,7 +43,7 @@ while IFS=: read -r username _ uid _ _ home shell; do
   [ -z "$desktop_dir" ] && continue
   [ ! -d "$desktop_dir" ] && continue
 
-  target="$desktop_dir/VoiceInk.desktop"
+  target="$desktop_dir/Parlys.desktop"
   cp -f "$DESKTOP_SRC" "$target"
   chown "$uid:$uid" "$target" 2>/dev/null || true
   chmod +x "$target" 2>/dev/null || true

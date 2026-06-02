@@ -4,7 +4,7 @@
 //
 // Usage:  node scripts/cdp-watch.js [command]
 //   command = "watch"  (default) — subscribe + run quick diagnostic
-//           = "inject TEXT"      — call window.voiceink.injectText(TEXT)
+//           = "inject TEXT"      — call window.parlys.injectText(TEXT)
 //           = "settings"         — dump getSettings()
 //           = "logs"             — dump last main-process logs from runtime.log
 //
@@ -27,8 +27,8 @@ function getTargets() {
 
 async function withRenderer(fn) {
   const targets = await getTargets();
-  const t = targets.find((x) => x.type === 'page' && (x.title === 'VoiceInk' || x.url.includes('index.html')));
-  if (!t) throw new Error('No VoiceInk page target. Is the renderer up?');
+  const t = targets.find((x) => x.type === 'page' && (x.title === 'Parlys' || x.url.includes('index.html')));
+  if (!t) throw new Error('No Parlys page target. Is the renderer up?');
   const ws = new WebSocket(t.webSocketDebuggerUrl);
   let id = 0;
   const pending = new Map();
@@ -89,7 +89,7 @@ async function main() {
       console.log('Watching renderer console... (5 sec)');
       // Also dump current state.
       const checks = {
-        autoInject: 'window.voiceink ? true : false',
+        autoInject: 'window.parlys ? true : false',
         recState: '(document.body.dataset.recState||"?")',
         lastError: '(document.body.dataset.lastError||"?")',
       };
@@ -102,13 +102,13 @@ async function main() {
   } else if (command === 'inject') {
     const text = args.join(' ') || 'test-injection-from-claude';
     await withRenderer(async (send) => {
-      const expr = `window.voiceink.injectText(${JSON.stringify(text)}).then(()=>"ok").catch(e=>"err:"+e.message)`;
+      const expr = `window.parlys.injectText(${JSON.stringify(text)}).then(()=>"ok").catch(e=>"err:"+e.message)`;
       const r = await evalExpr(send, expr);
       console.log('inject result:', JSON.stringify(r));
     });
   } else if (command === 'settings') {
     await withRenderer(async (send) => {
-      const expr = `window.voiceink.getSettings().then(s=>({autoInject:s.autoInject,autoCopy:s.autoCopy,language:s.language,mode:s.mode,sttPrompt:s.sttPrompt.slice(0,50)}))`;
+      const expr = `window.parlys.getSettings().then(s=>({autoInject:s.autoInject,autoCopy:s.autoCopy,language:s.language,mode:s.mode,sttPrompt:s.sttPrompt.slice(0,50)}))`;
       const r = await evalExpr(send, expr);
       console.log('settings:', JSON.stringify(r.value, null, 2));
     });
@@ -121,7 +121,7 @@ async function main() {
     const b64 = buf.toString('base64');
     await withRenderer(async (send) => {
       const expr = `
-        window.voiceink.transcribe({
+        window.parlys.transcribe({
           audioBase64: ${JSON.stringify(b64)},
           mimeType: 'audio/mpeg',
           language: 'fr',

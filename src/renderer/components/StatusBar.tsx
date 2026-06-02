@@ -38,7 +38,7 @@ export function StatusBar() {
             title="Voir l'historique des versions"
             className="text-white/50 hover:text-white/90 transition-colors cursor-pointer rounded px-1 -mx-1 hover:bg-white/5 focus:outline-none focus-visible:ring-1 focus-visible:ring-white/40"
           >
-            VoiceInk v{__APP_VERSION__}
+            Parlys v{__APP_VERSION__}
           </button>
         </div>
       </div>

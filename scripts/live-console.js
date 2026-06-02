@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Attach to the INSTALLED VoiceInk.exe with CDP and stream every console
+ * Attach to the INSTALLED Parlys.exe with CDP and stream every console
  * event (log, warning, error, trace, assert, exception) for `duration`
- * seconds. Also pipes VoiceInk's own stdout/stderr so we see logs from
+ * seconds. Also pipes Parlys's own stdout/stderr so we see logs from
  * the main process.
  *
  * Goal: catch runtime bugs the static audit missed — unhandled
@@ -19,7 +19,7 @@ const { spawn, execSync } = require('child_process');
 const path = require('path');
 const http = require('http');
 
-const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'VoiceInk.exe');
+const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'Parlys.exe');
 const CDP_PORT = 9222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -27,7 +27,7 @@ const duration = Math.max(5, parseInt(process.argv[2] || '30', 10)) * 1000;
 const density  = process.argv[3] || 'compact';
 
 function killAll() {
-  for (const n of ['VoiceInk.exe', 'electron.exe']) {
+  for (const n of ['Parlys.exe', 'electron.exe']) {
     try { execSync(`taskkill /F /IM ${n}`, { stdio: 'ignore' }); } catch {}
   }
 }
@@ -93,8 +93,8 @@ function tagLine(tag, level, text) {
 
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  env.VOICEINK_CDP = '1';
-  env.VOICEINK_FORCE_DENSITY = density;
+  env.PARLYS_CDP = '1';
+  env.PARLYS_FORCE_DENSITY = density;
 
   const child = spawn(INSTALL, [], {
     shell: false, detached: false, windowsHide: false, env,

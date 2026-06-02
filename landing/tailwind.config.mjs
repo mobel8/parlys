@@ -5,7 +5,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // VoiceInk brand palette — kept in sync with the Electron app's
+        // Parlys brand palette — kept in sync with the Electron app's
         // "Arctic Pulse" theme so marketing and product feel like one
         // continuous surface.
         ink: {

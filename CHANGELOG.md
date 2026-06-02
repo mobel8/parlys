@@ -1,6 +1,6 @@
 # Changelog
 
-Toutes les modifications notables de VoiceInk sont documentées ici.
+Toutes les modifications notables de Parlys sont documentées ici.
 
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
@@ -11,14 +11,14 @@ et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/)
 
 - **Raccourci clavier global pour activer/désactiver l'interprète vocal.** Nouveau champ `shortcutInterpreter` (défaut `CommandOrControl+Shift+I`). Appuyer dessus de n'importe où dans l'OS flippe `interpreterEnabled` — la pastille émeraude en haut à droite s'allume/s'éteint instantanément, la prochaine dictée passe par le pipeline Whisper → traduction → voix IA, sans avoir à ouvrir Paramètres. Le main process persiste le setting + broadcast `ON_SETTINGS_CHANGED` à toutes les fenêtres renderer, qui se resynchronisent sans reload.
 - **Interface proportionnelle (responsive de A à Z).** Toute la hiérarchie typographique suit maintenant la taille de la fenêtre via `font-size: clamp(14px, 14px + 0.35vw, 17px)` sur `<html>`, ce qui propage automatiquement à toutes les classes Tailwind `rem` (text-lg, text-3xl, padding, gap…). Les grilles thèmes / TTS providers / toggle chips passent en `grid-template-columns: repeat(auto-fit, minmax(Xrem, 1fr))` — le nombre de colonnes s'adapte en continu au lieu de snapper entre breakpoints md/lg. La SettingsView utilise une nouvelle utility `.page-container` avec `max-width: min(68rem, 96vw)` + paddings en `clamp()` — le contenu respire sur écran ultra-large mais reste lisible à 580 px. Le header MainView passe en `flex-wrap` avec paddings fluides — les pickers basculent sous le titre plutôt que d'overflow si la fenêtre est étroite.
-- **Langue de l'interface de l'app configurable (i18n).** Nouveau champ `uiLanguage` (`'auto' | 'fr' | 'en'`, défaut `'auto'`). Dictionnaires FR + EN bundlés dans `@d:\voiceink\src\shared\i18n.ts` (~60 clés à ce stade — nav, settings, actions principales), hook React `useT()` dans `@d:\voiceink\src\renderer\lib\i18n.ts`, sélecteur de langue UI placé en tête de la section Interface de Paramètres (avec icône Globe pour qu'un utilisateur anglophone tombé sur un build FR puisse le trouver sans lire aucun label français). Résolution `auto` → détection via `navigator.language` puis fallback à `'en'`. Ajouter une langue = ajouter un dictionnaire frère + une entrée dans `SUPPORTED_UI_LANGUAGES`, zéro autre changement de code.
+- **Langue de l'interface de l'app configurable (i18n).** Nouveau champ `uiLanguage` (`'auto' | 'fr' | 'en'`, défaut `'auto'`). Dictionnaires FR + EN bundlés dans `@d:\parlys\src\shared\i18n.ts` (~60 clés à ce stade — nav, settings, actions principales), hook React `useT()` dans `@d:\parlys\src\renderer\lib\i18n.ts`, sélecteur de langue UI placé en tête de la section Interface de Paramètres (avec icône Globe pour qu'un utilisateur anglophone tombé sur un build FR puisse le trouver sans lire aucun label français). Résolution `auto` → détection via `navigator.language` puis fallback à `'en'`. Ajouter une langue = ajouter un dictionnaire frère + une entrée dans `SUPPORTED_UI_LANGUAGES`, zéro autre changement de code.
 - **Script `npm run smoke:loop`.** Boucle automatisée qui lance l'Electron packagé 1+ fois sur chaque vue (main / history / settings), capte stdout+stderr+`[renderer …]` forwardés, et classifie chaque ligne selon des regex `FATAL_PATTERNS` (`ReferenceError`, `Uncaught TypeError`, `SyntaxError`, unhandled rejection, crash Electron) et `WARNING_PATTERNS` (violations CSP, DevTools warnings, registration refused, loadRenderer failed). Rapport agrégé à la fin. Exit 0 = clean, 1 = fatal, 2 = early exit. Usage : `node scripts/loop-smoke.js [passes] [ms-per-view]`. Passe 6/6 sur ce build.
 
 ### Modifié
 
 - **`SET_SETTINGS` IPC** re-enregistre les accélérateurs globaux si `shortcutToggle`, `shortcutPTT`, `shortcutInterpreter` ou `pttEnabled` ont changé → aucune restart de l'app nécessaire pour appliquer un nouveau binding. Broadcast également la nouvelle Settings à toutes les autres fenêtres via `ON_SETTINGS_CHANGED` pour que la synchronisation inter-fenêtres soit immédiate.
-- **`ShortcutInput` capture-clavier** remplace les inputs text libre pour les 3 hotkeys. L'utilisateur ne peut plus saisir un typo silencieux qui casse le binding — il appuie littéralement sur sa combo et VoiceInk la convertit en accelerator Electron (format `CommandOrControl+Shift+X`). Échap annule, Backspace efface. Interactions testées : lettre+modif / touche spéciale / combo sans modif (rejetée pour prévenir les lone-letter bindings qui mangeraient la touche au niveau OS).
-- **`killExisting()` dans les scripts de smoke** nuke maintenant `VoiceInk.exe` (app packagée) en plus de `electron.exe`, avec un délai 1500 ms avant de respawn pour laisser Windows libérer le single-instance lock.
+- **`ShortcutInput` capture-clavier** remplace les inputs text libre pour les 3 hotkeys. L'utilisateur ne peut plus saisir un typo silencieux qui casse le binding — il appuie littéralement sur sa combo et Parlys la convertit en accelerator Electron (format `CommandOrControl+Shift+X`). Échap annule, Backspace efface. Interactions testées : lettre+modif / touche spéciale / combo sans modif (rejetée pour prévenir les lone-letter bindings qui mangeraient la touche au niveau OS).
+- **`killExisting()` dans les scripts de smoke** nuke maintenant `Parlys.exe` (app packagée) en plus de `electron.exe`, avec un délai 1500 ms avant de respawn pour laisser Windows libérer le single-instance lock.
 
 ### Notes techniques
 
@@ -36,7 +36,7 @@ et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/)
 
 ### Modifié
 
-- **`swapDensity()` orchestré** — envoie `voiceink:densitySwapOut` à la fenêtre sortante, attend 130 ms pour laisser jouer la transition CSS, puis `show()` la nouvelle fenêtre et `dispose()` l'ancienne. Le signal IPC est exposé au renderer via `preload.ts::onDensitySwapOut` et consommé dans `App.tsx` pour stamper `html.is-leaving`.
+- **`swapDensity()` orchestré** — envoie `parlys:densitySwapOut` à la fenêtre sortante, attend 130 ms pour laisser jouer la transition CSS, puis `show()` la nouvelle fenêtre et `dispose()` l'ancienne. Le signal IPC est exposé au renderer via `preload.ts::onDensitySwapOut` et consommé dans `App.tsx` pour stamper `html.is-leaving`.
 - **`waitForFirstPaint()` avec soft-cap 400 ms** — si `ready-to-show` natif est arrivé mais le signal `renderer-ready` tarde (hydration React lente sur cold cache), on avance quand même. La fenêtre apparaît plus vite en cold path sans risquer le flash d'un shell vide, parce que le `#root.is-entering` maintient l'opacity à 0 jusqu'au 2e rAF quoi qu'il arrive. Hard-cap réduit de 2000 ms à 1500 ms.
 - **Gate TTS étanche** — `src/main/ipc.ts` (handlers `INTERPRET` et `SPEAK`) lit `settings.speakTranslations` et skip intégralement `streamTTS()` si `false`. Le `done` sentinel est toujours émis pour que le `MediaSource` du renderer ne stall pas. Côté renderer, `useContinuousInterpreter` reçoit un getter `speakEnabled` : quand `false`, aucun `InterpretPlayer` n'est construit du tout (pas de `MediaSource` à ouvrir, pas de chunks à consommer).
 
@@ -50,14 +50,14 @@ et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/)
 
 ### Corrigé (hotfix critique)
 
-- **`ReferenceError: SpeedSlider is not defined` dans la vue Paramètres.** Dans le build 1.5.0, l'import `import { SpeedSlider } from './SpeedSlider'` avait disparu de `@d:\voiceink\src\renderer\components\SettingsView.tsx` pendant les refactorings, mais la balise `<SpeedSlider …>` restait dans le JSX. Esbuild (le transformer interne de Vite) ne fait que **stripper les types** — il ne vérifie pas la résolution des symboles. Résultat : `npm run build` réussissait, le bundle partait en production, puis explosait au runtime dès qu'on cliquait sur « Paramètres » (rendu bloqué, vue vide, impossible d'interagir). L'import est restauré.
+- **`ReferenceError: SpeedSlider is not defined` dans la vue Paramètres.** Dans le build 1.5.0, l'import `import { SpeedSlider } from './SpeedSlider'` avait disparu de `@d:\parlys\src\renderer\components\SettingsView.tsx` pendant les refactorings, mais la balise `<SpeedSlider …>` restait dans le JSX. Esbuild (le transformer interne de Vite) ne fait que **stripper les types** — il ne vérifie pas la résolution des symboles. Résultat : `npm run build` réussissait, le bundle partait en production, puis explosait au runtime dès qu'on cliquait sur « Paramètres » (rendu bloqué, vue vide, impossible d'interagir). L'import est restauré.
 - **Double garde-fou pour prévenir toute régression de ce type :**
   1. `scripts/_build-renderer.js` exécute désormais `tsc --noEmit` AVANT Vite. Tout symbole non importé ou mal typé fait échouer le build, avec un diagnostic clair (fichier + ligne + colonne). Impact : +3 s par build, contre une classe entière de bugs fatals en production.
-  2. `scripts/_smoke-settings.js` (nouveau) boote l'Electron packagé avec `VOICEINK_START_VIEW=settings`, attend 12 s, et grep stdout/stderr pour `ReferenceError` / `Uncaught TypeError`. À exécuter avant chaque release. Passe en ~15 s.
+  2. `scripts/_smoke-settings.js` (nouveau) boote l'Electron packagé avec `PARLYS_START_VIEW=settings`, attend 12 s, et grep stdout/stderr pour `ReferenceError` / `Uncaught TypeError`. À exécuter avant chaque release. Passe en ~15 s.
 
 ### Ajouté (plomberie de test)
 
-- **`VOICEINK_START_VIEW`** — variable d'environnement lue par `src/main/index.ts`. Si elle vaut `main`, `history` ou `settings`, le main injecte `;view=<X>` dans l'URL hash du renderer, et `useStore` lit ce suffixe au boot pour atterrir directement sur la vue correspondante. Utilisé uniquement par le smoke test — la dictée en production continue d'ouvrir `main` par défaut.
+- **`PARLYS_START_VIEW`** — variable d'environnement lue par `src/main/index.ts`. Si elle vaut `main`, `history` ou `settings`, le main injecte `;view=<X>` dans l'URL hash du renderer, et `useStore` lit ce suffixe au boot pour atterrir directement sur la vue correspondante. Utilisé uniquement par le smoke test — la dictée en production continue d'ouvrir `main` par défaut.
 
 ### Notes techniques
 
@@ -121,7 +121,7 @@ Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initial
 - **Translate en streaming SSE + overlap TTS** (`streamTranslate` dans `llm.ts`). Dès qu'une phrase complète arrive du modèle, on dispatche le TTS en parallèle du reste de la traduction. Pour les phrases mono-ligne c'est équivalent à non-streaming, pour les phrases multi-ligne ça économise ~100-200 ms. Fallback automatique sur le mode one-shot si le streaming échoue.
 - **Prompt translate compact** : passé de ~40 tokens (« You are a professional translator… ») à ~12 tokens (« Translate to X. Reply with ONLY… »). Qualité identique, -20 à -30 ms de prefix processing sur 8B-instant.
 - **Bit-rate TTS Cartesia 128 → 96 kbps**. Benché sur 12 runs : TTFB 206 → 170 ms (−36 ms) en moyenne pour une qualité audio indistinguable (voix humaine n'a pas de contenu >8 kHz utile). Moins de bytes sur le wire = chunks plus rapides.
-- **TLS warm-up des sockets** via nouvel IPC `voiceink:prewarm` appelé par le renderer **dès que l'utilisateur clique "enregistrer"**. Les 2-30 s d'enregistrement donnent à Node (undici) le temps d'établir TCP + TLS avec `api.groq.com` et `api.cartesia.ai` en parallèle. Quand les requêtes réelles partent, elles réutilisent des sockets chauds : ~40-80 ms de gagné sur chacune de Whisper + translate + TTS = jusqu'à 200 ms cumulés.
+- **TLS warm-up des sockets** via nouvel IPC `parlys:prewarm` appelé par le renderer **dès que l'utilisateur clique "enregistrer"**. Les 2-30 s d'enregistrement donnent à Node (undici) le temps d'établir TCP + TLS avec `api.groq.com` et `api.cartesia.ai` en parallèle. Quand les requêtes réelles partent, elles réutilisent des sockets chauds : ~40-80 ms de gagné sur chacune de Whisper + translate + TTS = jusqu'à 200 ms cumulés.
 - **`Connection: keep-alive` explicite** sur les 4 appels HTTP sortants + `max_tokens: 512` cap sur translate pour couper net les runaway models.
 
 ### Benchmarks détaillés
@@ -183,7 +183,7 @@ Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initial
 - **Catalogue complet de voix (100+ Cartesia, 11 OpenAI, ElevenLabs live)** — le picker de voix n'est plus limité à une liste curée de 6-8 voix. Il interroge maintenant l'API `/voices` de chaque fournisseur, récupère la liste complète avec métadata (nom, description, langue, genre, accent, tag « Pro »), et la présente dans une UI filtrable : champ de recherche live (match sur nom + description), filtre par langue (15 langues Cartesia incluant en, fr, es, de, ja, ko, ar, hi, pt…), filtre par genre (masculin / féminin / neutre), et bouton d'aperçu audio quand le fournisseur expose une URL de preview. Le catalogue est mis en cache 1 h dans `localStorage`, keyed par clé API — changer de clé invalide automatiquement le cache.
 - **Routing audio virtuel (Discord, Zoom, Meet, OBS)** — nouveau sélecteur « Sortie audio de la voix traduite » dans Paramètres > Traducteur vocal. Pointe vers n'importe quel périphérique audio système (VB-Cable Input, VoiceMeeter, OBS Virtual Audio). Le `InterpretPlayer` utilise `HTMLAudioElement.setSinkId()` pour router la voix IA sur ce device — d'autres applis (Discord, Zoom) captent alors la traduction comme s'il s'agissait de votre vrai micro, en parallèle de votre voix.
 - **Mode Écoute conversation (Listener)** — écoute en temps réel ce que dit **une autre personne** et affiche la transcription + traduction dans un panneau défilant avec auto-scroll et timestamps. Sélecteur d'entrée audio dédié (typiquement un device loopback comme « CABLE Output » pour capturer un appel Discord entrant, ou un micro secondaire). Deux modes : **Texte uniquement** (défaut, lecture rapide, économique) ou **Texte + audio TTS** (la traduction est aussi prononcée via le moteur TTS choisi). Chaque segment peut être copié dans le presse-papiers en un clic. Historique borné à 200 segments pour contenir la mémoire.
-- **Pipeline text-to-speech dédié (`voiceink:speak`)** — nouvel IPC qui bypass Whisper pour synthétiser directement un texte déjà traduit, utilisé par le mode audio du Listener. Reuse les 3 moteurs TTS existants + le routing `setSinkId`.
+- **Pipeline text-to-speech dédié (`parlys:speak`)** — nouvel IPC qui bypass Whisper pour synthétiser directement un texte déjà traduit, utilisé par le mode audio du Listener. Reuse les 3 moteurs TTS existants + le routing `setSinkId`.
 - **Catalogue Cartesia validé live** : 100 voix retournées par l'API en une requête, avec 15 langues (en: 30, es: 11, ko: 10, ar: 8, hi: 7, de: 6, tl: 6, fr: 2, …) et 100 % de voix avec métadata de genre (55 féminines, 45 masculines).
 
 ### Tests
@@ -206,12 +206,12 @@ Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initial
 
 ### Ajouté
 - **Barre de navigation minimaliste dans Paramètres** — 10 icônes rondes (32 px) disposées en pilule glass en haut de la vue, sticky au scroll. Chaque section (Apparence, Interface, Dictionnaire, Traducteur vocal, Traduction, Transcription, Workflow, Post-traitement, Raccourcis, Système) est accessible en un clic, avec scroll fluide vers la section cible. Un `IntersectionObserver` met en évidence la section actuellement visible (halo violet), transformant la nav en indicateur de progression. Labels en tooltip au survol — zéro encombrement visuel par défaut, découverte progressive au besoin. Le dégradé glass s'accorde au reste de l'UI, cohérent avec les cartes des sections.
-- **Script `scripts/_inject-cartesia-key.js`** pour préconfigurer la clé API Cartesia directement dans `%APPDATA%\voiceink\voiceink-settings.json` sans passer par l'UI — utile en développement et pour les smoke-tests de boot.
+- **Script `scripts/_inject-cartesia-key.js`** pour préconfigurer la clé API Cartesia directement dans `%APPDATA%\parlys\parlys-settings.json` sans passer par l'UI — utile en développement et pour les smoke-tests de boot.
 
 ## [1.2.0] — 2026-04-22
 
 ### Ajouté
-- **Traducteur vocal (interprète)** — nouveau mode indépendant des 4 modes de dictée classiques. Parlez dans votre langue, VoiceInk transcrit, traduit et **prononce instantanément** le résultat avec une voix IA réaliste. Le pipeline streame les chunks audio MP3 dès les premiers octets (TTFB ~40–200 ms selon le moteur), sans attendre la synthèse complète.
+- **Traducteur vocal (interprète)** — nouveau mode indépendant des 4 modes de dictée classiques. Parlez dans votre langue, Parlys transcrit, traduit et **prononce instantanément** le résultat avec une voix IA réaliste. Le pipeline streame les chunks audio MP3 dès les premiers octets (TTFB ~40–200 ms selon le moteur), sans attendre la synthèse complète.
   - **Toggle indépendant** dans la barre du MainView (chip vert « Interprète vocal »), à côté du picker de mode. Activable en un clic, la langue cible se choisit dans la même chip. Les 4 modes de dictée `raw / natural / formal / message` continuent de fonctionner quand l'interprète est désactivé.
   - **Section dédiée dans Paramètres** (« Traducteur vocal »), avec choix du moteur, choix de la voix (liste curée + ID personnalisé pour voix clonées), clé API stockée par moteur, slider de vitesse de parole (0.5×–2.0×).
 - **3 moteurs TTS interchangeables**, chacun en streaming HTTP/WebSocket pour minimiser la latence perçue :
@@ -226,7 +226,7 @@ Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initial
 - `src/shared/types.ts` étendu avec `interpreterEnabled`, `interpretTargetLang`, `interpreterContinuous`, `ttsProvider`, `ttsVoiceId` (keyed par provider), `ttsApiKey` (keyed par provider), `ttsSpeed`. Nouveaux types `InterpretRequest`, `InterpretResponse`, `InterpretChunkEvent`. Nouveaux IDs IPC `INTERPRET` et `ON_INTERPRET_CHUNK`.
 - Dépendance ajoutée : `ws@^8.18.0` (client WebSocket pour Cartesia) + `@types/ws` en dev.
 - `src/main/services/validate.ts` gagne `validateInterpretRequest` et un sanitiseur étendu pour les nouveaux champs (clamping `ttsSpeed` 0.25–4.0, enum `ttsProvider`, drop des clés de provider inconnues).
-- `src/main/ipc.ts` gagne le handler `voiceink:interpret` qui orchestre Whisper → translate → streamTTS avec mesure `ttfbMs` loggée dans `runtime.log`.
+- `src/main/ipc.ts` gagne le handler `parlys:interpret` qui orchestre Whisper → translate → streamTTS avec mesure `ttfbMs` loggée dans `runtime.log`.
 - `src/main/preload.ts` expose `interpret()` et `onInterpretChunk()`.
 
 ## [1.1.3] — 2026-04-21
@@ -280,7 +280,7 @@ Le p95 passe sous 600 ms pour la première fois depuis l'implémentation initial
 
 ## [1.0.0] — 2026-04-20
 
-Version initiale de VoiceInk : application de dictée vocale vers texte avec post-traitement LLM.
+Version initiale de Parlys : application de dictée vocale vers texte avec post-traitement LLM.
 
 ### Ajouté
 - **Dictée vocale** via Whisper (modèles Groq STT : `whisper-large-v3-turbo`, `distil-whisper-large-v3-en`).
@@ -301,7 +301,7 @@ Version initiale de VoiceInk : application de dictée vocale vers texte avec pos
 
 ### Corrigé (pendant le développement de 1.0.0)
 - Densité pinnée au hash de l'URL pour éviter le flash de la comfortable-view dans une pill de 176×55 lors du swap de densité.
-- Divergence des chemins de paramètres entre dev (`%APPDATA%\Electron\`) et prod (`%APPDATA%\voiceink\`).
+- Divergence des chemins de paramètres entre dev (`%APPDATA%\Electron\`) et prod (`%APPDATA%\parlys\`).
 - Oscillation du survol sur la pastille compacte (halo de tolérance 80×32).
 - Fuite de mémoire sur les stale-closures lors du re-render asynchrone.
 - Bug « pas de feedback d'enregistrement » au double-lancement.

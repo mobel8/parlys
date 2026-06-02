@@ -1,11 +1,11 @@
 ---
 title: "Dictée médicale en français : le guide 2026 pour les médecins libéraux"
-description: "Réduire de 2h30 à 45 minutes la rédaction de vos comptes-rendus. Comparatif Dragon Medical vs VoiceInk vs Lifen, vocabulaire CIM-10, intégration Doctolib."
+description: "Réduire de 2h30 à 45 minutes la rédaction de vos comptes-rendus. Comparatif Dragon Medical vs Parlys vs Lifen, vocabulaire CIM-10, intégration Doctolib."
 keywords: ["dictée médicale", "dictée vocale médecin", "dragon medical français", "compte-rendu médical", "médecin libéral productivité", "logiciel dictée santé", "Doctolib dictée", "Lifen dictée"]
 date: 2026-04-22
 category: vertical-health
 readingTime: "11 min read"
-author: "VoiceInk Team"
+author: "Parlys Team"
 ---
 
 Un médecin libéral français rédige en moyenne **12 à 18 comptes-rendus par jour** : consultations, ordonnances, courriers de correspondance, lettres d'admission. À 5-12 minutes par document tapé, ça représente **2h à 3h de saisie clavier quotidienne**. Du temps non facturable, non médical, et franchement épuisant en fin de journée.
@@ -41,7 +41,7 @@ Les moteurs Whisper fine-tunés en 2024-2025 ont rattrapé Dragon sur le vocabul
 
 Verdict : si votre cabinet utilise déjà Dragon et que vous facturez à 90 consultations/semaine, ne changez pas. Le ROI n'est pas évident.
 
-### 2. VoiceInk — le challenger moderne
+### 2. Parlys — le challenger moderne
 
 - **Prix** : 9.90 €/mo Pro (≈ 119 €/an)
 - **Accuracy FR général** : 97-98 % (tests de la communauté)
@@ -69,7 +69,7 @@ Pour les radiologues exclusivement. Moteur ultra-spécialisé sur l'imagerie, in
 
 ## Les gains concrets en cabinet
 
-Voici des mesures compilées sur une cohorte de 40 médecins libéraux français ayant switché vers Dragon Medical ou VoiceInk en 2025 :
+Voici des mesures compilées sur une cohorte de 40 médecins libéraux français ayant switché vers Dragon Medical ou Parlys en 2025 :
 
 | Tâche | Saisie clavier | Dictée |
 |---|---|---|
@@ -88,13 +88,13 @@ Autres bénéfices rapportés (qualitatif) :
 
 ## Les pièges à éviter
 
-**1. Le RGPD et l'HDS**. Si le moteur de transcription envoie l'audio à un cloud hors UE ou sans certification HDS, vous êtes en infraction. Vérifiez noir sur blanc : Dragon Medical One est HDS, VoiceInk le sera mi-2026, Otter et les moteurs américains généralistes ne le sont pas.
+**1. Le RGPD et l'HDS**. Si le moteur de transcription envoie l'audio à un cloud hors UE ou sans certification HDS, vous êtes en infraction. Vérifiez noir sur blanc : Dragon Medical One est HDS, Parlys le sera mi-2026, Otter et les moteurs américains généralistes ne le sont pas.
 
 **2. Le consentement patient pour dicter pendant la consultation**. Ce n'est pas obligatoire si les données de santé ne quittent pas le cabinet, mais recommandé par le CNOM. Ajoutez une ligne dans votre affichage d'accueil cabinet.
 
 **3. La relecture**. Une accuracy à 97 % signifie **3 erreurs pour 100 mots** — sur un compte-rendu de 500 mots, ça fait 15 mots à relire. Ne signez jamais un document dicté sans relecture, même avec Dragon Medical.
 
-**4. Le vocabulaire personnel**. Vos abréviations (FC, TA, EVA, etc.) doivent être ajoutées au dictionnaire. Dragon le fait avec son "Nuance Vocabulary Editor"; VoiceInk Pro a un éditeur de vocabulaire custom dans Paramètres → Dictionnaire.
+**4. Le vocabulaire personnel**. Vos abréviations (FC, TA, EVA, etc.) doivent être ajoutées au dictionnaire. Dragon le fait avec son "Nuance Vocabulary Editor"; Parlys Pro a un éditeur de vocabulaire custom dans Paramètres → Dictionnaire.
 
 **5. Le mode d'opération**. La dictée en "raw" (retranscription brute) sur un compte-rendu coûte 15 minutes de ponctuation manuelle. Utilisez toujours le mode "Naturel" ou "Formel" qui ajoute ponctuation, majuscules et met en forme le texte.
 
@@ -102,20 +102,20 @@ Autres bénéfices rapportés (qualitatif) :
 
 ### Plan d'essai 30 jours
 
-1. **Téléchargez VoiceInk** (Free, 30 min/jour — largement assez pour tester).
+1. **Téléchargez Parlys** (Free, 30 min/jour — largement assez pour tester).
 2. Journée 1-3 : dictez uniquement vos **courriers de correspondance**. Pas de compte-rendu officiel encore.
 3. Journée 4-10 : passez **50 % de vos comptes-rendus** en dictée. Gardez la frappe pour ceux où vous êtes pressés — l'habitude prend du temps.
 4. Journée 11-30 : ajoutez votre **vocabulaire custom** (une vingtaine d'abréviations par spécialité suffit). Passez à 100 % dictée.
 5. **Bilan à J30** : calculez le temps gagné en chronométrant une journée "avant" et une journée "après". Si vous récupérez > 45 minutes, l'upgrade Pro (9.90 €/mois) est évident.
 
-Si VoiceInk ne couvre pas votre vocabulaire (radiologie, anapath, cardio interventionnelle), essayez **Dragon Medical One** en parallèle avec l'essai 30 jours Nuance. Restez sur celui qui fait le moins d'erreurs sur VOS documents.
+Si Parlys ne couvre pas votre vocabulaire (radiologie, anapath, cardio interventionnelle), essayez **Dragon Medical One** en parallèle avec l'essai 30 jours Nuance. Restez sur celui qui fait le moins d'erreurs sur VOS documents.
 
 ## Le verdict pour un médecin libéral français en 2026
 
-- **Généraliste, médecine interne, pédiatrie, gynéco, psychiatrie** : commencez par **VoiceInk**. 9.90 €/mois vs 699 €/an, même service pour votre besoin, meilleur UI, meilleure latence.
-- **Radiologie, anapath, cardio interventionnelle, chirurgie spécialisée** : restez sur **Dragon Medical** pour l'instant. Ré-évaluez en Q4 2026 quand la vertical médicale VoiceInk sera certifiée HDS.
-- **Cabinet en groupe (> 3 praticiens)** : la licence groupe Dragon devient coûteuse (~2000 €/an/siège). VoiceInk Team à 19 €/mo/siège divise la facture par 8.
+- **Généraliste, médecine interne, pédiatrie, gynéco, psychiatrie** : commencez par **Parlys**. 9.90 €/mois vs 699 €/an, même service pour votre besoin, meilleur UI, meilleure latence.
+- **Radiologie, anapath, cardio interventionnelle, chirurgie spécialisée** : restez sur **Dragon Medical** pour l'instant. Ré-évaluez en Q4 2026 quand la vertical médicale Parlys sera certifiée HDS.
+- **Cabinet en groupe (> 3 praticiens)** : la licence groupe Dragon devient coûteuse (~2000 €/an/siège). Parlys Team à 19 €/mo/siège divise la facture par 8.
 
-[Télécharger VoiceInk (gratuit) →](/#download)
+[Télécharger Parlys (gratuit) →](/#download)
 
-*Cet article sera mis à jour quand la certification HDS de VoiceInk sera effective et que la vertical médicale sera livrée. Inscrivez-vous à la [newsletter](/#newsletter) pour être prévenu.*
+*Cet article sera mis à jour quand la certification HDS de Parlys sera effective et que la vertical médicale sera livrée. Inscrivez-vous à la [newsletter](/#newsletter) pour être prévenu.*

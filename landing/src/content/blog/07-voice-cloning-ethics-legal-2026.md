@@ -1,7 +1,7 @@
 ---
 title: "Voice cloning in 2026 — what's legal, what's ethical, what breaks trust"
 description: "AI voice cloning is powerful and cheap. Here's the legal landscape in France / EU / US, the ethical guardrails creators should adopt, and what platforms now block."
-keywords: ["voice cloning legal", "ai voice cloning ethics", "deepfake voice law", "elevenlabs consent", "voice cloning france", "ai audio regulation", "eu ai act voice", "voiceink ethics"]
+keywords: ["voice cloning legal", "ai voice cloning ethics", "deepfake voice law", "elevenlabs consent", "voice cloning france", "ai audio regulation", "eu ai act voice", "parlys ethics"]
 date: 2026-04-22
 category: guide
 readingTime: "8 min read"
@@ -66,7 +66,7 @@ The reputable voice cloning providers all now require **audio-based consent veri
 - **Professional voice**: requires signing their VoiceCloningAgreement.pdf, proof of identity, and a dedicated "voice profile" in your account.
 - **Voice library** (available to resell): subject to additional licensing review.
 
-### VoiceInk
+### Parlys
 
 - **Relies on Cartesia / ElevenLabs** underneath, inheriting their consent checks.
 - **Additional guardrail**: the desktop app only allows you to enroll voices you've recorded yourself live (detected via the system microphone, not arbitrary audio file uploads). This prevents most "clone from a downloaded YouTube video" abuse.
@@ -121,4 +121,4 @@ Voice cloning is here to stay. The question isn't whether — it's whether the i
 
 ---
 
-VoiceInk's voice cloning (launching Q3 2026) ships with mandatory consent verification, disclosure templates for creators, and a clear audit trail per voice enrolled. [Join the waitlist →](/#waitlist)
+Parlys's voice cloning (launching Q3 2026) ships with mandatory consent verification, disclosure templates for creators, and a clear audit trail per voice enrolled. [Join the waitlist →](/#waitlist)

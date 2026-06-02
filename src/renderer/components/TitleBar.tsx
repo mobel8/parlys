@@ -2,7 +2,7 @@ import { Minus, Square, X, Mic, Minimize2, Pin, PinOff } from 'lucide-react';
 import { useStore } from '../stores/useStore';
 
 export function TitleBar() {
-  const api = (window as any).voiceink;
+  const api = (window as any).parlys;
   const { settings, updateSettings } = useStore();
   // This titlebar only renders in comfortable mode; the pill has no titlebar.
   const compact = false;
@@ -30,7 +30,7 @@ export function TitleBar() {
         <div className={`rounded-lg bg-gradient-to-br from-violet-500 to-fuchsia-500 grid place-items-center shadow-lg shadow-violet-500/40 ${compact ? 'w-5 h-5' : 'w-6 h-6'}`}>
           <Mic size={compact ? 11 : 13} className="text-white" />
         </div>
-        <span className={`font-semibold tracking-tight ${compact ? 'text-[12px]' : ''}`}>VoiceInk</span>
+        <span className={`font-semibold tracking-tight ${compact ? 'text-[12px]' : ''}`}>Parlys</span>
         {!compact && <span className="text-[11px] text-white/30 ml-1">· Dictée IA</span>}
       </div>
       <div className={`no-drag flex items-center ${compact ? 'gap-0.5' : 'gap-1'}`}>

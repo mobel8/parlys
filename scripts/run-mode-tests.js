@@ -27,9 +27,9 @@ const { postProcess } = require(path.join(ROOT, 'dist', 'main', 'engines', 'llm.
 
 // ---- 1. Read the user's settings so we have a real Groq key. -----------
 function loadSettings() {
-  const p = path.join(process.env.APPDATA || os.homedir(), 'voiceink', 'voiceink-settings.json');
+  const p = path.join(process.env.APPDATA || os.homedir(), 'parlys', 'parlys-settings.json');
   if (!fs.existsSync(p)) {
-    console.error(`✗ settings not found at ${p} — launch VoiceInk once and paste your Groq key in Paramètres.`);
+    console.error(`✗ settings not found at ${p} — launch Parlys once and paste your Groq key in Paramètres.`);
     process.exit(2);
   }
   const raw = JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -40,7 +40,7 @@ function loadSettings() {
   }
   if (!s.groqApiKey) {
     console.error('✗ no Groq API key found.');
-    console.error('  → Either paste it in VoiceInk → Paramètres → Clé API Groq,');
+    console.error('  → Either paste it in Parlys → Paramètres → Clé API Groq,');
     console.error('  → or set the GROQ_API_KEY env var before running this harness.');
     process.exit(2);
   }

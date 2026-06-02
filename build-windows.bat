@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul 2>nul
-title VoiceInk - Build Windows
+title Parlys - Build Windows
 cd /d "%~dp0"
 
 echo.
-echo  VoiceInk - Build Windows (.exe)
+echo  Parlys - Build Windows (.exe)
 echo  ================================
 echo.
 

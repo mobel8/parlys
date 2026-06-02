@@ -32,12 +32,12 @@
 
 import { TTSChunk, TTSStreamOptions } from './index';
 
-// HTTP endpoint. Overridable via env var `VOICEINK_CARTESIA_URL` for
+// HTTP endpoint. Overridable via env var `PARLYS_CARTESIA_URL` for
 // local tests against a mock server — never document publicly since
 // pointing end-users at a custom URL would leak their API key.
 const CARTESIA_URL =
-  process.env.VOICEINK_CARTESIA_URL ||
-  process.env.VOICEINK_CARTESIA_WS_URL ||  // legacy name kept as alias
+  process.env.PARLYS_CARTESIA_URL ||
+  process.env.PARLYS_CARTESIA_WS_URL ||  // legacy name kept as alias
   'https://api.cartesia.ai/tts/bytes';
 const CARTESIA_VERSION = '2024-11-13';
 
@@ -161,7 +161,7 @@ async function safeReadText(res: Response): Promise<string> {
  */
 export function prewarmCartesia(apiKey: string): void {
   if (!apiKey) return;
-  const url = (process.env.VOICEINK_CARTESIA_URL || 'https://api.cartesia.ai/tts/bytes')
+  const url = (process.env.PARLYS_CARTESIA_URL || 'https://api.cartesia.ai/tts/bytes')
     .replace(/\/tts\/bytes.*$/, '/voices/?limit=1');
   // HEAD is cheapest; some servers reject it so we just fall back to GET.
   fetch(url, {

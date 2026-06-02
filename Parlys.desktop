@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=VoiceInk
+Name=Parlys
 Comment=Dictée vocale intelligente avec post-traitement LLM
 Exec=/home/moi/Bureau/voice/launch.sh
 Path=/home/moi/Bureau/voice

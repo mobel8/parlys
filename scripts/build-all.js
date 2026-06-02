@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build VoiceInk installers for the current platform — and also
+ * Build Parlys installers for the current platform — and also
  * cross-build Linux AppImage + tar.gz from Windows when possible
  * (electron-builder supports that if Developer Mode is enabled so
  * symlinks can be created without admin).

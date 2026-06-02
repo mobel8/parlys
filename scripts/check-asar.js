@@ -2,7 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const asar = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'resources', 'app.asar');
+const asar = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'resources', 'app.asar');
 const idx  = path.join(__dirname, '..', 'dist', 'main', 'index.js');
 
 for (const p of [asar, idx]) {

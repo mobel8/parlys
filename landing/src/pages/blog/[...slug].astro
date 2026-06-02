@@ -24,13 +24,13 @@ interface Props { post: CollectionEntry<'blog'>; }
 const { post } = Astro.props;
 const { Content } = await post.render();
 
-const ogTitle = `${post.data.title} — VoiceInk`;
+const ogTitle = `${post.data.title} — Parlys`;
 ---
 
 <BaseLayout
   title={ogTitle}
   description={post.data.description}
-  canonical={`https://voiceink.app/blog/${post.slug}`}
+  canonical={`https://parlys.app/blog/${post.slug}`}
 >
   <article class="relative pt-12 pb-24 md:pt-16 md:pb-32">
     <div class="container-narrow px-4 md:px-6">
@@ -65,7 +65,7 @@ const ogTitle = `${post.data.title} — VoiceInk`;
             <p class="text-sm text-ink-400">Thanks for reading.</p>
             <p class="mt-1 text-lg font-semibold text-white">Want the fastest voice AI on your desktop?</p>
           </div>
-          <a href="/#download" class="btn-primary btn-sm focus-ring">Download VoiceInk Free</a>
+          <a href="/#download" class="btn-primary btn-sm focus-ring">Download Parlys Free</a>
         </div>
       </footer>
     </div>

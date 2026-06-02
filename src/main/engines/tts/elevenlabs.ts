@@ -20,7 +20,7 @@
 
 import { TTSChunk, TTSStreamOptions } from './index';
 
-const BASE = process.env.VOICEINK_ELEVENLABS_URL || 'https://api.elevenlabs.io';
+const BASE = process.env.PARLYS_ELEVENLABS_URL || 'https://api.elevenlabs.io';
 const ENDPOINT = (voiceId: string) =>
   `${BASE}/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`;
 

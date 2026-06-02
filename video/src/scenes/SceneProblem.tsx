@@ -5,13 +5,13 @@
  * feels the friction we're solving. Three mock UI cards (Google
  * Translate, Otter, Dragon) drift into view, each stamped with a
  * harsh red latency badge. Over them, a contrast card flashes in
- * showing VoiceInk's 380 ms — the visual payoff that sets up the
+ * showing Parlys's 380 ms — the visual payoff that sets up the
  * rest of the video.
  *
  * Motion grammar:
  *   - Enemy cards come in from bottom, each with a subtle tilt.
  *   - A "vs" slash wipes across the middle at the mid-point.
- *   - VoiceInk card springs in on top, scaled 1.1x with a glow.
+ *   - Parlys card springs in on top, scaled 1.1x with a glow.
  */
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
@@ -93,7 +93,7 @@ export const SceneProblem: React.FC = () => {
   const { fps, durationInFrames } = useVideoConfig();
   const t = useT();
 
-  // "VS" slash wipes in at ~90f, then the VoiceInk hero card lands.
+  // "VS" slash wipes in at ~90f, then the Parlys hero card lands.
   const slashX = interpolate(frame, [80, 110], [-40, 0], {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: EASING.outExpo,
   });
@@ -101,7 +101,7 @@ export const SceneProblem: React.FC = () => {
     extrapolateLeft: 'clamp', extrapolateRight: 'clamp',
   });
 
-  // VoiceInk champion card
+  // Parlys champion card
   const championEntry = sp({ frame, fps, delay: 130, preset: 'bouncy', clamp: false });
   const championClamp = Math.min(championEntry, 1.06);
 
@@ -176,7 +176,7 @@ export const SceneProblem: React.FC = () => {
         </div>
       </div>
 
-      {/* VoiceInk hero result */}
+      {/* Parlys hero result */}
       <div
         style={{
           position: 'absolute',

@@ -13,12 +13,12 @@ But in 2026, the gap has closed. **Whisper-based engines match Dragon on accurac
 
 Here are the seven best alternatives, ranked on a mix of accuracy, speed, pricing, and how painful the upgrade path feels.
 
-## 1. VoiceInk — Best overall replacement for general use
+## 1. Parlys — Best overall replacement for general use
 
 **Pricing**: Free forever / 9.90 €/mo Pro
 **Best for**: writers, coders, managers, anyone dictating emails, documents or messages
 
-VoiceInk uses Whisper Turbo on Groq's LPU inference for sub-200 ms transcription, followed by a Llama 3.1 post-processing pass that cleans up "um"s, filler words, and turns half-finished thoughts into proper sentences. Four dictation modes (Raw, Natural, Formal, Message) give you fine control over the output polish.
+Parlys uses Whisper Turbo on Groq's LPU inference for sub-200 ms transcription, followed by a Llama 3.1 post-processing pass that cleans up "um"s, filler words, and turns half-finished thoughts into proper sentences. Four dictation modes (Raw, Natural, Formal, Message) give you fine control over the output polish.
 
 Where it shines:
 - **< 400 ms voice-to-voice** (including translation and TTS) — the industry record.
@@ -28,7 +28,7 @@ Where it shines:
 
 The Free tier is generous enough to fully replace Dragon for anyone dictating under 30 minutes a day.
 
-Where it doesn't beat Dragon: the Medical / Legal vertical dictionaries. If you're billing insurance codes all day, Dragon Medical still has a wider built-in lexicon. VoiceInk ships a custom-vocabulary feature in Pro and a medical vertical in Q3 2026.
+Where it doesn't beat Dragon: the Medical / Legal vertical dictionaries. If you're billing insurance codes all day, Dragon Medical still has a wider built-in lexicon. Parlys ships a custom-vocabulary feature in Pro and a medical vertical in Q3 2026.
 
 ## 2. Whisper.cpp + Hammerspoon — Best DIY free option
 
@@ -76,13 +76,13 @@ Voice Typing is surprisingly good, but it only works inside Google Docs. It does
 **Pricing**: Free (built into Windows 11)
 **Best for**: Windows users on a strict budget
 
-Windows 11's built-in dictation has improved significantly since the Windows 10 days, now using a cloud Whisper-class model. It works system-wide (press **Win+H**) and handles punctuation dictation commands. Accuracy is ~2-3 points below VoiceInk / Dragon on technical speech and much slower to start a session. Zero cost, which makes it a reasonable fallback for the occasional dictation.
+Windows 11's built-in dictation has improved significantly since the Windows 10 days, now using a cloud Whisper-class model. It works system-wide (press **Win+H**) and handles punctuation dictation commands. Accuracy is ~2-3 points below Parlys / Dragon on technical speech and much slower to start a session. Zero cost, which makes it a reasonable fallback for the occasional dictation.
 
 ## How to pick
 
 | If you need... | Pick |
 |---|---|
-| Modern, fast, everything in one app, < 10 €/mo | **VoiceInk** |
+| Modern, fast, everything in one app, < 10 €/mo | **Parlys** |
 | Local-only dictation, no recurring cost, DIY | **Whisper.cpp + Hammerspoon** |
 | Mac, built-in, occasional use | **Apple Dictation** |
 | Meeting notes and live transcription | **Otter.ai** |
@@ -92,8 +92,8 @@ Windows 11's built-in dictation has improved significantly since the Windows 10 
 
 ## The emerging winner
 
-The pattern we're seeing across our own Pro user base: Dragon users who try VoiceInk on a Free plan, use it for 30 days, and then cancel their Dragon license when the renewal comes up. Not because Dragon got worse, but because VoiceInk got good enough fast enough, and the UI delta is impossible to unsee once you've tasted it.
+The pattern we're seeing across our own Pro user base: Dragon users who try Parlys on a Free plan, use it for 30 days, and then cancel their Dragon license when the renewal comes up. Not because Dragon got worse, but because Parlys got good enough fast enough, and the UI delta is impossible to unsee once you've tasted it.
 
-Try VoiceInk free — if it doesn't replace Dragon for your workflow in a week, you haven't lost anything.
+Try Parlys free — if it doesn't replace Dragon for your workflow in a week, you haven't lost anything.
 
-[Download VoiceInk for Windows →](/#download)
+[Download Parlys for Windows →](/#download)

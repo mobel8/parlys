@@ -2,7 +2,7 @@
  * Scene 10 — Final CTA (0:54 → 1:00)
  *
  * The closing shot. The logo re-enters centre, the payoff tagline
- * lands above it, and the URL `voiceink.app` types in under it with
+ * lands above it, and the URL `parlys.app` types in under it with
  * a pulsing aurora outline around a giant Download button.
  *
  * Motion script:
@@ -16,7 +16,7 @@
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import { AuroraBackground } from '../components/AuroraBackground';
-import { VoiceInkLogo } from '../components/VoiceInkLogo';
+import { ParlysLogo } from '../components/ParlysLogo';
 import { StaggerText, TypingText } from '../components/TypingText';
 import { GradientText } from '../components/GradientText';
 import { sp } from '../lib/spring';
@@ -56,7 +56,7 @@ export const SceneFinalCTA: React.FC = () => {
           padding: '0 120px',
         }}
       >
-        <VoiceInkLogo size={200} delay={12} preset="dramatic" />
+        <ParlysLogo size={200} delay={12} preset="dramatic" />
 
         <div
           style={{

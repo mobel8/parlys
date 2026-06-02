@@ -1,7 +1,7 @@
 /**
  * VoiceDemo — the interactive "proof" widget next to the hero headline.
  *
- * It's a *visual simulation* of the VoiceInk pipeline, driven by a
+ * It's a *visual simulation* of the Parlys pipeline, driven by a
  * canned script that cycles every 9s. Why simulated and not a real
  * backend call?
  *   - The landing ships on a CDN (static), no live API on page load.
@@ -137,7 +137,7 @@ export default function VoiceDemo() {
       />
 
       {/* Window chrome — pretends the demo is a floating app window,
-          reinforcing "VoiceInk is a real desktop product". */}
+          reinforcing "Parlys is a real desktop product". */}
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" />
@@ -146,7 +146,7 @@ export default function VoiceDemo() {
         </div>
         <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-ink-400">
           <Zap size={11} className="text-aurora-cyan" />
-          VoiceInk Live
+          Parlys Live
         </div>
       </div>
 

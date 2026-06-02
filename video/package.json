@@ -1,15 +1,15 @@
 {
-  "name": "voiceink-promo-video",
+  "name": "parlys-promo-video",
   "version": "1.0.0",
   "private": true,
-  "description": "60-second promotional video for VoiceInk, built with Remotion.",
+  "description": "60-second promotional video for Parlys, built with Remotion.",
   "scripts": {
     "start": "remotion studio",
     "studio": "remotion studio",
-    "render": "remotion render VoiceInkPromo out/voiceink-promo-1080p.mp4 --codec h264 --crf 15",
-    "render:4k": "remotion render VoiceInkPromo out/voiceink-promo-4k.mp4 --codec h264 --crf 15 --scale 2",
-    "render:gif": "remotion render VoiceInkPromoShort out/voiceink-promo.gif --codec gif --every-nth-frame 2",
-    "render:social": "remotion render VoiceInkPromoVertical out/voiceink-promo-vertical.mp4 --codec h264 --crf 18",
+    "render": "remotion render ParlysPromo out/parlys-promo-1080p.mp4 --codec h264 --crf 15",
+    "render:4k": "remotion render ParlysPromo out/parlys-promo-4k.mp4 --codec h264 --crf 15 --scale 2",
+    "render:gif": "remotion render ParlysPromoShort out/parlys-promo.gif --codec gif --every-nth-frame 2",
+    "render:social": "remotion render ParlysPromoVertical out/parlys-promo-vertical.mp4 --codec h264 --crf 18",
     "upgrade": "remotion upgrade",
     "build": "remotion bundle"
   },

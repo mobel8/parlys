@@ -1,13 +1,13 @@
 @echo off
 REM ============================================================
-REM  VoiceInk dev launcher — entry point for the desktop shortcut.
+REM  Parlys dev launcher — entry point for the desktop shortcut.
 REM
 REM  Runs scripts/dev-launcher.js, which orchestrates:
 REM    - Vite dev server (renderer HMR)
 REM    - tsc --watch     (main process incremental rebuilds)
 REM    - Electron        (auto-restart on every main rebuild)
 REM
-REM  This file is what the desktop "VoiceInk" shortcut targets after
+REM  This file is what the desktop "Parlys" shortcut targets after
 REM  scripts\setup-dev-shortcut.ps1 runs. Edit any source file under
 REM  src\ and the running app updates within ~1 second.
 REM ============================================================
@@ -22,7 +22,7 @@ if exist "node.exe" (
   set "NODE_BIN=node"
 )
 
-title VoiceInk — Dev Launcher
+title Parlys — Dev Launcher
 %NODE_BIN% scripts\dev-launcher.js
 
 REM Hold the window open if the launcher crashed so the user can read errors.

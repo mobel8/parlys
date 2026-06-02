@@ -1,4 +1,4 @@
-# VoiceInk Backend
+# Parlys Backend
 
 Fastify + Postgres + Stripe + Clerk. Brokers Groq / Cartesia / ElevenLabs / OpenAI for paid users; enforces per-plan quotas.
 
@@ -8,8 +8,8 @@ Fastify + Postgres + Stripe + Clerk. Brokers Groq / Cartesia / ElevenLabs / Open
 cd server
 cp .env.example .env               # fill in your dev values
 npm install
-docker run -d --name voiceink-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:16
-psql postgres://postgres:dev@localhost:5432/postgres -c "CREATE DATABASE voiceink;"
+docker run -d --name parlys-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:16
+psql postgres://postgres:dev@localhost:5432/postgres -c "CREATE DATABASE parlys;"
 psql $DATABASE_URL < src/db/schema.sql
 npm run dev
 ```

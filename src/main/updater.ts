@@ -1,5 +1,5 @@
 /**
- * Auto-update orchestration for VoiceInk.
+ * Auto-update orchestration for Parlys.
  *
  * Design decisions
  * ─────────────────────────────────────────────────────────────────────
@@ -100,7 +100,7 @@ export async function checkForUpdates(): Promise<void> {
 export function installAndRestart(): void {
   if (state.phase !== 'ready') return;
   // `isSilent=true` : don't show the installer UI (we already asked the user).
-  // `isForceRunAfter=true` : re-launch VoiceInk right after the install.
+  // `isForceRunAfter=true` : re-launch Parlys right after the install.
   autoUpdater.quitAndInstall(true, true);
 }
 

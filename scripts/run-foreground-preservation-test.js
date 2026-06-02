@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Verify that VoiceInk's pill no longer disturbs the foreground app when
+ * Verify that Parlys's pill no longer disturbs the foreground app when
  * it appears and when the shortcut toggles the recording state.
  *
  * The user's bug: "Lorsque j'utilise le logiciel en faisant par exemple
@@ -25,7 +25,7 @@
  *      maximised HWND — if the pill moves a maximised Electron
  *      window, it would move Chrome / VS Code / anything).
  *   2. Reads its bounds via koffi GetWindowRect.
- *   3. Launches VoiceInk with CDP, which shows the pill.
+ *   3. Launches Parlys with CDP, which shows the pill.
  *   4. Reads victim bounds again — assert they did NOT shift.
  *   5. Via CDP, triggers the pill's toggle recording (simulating
  *      the shortcut firing).
@@ -42,14 +42,14 @@ const path = require('path');
 const http = require('http');
 const os = require('os');
 
-const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk', 'VoiceInk.exe');
+const INSTALL = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys', 'Parlys.exe');
 const CDP_PORT = 9222;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function killAll() {
   // Don't kill electron.exe blindly — VS Code / other Electron apps may
-  // be running on the dev box. We only target VoiceInk + our victim.
-  for (const n of ['VoiceInk.exe', 'notepad.exe']) {
+  // be running on the dev box. We only target Parlys + our victim.
+  for (const n of ['Parlys.exe', 'notepad.exe']) {
     try { execSync(`taskkill /F /IM ${n}`, { stdio: 'ignore' }); } catch {}
   }
 }
@@ -236,12 +236,12 @@ async function main() {
   const r0 = getRect(vh);
   console.log('  victim rect at rest:', rectStr(r0));
 
-  // 2. Launch VoiceInk with CDP.
-  console.log('[2] launch VoiceInk (CDP) in compact mode');
+  // 2. Launch Parlys with CDP.
+  console.log('[2] launch Parlys (CDP) in compact mode');
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  env.VOICEINK_CDP = '1';
-  env.VOICEINK_FORCE_DENSITY = 'compact';
+  env.PARLYS_CDP = '1';
+  env.PARLYS_FORCE_DENSITY = 'compact';
   const vi = spawn(INSTALL, [], { stdio: 'ignore', detached: false, env });
   let targets = [];
   for (let i = 0; i < 200; i++) {

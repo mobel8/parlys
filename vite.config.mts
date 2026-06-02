@@ -78,9 +78,9 @@ const THEMES_JSON = extractThemesJson();
  */
 function preApplyThemePlugin(): Plugin {
   return {
-    name: 'voiceink-pre-apply-theme',
+    name: 'parlys-pre-apply-theme',
     transformIndexHtml(html) {
-      const inject = `\n    <script>window.__VOICEINK_THEMES__ = ${THEMES_JSON};</script>`;
+      const inject = `\n    <script>window.__PARLYS_THEMES__ = ${THEMES_JSON};</script>`;
       return html.replace('</head>', inject + '\n  </head>');
     },
   };

@@ -1,5 +1,5 @@
 /**
- * Central i18n constants for the VoiceInk landing.
+ * Central i18n constants for the Parlys landing.
  *
  * Approach: we render both locales into the HTML at build time and
  * let CSS (`html[data-lang="xx"] [data-i18n-lang="yy"] { display: none; }`)
@@ -28,10 +28,10 @@ export const DEFAULT_LANG: Lang = 'fr';
 export const LANGS: readonly Lang[] = ['fr', 'en'] as const;
 
 /** localStorage key — namespaced to avoid clashing with other apps. */
-export const LANG_STORAGE_KEY = 'voiceink_lang';
+export const LANG_STORAGE_KEY = 'parlys_lang';
 
 /** Custom event name fired on <window> when the user changes language. */
-export const LANG_CHANGE_EVENT = 'voiceink:langchange';
+export const LANG_CHANGE_EVENT = 'parlys:langchange';
 
 /** Human-readable labels for the toggle UI. */
 export const LANG_LABELS: Record<Lang, { short: string; long: string; flag: string }> = {

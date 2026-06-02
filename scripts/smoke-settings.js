@@ -1,6 +1,6 @@
 // End-to-end smoke test for the Settings view.
 //
-// Spawns a built, production Electron app with VOICEINK_START_VIEW=settings
+// Spawns a built, production Electron app with PARLYS_START_VIEW=settings
 // so the renderer lands directly on SettingsView on first render, then
 // watches stderr/stdout for any "ReferenceError" message emitted by the
 // renderer (main's `webContents.on('console-message')` handler already
@@ -23,7 +23,7 @@
 // the installer.
 //
 // The timeout is intentionally long (12 s) because the first-run
-// settings load goes through `voiceink.getSettings` IPC which touches
+// settings load goes through `parlys.getSettings` IPC which touches
 // disk and sometimes warms up a few ms on slow NVMe on cold boot.
 
 const { spawn, spawnSync } = require('child_process');
@@ -55,7 +55,7 @@ const FATAL_PATTERNS = [
 const cleanEnv = { ...process.env };
 delete cleanEnv.ELECTRON_RUN_AS_NODE;
 delete cleanEnv.ELECTRON_NO_ATTACH_CONSOLE;
-cleanEnv.VOICEINK_START_VIEW = 'settings';
+cleanEnv.PARLYS_START_VIEW = 'settings';
 
 console.log('[smoke] launching electron in settings-view mode…');
 const child = spawn(electronBin, [mainEntry], {

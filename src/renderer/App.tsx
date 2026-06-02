@@ -21,7 +21,7 @@ export default function App() {
     // Double rAF guarantees the commit has actually been painted before
     // main is allowed to swap the window into view.
     const ready = () => {
-      try { window.voiceink?.rendererReady?.(); } catch { /* no-op */ }
+      try { window.parlys?.rendererReady?.(); } catch { /* no-op */ }
     };
     requestAnimationFrame(() => requestAnimationFrame(ready));
   }, [loadSettings, loadHistory]);
@@ -31,7 +31,7 @@ export default function App() {
   // `interpreterEnabled` in main but the emerald chip in this
   // renderer still looks grey because it reads its own stale state.
   useEffect(() => {
-    const unsub = window.voiceink?.onSettingsChanged?.((next: any) => {
+    const unsub = window.parlys?.onSettingsChanged?.((next: any) => {
       setSettingsFromBroadcast(next);
     });
     return () => { try { unsub?.(); } catch { /* ignore */ } };
@@ -61,7 +61,7 @@ export default function App() {
 
   // Main can push us to the Settings view after expanding from the pill.
   useEffect(() => {
-    const unsub = window.voiceink.onOpenSettings?.(() => setView('settings'));
+    const unsub = window.parlys.onOpenSettings?.(() => setView('settings'));
     return () => unsub?.();
   }, [setView]);
 
@@ -71,7 +71,7 @@ export default function App() {
   // waits ~130 ms after sending the signal before actually swapping
   // windows, giving the 120 ms CSS transition time to play.
   useEffect(() => {
-    const unsub = window.voiceink?.onDensitySwapOut?.(() => {
+    const unsub = window.parlys?.onDensitySwapOut?.(() => {
       document.documentElement.classList.add('is-leaving');
     });
     return () => { try { unsub?.(); } catch { /* ignore */ } };
@@ -81,7 +81,7 @@ export default function App() {
   // The bootstrap already stamps the initial value from the URL hash;
   // this hook just keeps it in sync afterward.
   useEffect(() => {
-    const unsub = (window.voiceink as any)?.onPillScaleChanged?.((scale: number) => {
+    const unsub = (window.parlys as any)?.onPillScaleChanged?.((scale: number) => {
       if (Number.isFinite(scale) && scale >= 0.5 && scale <= 1.5) {
         document.documentElement.style.setProperty('--pill-scale', String(scale));
         document.documentElement.setAttribute('data-window', 'pill');

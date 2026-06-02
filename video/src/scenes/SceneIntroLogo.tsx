@@ -3,7 +3,7 @@
  *
  * Opening shot. The studio is dark; an aurora ripple pulses once from
  * the centre and pushes the logo mark out of the void. Then the
- * wordmark "VoiceInk" slides in under it, and a tagline chip lands
+ * wordmark "Parlys" slides in under it, and a tagline chip lands
  * below.
  *
  * Three simultaneous motions, each on its own spring:
@@ -19,7 +19,7 @@
 import React from 'react';
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import { AuroraBackground } from '../components/AuroraBackground';
-import { VoiceInkLogo } from '../components/VoiceInkLogo';
+import { ParlysLogo } from '../components/ParlysLogo';
 import { StaggerText } from '../components/TypingText';
 import { sp } from '../lib/spring';
 import { EASING, BRAND } from '../lib/theme';
@@ -87,7 +87,7 @@ export const SceneIntroLogo: React.FC = () => {
           gap: 32,
         }}
       >
-        <VoiceInkLogo size={280} delay={12} preset="dramatic" />
+        <ParlysLogo size={280} delay={12} preset="dramatic" />
 
         <div
           style={{
@@ -101,7 +101,7 @@ export const SceneIntroLogo: React.FC = () => {
             lineHeight: 1,
           }}
         >
-          VoiceInk
+          Parlys
         </div>
 
         <div

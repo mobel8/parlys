@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# VoiceInk — Setup & Lancement sur Linux
+# Parlys — Setup & Lancement sur Linux
 # ============================================================
 # À utiliser la première fois, ou après un changement de plateforme
 # Usage: bash setup-linux.sh
@@ -9,7 +9,7 @@
 set -e
 cd "$(dirname "$0")"
 
-echo "=== VoiceInk — Setup Linux ==="
+echo "=== Parlys — Setup Linux ==="
 echo ""
 
 # ── Node.js ────────────────────────────────────────────────
@@ -49,5 +49,5 @@ echo "[4/5] Compilation TypeScript + Vite..."
 npm run build
 
 echo ""
-echo "[5/5] Lancement de VoiceInk..."
+echo "[5/5] Lancement de Parlys..."
 npm start

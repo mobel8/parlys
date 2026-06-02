@@ -1,10 +1,10 @@
 @echo off
 chcp 65001 >nul 2>nul
-title VoiceInk - Build All Installers
+title Parlys - Build All Installers
 cd /d "%~dp0"
 
 echo.
-echo  VoiceInk - Build All Installers
+echo  Parlys - Build All Installers
 echo  ================================
 echo   * Windows .exe (native)
 echo   * Linux AppImage + tar.gz (cross-build; requires Dev Mode)
@@ -48,6 +48,6 @@ echo.
 echo  Pour les installeurs .deb / .rpm / .dmg :
 echo    1. Activer le workflow GitHub Actions (.github\workflows\release.yml)
 echo    2. Pousser un tag : git tag v1.0.0 ^&^& git push --tags
-echo    3. Recuperer les artefacts sur github.com/mobel8/voiceink/releases
+echo    3. Recuperer les artefacts sur github.com/mobel8/parlys/releases
 echo.
 pause

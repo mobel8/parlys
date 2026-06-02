@@ -54,9 +54,9 @@ function loadPrompts() {
 function loadApiKey() {
   const appdata = process.env.APPDATA;
   if (!appdata) throw new Error('APPDATA not set');
-  const settingsPath = path.join(appdata, 'voiceink', 'voiceink-settings.json');
+  const settingsPath = path.join(appdata, 'parlys', 'parlys-settings.json');
   if (!fs.existsSync(settingsPath)) {
-    throw new Error(`settings.json not found at ${settingsPath} — launch VoiceInk once to create it`);
+    throw new Error(`settings.json not found at ${settingsPath} — launch Parlys once to create it`);
   }
   const raw = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
   const key = raw?.settings?.groqApiKey || process.env.GROQ_API_KEY || '';

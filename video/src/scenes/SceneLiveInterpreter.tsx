@@ -2,7 +2,7 @@
  * Scene 5 — Live interpreter (0:20 → 0:28)
  *
  * The hero demo. A faux desktop window plays out a real-time
- * conversation: user speaks French, VoiceInk produces English in
+ * conversation: user speaks French, Parlys produces English in
  * the speaker's own voice. The viewer sees the stages light up and
  * the translated waveform burst out on the right.
  *
@@ -123,7 +123,7 @@ export const SceneLiveInterpreter: React.FC = () => {
                 fontWeight: 500,
               }}
             >
-              VoiceInk · Live interpreter
+              Parlys · Live interpreter
             </div>
             <StageChip label={t.interpreter.stages[0]} active={listenActive} done={!listenActive && frame >= 90}  color={BRAND.cyan} />
             <StageChip label={t.interpreter.stages[1]} active={interpActive} done={!interpActive && frame >= 140} color={BRAND.purple} />

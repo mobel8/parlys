@@ -1,5 +1,5 @@
 /**
- * VoiceInkPromoShort — a condensed 15-second highlight reel.
+ * ParlysPromoShort — a condensed 15-second highlight reel.
  *
  * Use cases:
  *   - Twitter/X upload (max 2:20, but 15s performs best).
@@ -24,7 +24,7 @@ import { SceneLiveInterpreter } from './scenes/SceneLiveInterpreter';
 import { SceneStats }           from './scenes/SceneStats';
 import { SceneFinalCTA }        from './scenes/SceneFinalCTA';
 
-export const VoiceInkPromoShort: React.FC<{ lang?: Lang }> = ({ lang = 'en' }) => (
+export const ParlysPromoShort: React.FC<{ lang?: Lang }> = ({ lang = 'en' }) => (
   <LangProvider lang={lang}>
   <AbsoluteFill style={{ backgroundColor: '#020410' }}>
     <Sequence name="Intro"       from={0}   durationInFrames={120}><SceneIntroLogo /></Sequence>

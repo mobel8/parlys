@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const settingsPath = path.join(process.env.APPDATA, 'voiceink', 'voiceink-settings.json');
+const settingsPath = path.join(process.env.APPDATA, 'parlys', 'parlys-settings.json');
 if (!fs.existsSync(settingsPath)) {
   console.error('SKIP: settings not found at', settingsPath);
   process.exit(2);

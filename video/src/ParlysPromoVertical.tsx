@@ -1,5 +1,5 @@
 /**
- * VoiceInkPromoVertical — a 1080×1920 version for TikTok / Reels / Shorts.
+ * ParlysPromoVertical — a 1080×1920 version for TikTok / Reels / Shorts.
  *
  * The landscape scenes re-use their logic, but we wrap each one in
  * a container that slightly zooms in and centres the action so the
@@ -45,7 +45,7 @@ const Vertical: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </AbsoluteFill>
 );
 
-export const VoiceInkPromoVertical: React.FC = () => (
+export const ParlysPromoVertical: React.FC = () => (
   <AbsoluteFill style={{ backgroundColor: '#020410' }}>
     <Sequence name="Intro"       from={0}                                       durationInFrames={SCENES.intro.duration}><Vertical><SceneIntroLogo /></Vertical></Sequence>
     <Sequence name="Tagline"     from={SCENES.tagline.start - SCENES.problem.duration} durationInFrames={SCENES.tagline.duration}><Vertical><SceneTagline /></Vertical></Sequence>

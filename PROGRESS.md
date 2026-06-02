@@ -1,4 +1,4 @@
-# VoiceInk — Suivi de Progression
+# Parlys — Suivi de Progression
 
 > **INSTRUCTION:** Ce fichier doit être mis à jour à chaque session de développement.
 > Il sert de mémoire persistante pour que tout assistant IA (Cascade, Claude Code, etc.)
@@ -265,7 +265,7 @@ prochain lancement.
 
 **Known caveats documentées :**
 - `SetForegroundWindow` peut retourner 0 à cause du focus-stealing prevention
-  Win32 si l'app VoiceInk ne possède pas le focus récent. On logue et on
+  Win32 si l'app Parlys ne possède pas le focus récent. On logue et on
   continue — le paste atterrit quand même dans la bonne app dans la très
   grande majorité des cas (quand l'utilisateur vient juste d'y travailler).
 - Lors du toggle densité, la fenêtre est détruite et recréée : ~300 ms
@@ -336,7 +336,7 @@ prochain lancement.
 **Edge case identifié :** au tout premier lancement, avant que l'utilisateur
 n'ait switché sur une autre app, `lastExternalHwnd` peut être la barre des
 tâches / Explorer. L'injection ira donc dans Explorer. Pour un usage normal,
-l'utilisateur lance VoiceInk depuis la tray/shortcut alors qu'il est déjà dans
+l'utilisateur lance Parlys depuis la tray/shortcut alors qu'il est déjà dans
 Word/browser ; le tracker à 4 Hz a le temps de capturer le bon HWND avant le
 switch.
 
@@ -360,7 +360,7 @@ Latence typique mesurée ~200-400 ms pour 2-5 s d'audio.
 **Pipeline :**
 ```
 MediaRecorder (audio/webm;opus, 100ms timeslice)
-  → blob → base64 → IPC (voiceink:transcribe)
+  → blob → base64 → IPC (parlys:transcribe)
   → main process : POST multipart → api.groq.com/openai/v1/audio/transcriptions
   → (optionnel) LLM post-process Groq/OpenAI/Anthropic/Ollama
   → clipboard.writeText + Ctrl+V (PowerShell SendKeys)

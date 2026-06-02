@@ -16,11 +16,11 @@ export function createTray(getWin: () => BrowserWindow | null): Tray {
   }
 
   tray = new Tray(image);
-  tray.setToolTip('VoiceInk — Dictée IA');
+  tray.setToolTip('Parlys — Dictée IA');
 
   const menu = Menu.buildFromTemplate([
     {
-      label: 'Afficher VoiceInk',
+      label: 'Afficher Parlys',
       click: () => {
         const w = getWin();
         if (w) { w.show(); w.focus(); }
@@ -31,7 +31,7 @@ export function createTray(getWin: () => BrowserWindow | null): Tray {
       click: () => {
         const w = getWin();
         // Do not show/focus the window: otherwise the auto-injection paste
-        // would land in VoiceInk itself instead of the user's current app.
+        // would land in Parlys itself instead of the user's current app.
         if (w) w.webContents.send(IPC.ON_TOGGLE_RECORDING);
       },
     },

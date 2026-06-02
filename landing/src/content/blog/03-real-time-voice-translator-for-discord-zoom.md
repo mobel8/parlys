@@ -1,7 +1,7 @@
 ---
 title: "Real-time voice translator for Discord, Zoom and Google Meet"
 description: "Speak French in a Discord call, be heard in English. How to route an AI voice translator into any conferencing app via a virtual microphone. Zero lag, your own voice."
-keywords: ["real-time voice translator", "discord voice translator", "zoom live translation", "google meet translator", "virtual microphone translator", "bilingual meeting app", "live interpreter software", "voiceink"]
+keywords: ["real-time voice translator", "discord voice translator", "zoom live translation", "google meet translator", "virtual microphone translator", "bilingual meeting app", "live interpreter software", "parlys"]
 date: 2026-04-22
 category: tutorial
 readingTime: "7 min read"
@@ -34,17 +34,17 @@ Windows, macOS and Linux all support creating a fake audio input that another pr
 - **macOS**: [BlackHole](https://existential.audio/blackhole/) (free, open-source).
 - **Linux**: PulseAudio `null-sink` or PipeWire virtual device (both built in).
 
-VoiceInk ships with a one-click installer that sets up a virtual mic named "VoiceInk Output" using VB-Audio on Windows and BlackHole on macOS. In Discord, you pick "VoiceInk Output" as your input device in Settings → Voice & Video. Same idea in Zoom (Settings → Audio → Microphone) and Google Meet (⚙ → Audio → Microphone).
+Parlys ships with a one-click installer that sets up a virtual mic named "Parlys Output" using VB-Audio on Windows and BlackHole on macOS. In Discord, you pick "Parlys Output" as your input device in Settings → Voice & Video. Same idea in Zoom (Settings → Audio → Microphone) and Google Meet (⚙ → Audio → Microphone).
 
 ## Walkthrough: Discord bilingual call in 5 minutes
 
-1. **Install VoiceInk** from the download page. Accept the VB-Audio installer prompt.
-2. In Discord: **User Settings → Voice & Video → Input Device → "VoiceInk Output"**.
-3. Open VoiceInk, click the language pill in the top bar, pick: **Source = French (auto)**, **Target = Japanese**.
-4. Toggle "Voice interpreter" in the settings bar. A pink chip lights up at the top of the VoiceInk window.
+1. **Install Parlys** from the download page. Accept the VB-Audio installer prompt.
+2. In Discord: **User Settings → Voice & Video → Input Device → "Parlys Output"**.
+3. Open Parlys, click the language pill in the top bar, pick: **Source = French (auto)**, **Target = Japanese**.
+4. Toggle "Voice interpreter" in the settings bar. A pink chip lights up at the top of the Parlys window.
 5. **Press and hold Ctrl+Alt+Space** while you speak in French. Release when you're done.
 6. ~400 ms later, your teammate hears the Japanese translation in your voice, through Discord.
-7. When they reply, VoiceInk's "Listener" feature captures the incoming Discord audio, transcribes it, and shows you the French translation on screen. (Audio playback of the reverse direction is a Pro feature in Listener settings.)
+7. When they reply, Parlys's "Listener" feature captures the incoming Discord audio, transcribes it, and shows you the French translation on screen. (Audio playback of the reverse direction is a Pro feature in Listener settings.)
 
 ## Practical latency numbers
 
@@ -77,8 +77,8 @@ Your teammate hears the *first syllable* of the Japanese translation within 370 
 
 ## Privacy, briefly
 
-VoiceInk uploads your audio over TLS to Groq (transcribe) and Cartesia (synthesise). Neither provider stores it or trains on it — both signed DPAs to that effect. If you're paranoid, turn on **BYOK mode** in settings: you provide your own Groq / Cartesia API keys, our server is bypassed entirely, and zero audio bytes cross our infrastructure. Free users can use BYOK; Pro users can too.
+Parlys uploads your audio over TLS to Groq (transcribe) and Cartesia (synthesise). Neither provider stores it or trains on it — both signed DPAs to that effect. If you're paranoid, turn on **BYOK mode** in settings: you provide your own Groq / Cartesia API keys, our server is bypassed entirely, and zero audio bytes cross our infrastructure. Free users can use BYOK; Pro users can too.
 
 ---
 
-A free VoiceInk account gives you 15 minutes of interpreter per month — enough to try it on a call and see if the latency is as real as we claim. [Download free →](/#download)
+A free Parlys account gives you 15 minutes of interpreter per month — enough to try it on a call and see if the latency is as real as we claim. [Download free →](/#download)

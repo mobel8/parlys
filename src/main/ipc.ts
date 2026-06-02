@@ -134,7 +134,7 @@ export function registerIpc(): void {
             win.setBounds({ x, y, width: newW, height: newH }, false);
             // Tell the renderer to re-stamp --pill-scale + data-window so
             // its zoom matches the new native bounds in the SAME frame.
-            try { win.webContents.send('voiceink:pillScaleChanged', scale); } catch { /* ignore */ }
+            try { win.webContents.send('parlys:pillScaleChanged', scale); } catch { /* ignore */ }
           } catch (e) { console.warn('[ipc:set] pill resize failed', e); }
         }
       }

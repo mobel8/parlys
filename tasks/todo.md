@@ -1,7 +1,7 @@
 # Add Cerebras as an LLM provider (post-processing + translation)
 
 ## Context
-VoiceInk = voice→text with optional LLM post-processing. Added Cerebras
+Parlys = voice→text with optional LLM post-processing. Added Cerebras
 (OpenAI-compatible API at api.cerebras.ai, wafer-scale, ~12 ms inference)
 as a selectable LLM provider. STT (Whisper) stays on Groq — Cerebras has
 no transcription. Translation routes through Cerebras only when the user
@@ -10,7 +10,7 @@ Groq translation path byte-for-byte (zero regression).
 
 Models available on the key: `gpt-oss-120b`, `qwen-3-235b-a22b-instruct-2507`,
 `zai-glm-4.7`, `llama3.1-8b`. Default = `gpt-oss-120b`; all 4 selectable.
-Key stored ONLY in `%APPDATA%\voiceink\voiceink-settings.json` + a
+Key stored ONLY in `%APPDATA%\parlys\parlys-settings.json` + a
 `CEREBRAS_API_KEY` env fallback. Never committed.
 
 ## Tasks

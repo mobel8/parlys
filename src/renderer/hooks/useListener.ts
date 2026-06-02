@@ -98,7 +98,7 @@ export function useListener(opts: UseListenerOptions): UseListenerHandle {
     appendSegment(placeholder);
     try {
       const audioBase64 = await blobToBase64(blob);
-      const api = (window as any).voiceink;
+      const api = (window as any).parlys;
       const res = await api.listenerTranscribe({
         audioBase64,
         mimeType,

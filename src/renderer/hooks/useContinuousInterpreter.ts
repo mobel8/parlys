@@ -123,7 +123,7 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
   // Wire a single chunk listener that routes to the queue; the queue
   // forwards each chunk to its matching player by requestId.
   useEffect(() => {
-    const api = (window as any).voiceink;
+    const api = (window as any).parlys;
     if (!api?.onInterpretChunk) return;
     const unsub = api.onInterpretChunk((evt: InterpretChunkEvent) => {
       queueRef.current?.route(evt);
@@ -179,7 +179,7 @@ export function useContinuousInterpreter(opts: ContinuousInterpreterOptions): Co
     optsRef.current.onPhraseStart?.({ requestId });
     try {
       const audioBase64 = await blobToBase64(blob);
-      const api = (window as any).voiceink;
+      const api = (window as any).parlys;
       const res = await api.interpret({
         requestId,
         audioBase64,

@@ -8,10 +8,10 @@ const path = require('path');
 const os   = require('os');
 const asar = require('@electron/asar');
 
-const INSTALL_DIR  = path.join(process.env.LOCALAPPDATA, 'Programs', 'VoiceInk');
+const INSTALL_DIR  = path.join(process.env.LOCALAPPDATA, 'Programs', 'Parlys');
 const INSTALLED   = path.join(INSTALL_DIR, 'resources', 'app.asar');
 
-const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'voiceink-inspect-'));
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'parlys-inspect-'));
 asar.extractAll(INSTALLED, tmp);
 
 const assetsDir = path.join(tmp, 'dist', 'renderer', 'assets');

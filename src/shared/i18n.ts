@@ -1,5 +1,5 @@
 /**
- * Lightweight i18n scaffold for VoiceInk's UI.
+ * Lightweight i18n scaffold for Parlys's UI.
  *
  * Why hand-rolled instead of i18next/react-intl:
  *   - We have ~150 UI strings total (not thousands). Pulling in a 40 KB
@@ -106,7 +106,7 @@ const en: Dict = {
   'settings.density.compact':     'Compact / minimalist',
   'settings.density.hint':        'Compact turns the app into a tiny floating pill (176×52 px), transparent and always on top — ideal for overlay dictation.',
   'settings.alwaysOnTop':         'Always on top',
-  'settings.alwaysOnTop.desc':    'Keeps the VoiceInk window above your other apps.',
+  'settings.alwaysOnTop.desc':    'Keeps the Parlys window above your other apps.',
 
   // Settings — app language (this very feature)
   'settings.uiLanguage.label':    'App language',
@@ -122,13 +122,13 @@ const en: Dict = {
 
   // Settings — interpreter
   'settings.interpreter.title':     'Voice translator (interpreter)',
-  'settings.interpreter.desc':      'Speak in your language — VoiceInk instantly translates and speaks the result with a realistic AI voice. Great for multilingual meetings, video calls, or testing a turn of phrase in another language.',
+  'settings.interpreter.desc':      'Speak in your language — Parlys instantly translates and speaks the result with a realistic AI voice. Great for multilingual meetings, video calls, or testing a turn of phrase in another language.',
   'settings.interpreter.speakLabel':'Speak translations out loud',
   'settings.interpreter.speakDesc': 'When off, only the translated text is produced: no TTS call is made (Cartesia/ElevenLabs not billed, credit savings). Also applies to the Listener feature.',
   'settings.interpreter.targetLang':'Spoken output language',
 
   // Settings — system
-  'settings.autostart':           'Launch VoiceInk at system startup',
+  'settings.autostart':           'Launch Parlys at system startup',
   'settings.autostart.desc':      'The app will run automatically at every session open.',
   'settings.startMin':            'Start in background',
   'settings.startMin.desc':       'On launch, don\u2019t show the main window — stay in tray / pill.',
@@ -148,9 +148,9 @@ const en: Dict = {
 
   // Auto-updater
   'updater.checking':      'Checking for updates…',
-  'updater.upToDate':      'VoiceInk {version} is up to date.',
-  'updater.downloading':   'Downloading VoiceInk {version}…',
-  'updater.readyTitle':    'VoiceInk {version} is ready to install',
+  'updater.upToDate':      'Parlys {version} is up to date.',
+  'updater.downloading':   'Downloading Parlys {version}…',
+  'updater.readyTitle':    'Parlys {version} is ready to install',
   'updater.readyDesc':     'Restart to apply the update — your work will be saved.',
   'updater.installNow':    'Install & restart',
   'updater.later':         'Later',
@@ -214,7 +214,7 @@ const fr: Dict = {
   'settings.density.compact':     'Compact / minimaliste',
   'settings.density.hint':        'Le mode compact transforme l\u2019app en une petite pilule flottante (176×52 px) transparente, toujours au premier plan — idéale pour dicter en surimpression.',
   'settings.alwaysOnTop':         'Toujours au premier plan',
-  'settings.alwaysOnTop.desc':    'Garde la fenêtre VoiceInk visible au-dessus de vos autres applications.',
+  'settings.alwaysOnTop.desc':    'Garde la fenêtre Parlys visible au-dessus de vos autres applications.',
 
   // Langue UI
   'settings.uiLanguage.label':    'Langue de l\u2019application',
@@ -230,13 +230,13 @@ const fr: Dict = {
 
   // Interpréte
   'settings.interpreter.title':     'Traducteur vocal (interprète)',
-  'settings.interpreter.desc':      'Parlez dans votre langue — VoiceInk traduit instantanément et prononce le résultat avec une voix IA réaliste. Idéal pour réunions multilingues, appels visio, ou tester une tournure dans une autre langue.',
+  'settings.interpreter.desc':      'Parlez dans votre langue — Parlys traduit instantanément et prononce le résultat avec une voix IA réaliste. Idéal pour réunions multilingues, appels visio, ou tester une tournure dans une autre langue.',
   'settings.interpreter.speakLabel':'Prononcer la traduction à voix haute',
   'settings.interpreter.speakDesc': 'Quand désactivé, seul le texte traduit est produit : aucun appel TTS n\u2019est fait (Cartesia/ElevenLabs non sollicités, économies de crédits). S\u2019applique aussi au mode Écoute.',
   'settings.interpreter.targetLang':'Langue parlée en sortie',
 
   // Système
-  'settings.autostart':           'Lancer VoiceInk au démarrage de Windows',
+  'settings.autostart':           'Lancer Parlys au démarrage de Windows',
   'settings.autostart.desc':      'L\u2019app se lancera automatiquement à chaque ouverture de session.',
   'settings.startMin':            'Démarrer en arrière-plan',
   'settings.startMin.desc':       'Au lancement, ne pas afficher la fenêtre principale — rester dans le tray / en pilule.',
@@ -256,9 +256,9 @@ const fr: Dict = {
 
   // Mise à jour automatique
   'updater.checking':      'Recherche de mises à jour…',
-  'updater.upToDate':      'VoiceInk {version} est à jour.',
-  'updater.downloading':   'Téléchargement de VoiceInk {version}…',
-  'updater.readyTitle':    'VoiceInk {version} est prêt à être installé',
+  'updater.upToDate':      'Parlys {version} est à jour.',
+  'updater.downloading':   'Téléchargement de Parlys {version}…',
+  'updater.readyTitle':    'Parlys {version} est prêt à être installé',
   'updater.readyDesc':     'Redémarrez pour appliquer la mise à jour — votre travail sera sauvegardé.',
   'updater.installNow':    'Installer et redémarrer',
   'updater.later':         'Plus tard',

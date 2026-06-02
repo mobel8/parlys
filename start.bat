@@ -1,17 +1,17 @@
 @echo off
 chcp 65001 >nul 2>nul
 setlocal ENABLEDELAYEDEXPANSION
-title VoiceInk
+title Parlys
 cd /d "%~dp0"
 
 set "LOG=%~dp0run.log"
 echo =========================================================== > "%LOG%"
-echo VoiceInk start.bat - %date% %time% >> "%LOG%"
+echo Parlys start.bat - %date% %time% >> "%LOG%"
 echo =========================================================== >> "%LOG%"
 
 echo.
 echo  ============================================
-echo    VoiceInk - Dictee IA (Groq Whisper Turbo)
+echo    Parlys - Dictee IA (Groq Whisper Turbo)
 echo  ============================================
 echo.
 
@@ -112,7 +112,7 @@ if errorlevel 1 (
 echo  [3/4] Build OK
 
 :: ---- 4. Launch ----
-echo  [4/4] Lancement de VoiceInk...
+echo  [4/4] Lancement de Parlys...
 echo  ^(laissez cette fenetre ouverte pour voir les logs^)
 echo.
 echo --- launch --- >> "%LOG%"
@@ -128,6 +128,6 @@ if exist "node_modules\.bin\electron.cmd" (
 )
 
 echo.
-echo  VoiceInk ferme ^(code %errorlevel%^).
+echo  Parlys ferme ^(code %errorlevel%^).
 echo [EXIT] code %errorlevel% >> "%LOG%"
 pause

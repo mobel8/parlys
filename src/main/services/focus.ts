@@ -8,7 +8,7 @@
  * `setInterval`. Zero external processes, zero screen flicker, ~microsecond
  * call cost.
  *
- * We remember the LAST non-VoiceInk HWND so the injection layer can restore
+ * We remember the LAST non-Parlys HWND so the injection layer can restore
  * focus before pasting.
  */
 

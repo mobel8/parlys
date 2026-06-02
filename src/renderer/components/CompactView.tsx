@@ -50,7 +50,7 @@ export function CompactView() {
       const t0 = Date.now();
       try {
         const audioBase64 = await blobToBase64(blob);
-        const res = await window.voiceink.transcribe({
+        const res = await window.parlys.transcribe({
           audioBase64,
           mimeType,
           language: settings.language === 'auto' ? undefined : settings.language,
@@ -73,7 +73,7 @@ export function CompactView() {
         // paste here if it didn't (res.injected false, e.g. native path
         // unavailable). Avoids a double paste.
         if (settings.autoInject && res.finalText && !res.injected) {
-          await window.voiceink.injectText(res.finalText);
+          await window.parlys.injectText(res.finalText);
         }
         setLastTranscript(res.finalText);
         setRecState('idle');
@@ -113,7 +113,7 @@ export function CompactView() {
     // time the user stops speaking the HTTPS socket is hot, shaving
     // 40-80 ms off the Whisper round-trip. The compact pill flow was
     // missing this, MainView already had it.
-    try { (window.voiceink as any).prewarm?.(); } catch { /* best-effort */ }
+    try { (window.parlys as any).prewarm?.(); } catch { /* best-effort */ }
     await recorder.start();
   };
 
@@ -121,8 +121,8 @@ export function CompactView() {
   // double-register during rapid state changes, and dispatches through
   // the ref-backed toggle above.
   useEffect(() => {
-    const unsub = window.voiceink.onToggleRecording(() => {
-      try { window.voiceink.log?.('[compact] ON_TOGGLE_RECORDING received, recState=', recStateRef.current); } catch {}
+    const unsub = window.parlys.onToggleRecording(() => {
+      try { window.parlys.log?.('[compact] ON_TOGGLE_RECORDING received, recState=', recStateRef.current); } catch {}
       toggle();
     });
     return () => unsub?.();
@@ -149,19 +149,19 @@ export function CompactView() {
   }, []);
 
   const expand = async () => {
-    await window.voiceink.windowResizeForDensity?.('comfortable');
+    await window.parlys.windowResizeForDensity?.('comfortable');
   };
 
   const openContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    window.voiceink.showWidgetContextMenu?.();
+    window.parlys.showWidgetContextMenu?.();
   };
 
   const bars = useMiniWaveform(audioLevel, recState === 'recording');
 
   // Regression sampler for the hover oscillation test. Dormant in
-  // production; activated only when main sets VOICEINK_PILL_SAMPLER=1
+  // production; activated only when main sets PARLYS_PILL_SAMPLER=1
   // (which appends "-sampler" to the URL hash). Samples the pill's
   // rendered width and :hover state every 100 ms so `test-hover.js` can
   // assert the expansion is monotonically stable on a stationary

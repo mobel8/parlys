@@ -49,7 +49,7 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
   // matching player via the queue (match-by-requestId is done inside
   // `InterpretPlayer.push`).
   useEffect(() => {
-    const api = (window as any).voiceink;
+    const api = (window as any).parlys;
     if (!api?.onInterpretChunk) return;
     const off = api.onInterpretChunk((chunk: InterpretChunkEvent) => {
       queueRef.current?.route(chunk);
@@ -98,7 +98,7 @@ export function ListenerPanel({ variant = 'inline' }: Props) {
       onSinkError: (err) => console.warn('[listener:sink]', err.message),
     }, { sinkId: settings.ttsSinkId || undefined, autoStart: false });
     queue.add(player);
-    (window as any).voiceink?.speak({
+    (window as any).parlys?.speak({
       requestId,
       text: last.translated,
       language: settings.listenerTargetLang || 'fr',

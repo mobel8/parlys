@@ -1,15 +1,15 @@
-# VoiceInk Promo Video
+# Parlys Promo Video
 
-A 60-second cinematic presentation of VoiceInk, built with
+A 60-second cinematic presentation of Parlys, built with
 [Remotion](https://www.remotion.dev) (React + programmatic video).
 
 Three compositions ship:
 
 | ID                       | Ratio  | Duration | Use                      |
 |--------------------------|--------|----------|--------------------------|
-| `VoiceInkPromo`          | 16:9   | 60 s     | Master deliverable (YouTube / website hero) |
-| `VoiceInkPromoShort`     | 16:9   | 15 s     | Twitter / X, GIF export, GitHub README |
-| `VoiceInkPromoVertical`  | 9:16   | 30 s     | TikTok · Reels · Shorts  |
+| `ParlysPromo`          | 16:9   | 60 s     | Master deliverable (YouTube / website hero) |
+| `ParlysPromoShort`     | 16:9   | 15 s     | Twitter / X, GIF export, GitHub README |
+| `ParlysPromoVertical`  | 9:16   | 30 s     | TikTok · Reels · Shorts  |
 
 ## Quick start
 
@@ -49,15 +49,15 @@ src/
 ├── index.ts                 Entry (registerRoot)
 ├── Root.tsx                 Composition registry
 ├── styles.css               Tailwind v4 entry + brand tokens
-├── VoiceInkPromo.tsx        Master 60 s composition
-├── VoiceInkPromoShort.tsx   15 s highlights (T / X / GIF)
-├── VoiceInkPromoVertical.tsx 30 s 9:16 (Reels / TikTok)
+├── ParlysPromo.tsx        Master 60 s composition
+├── ParlysPromoShort.tsx   15 s highlights (T / X / GIF)
+├── ParlysPromoVertical.tsx 30 s 9:16 (Reels / TikTok)
 ├── lib/
 │   ├── theme.ts             BRAND colors, EASING, SCENES timeline table
 │   └── spring.ts            Pre-baked spring presets (soft/punch/slow/bouncy)
 ├── components/
 │   ├── AuroraBackground.tsx Mesh gradient blobs + grid overlay
-│   ├── VoiceInkLogo.tsx     Animated V mark (glow, shimmer, path reveal)
+│   ├── ParlysLogo.tsx     Animated V mark (glow, shimmer, path reveal)
 │   ├── Waveform.tsx         Audio bar array (live / triggered)
 │   ├── TypingText.tsx       Typewriter + stagger variants
 │   ├── GradientText.tsx     Animated aurora gradient fill
@@ -93,7 +93,7 @@ into a blog post, the two feel like one continuous surface.
 
 2. Drop it at `public/audio/bg.mp3`.
 
-3. In `VoiceInkPromo.tsx`, uncomment the `<Audio>` block:
+3. In `ParlysPromo.tsx`, uncomment the `<Audio>` block:
 
    ```tsx
    <Audio src={staticFile('audio/bg.mp3')} />
@@ -108,11 +108,11 @@ script below using Cartesia (same provider as the app itself — fitting).
 
 Suggested narration (≈ 145 words, 60 s at natural pace):
 
-> _VoiceInk. Your voice — finally, a superpower._
+> _Parlys. Your voice — finally, a superpower._
 >
 > _Most voice apps keep you waiting. One second. Two. Enough to ruin the conversation._
 >
-> _VoiceInk hears you, translates you, and speaks — in your own voice — in under 400 milliseconds._
+> _Parlys hears you, translates you, and speaks — in your own voice — in under 400 milliseconds._
 >
 > _It's four best-in-class models stitched together so tightly it feels like magic._
 >
@@ -124,9 +124,9 @@ Suggested narration (≈ 145 words, 60 s at natural pace):
 >
 > _Free forever — or go Pro for less than ten euros a month._
 >
-> _VoiceInk. Speak once. The world understands._
+> _Parlys. Speak once. The world understands._
 >
-> _**voiceink dot app**._
+> _**parlys dot app**._
 
 Save the TTS as `public/audio/vo.mp3` and add a second `<Audio>` with
 `volume={0.9}` (VO) while dimming `bg.mp3` to `volume={0.3}`.
@@ -135,5 +135,5 @@ Save the TTS as `public/audio/vo.mp3` and add a second `<Audio>` with
 
 This folder is source code we wrote in-house. Remotion itself has a
 special licence — review at [remotion.dev/license](https://remotion.dev/license).
-The Individual / Startup terms cover VoiceInk until we cross the
+The Individual / Startup terms cover Parlys until we cross the
 3-developer team mark.

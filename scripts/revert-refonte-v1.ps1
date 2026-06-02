@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Reverts ALL changes tagged [EXPERIMENT:refonte-v1] across the voiceink repo.
+  Reverts ALL changes tagged [EXPERIMENT:refonte-v1] across the parlys repo.
 .DESCRIPTION
   - Scans src/, index.html and other root files for the tag
   - Lists every hit per-file
@@ -15,7 +15,7 @@
 
 [CmdletBinding()]
 param(
-  [string]$RepoRoot = 'D:\voiceink',
+  [string]$RepoRoot = 'D:\parlys',
   [string]$Tag      = '[EXPERIMENT:refonte-v1]',
   [switch]$DryRun,
   [switch]$Yes

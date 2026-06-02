@@ -1,5 +1,5 @@
 /**
- * generate-sfx.js — procedural SFX synthesizer for the VoiceInk promo.
+ * generate-sfx.js — procedural SFX synthesizer for the Parlys promo.
  *
  * Why procedural?
  *   1. Zero dependencies. Ships with Node's stdlib only.
@@ -22,7 +22,7 @@
  *   - `heartbeat.wav`     — two-thump heartbeat (~650 ms)
  *   - `pad.wav`           — 60-second evolving ambient bed (mono, low)
  *
- * Output: d:/voiceink/video/public/sfx/*.wav (48 kHz mono 16-bit PCM).
+ * Output: d:/parlys/video/public/sfx/*.wav (48 kHz mono 16-bit PCM).
  * Remotion's <Audio> resamples transparently, and 48 kHz is the Remotion
  * default internal rate — zero resampling cost.
  */

@@ -1,5 +1,5 @@
 /**
- * VoiceInk backend entrypoint.
+ * Parlys backend entrypoint.
  *
  * Minimal middleware stack — we don't need request logging libraries or
  * metrics wrappers yet. Fastify's built-in logger + standard healthcheck
@@ -102,7 +102,7 @@ async function main() {
 
   try {
     await server.listen({ host: '0.0.0.0', port: env.port });
-    server.log.info(`VoiceInk backend listening on :${env.port}`);
+    server.log.info(`Parlys backend listening on :${env.port}`);
   } catch (err) {
     server.log.error({ err }, 'failed to start');
     process.exit(1);

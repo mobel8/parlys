@@ -1,7 +1,7 @@
 /**
  * End-to-end regression test for the compact pill hover oscillation.
  *
- *  1. Launch Electron with VOICEINK_PILL_SAMPLER=1.
+ *  1. Launch Electron with PARLYS_PILL_SAMPLER=1.
  *  2. Wait until the pill window is visible.
  *  3. Park the real cursor on the pill centre for 3 s.
  *  4. Parse the sampler lines from runtime.log.
@@ -62,13 +62,13 @@ const LOG = path.join(ROOT, 'runtime.log');
 
 function killElectron() {
   try { execSync('taskkill /F /IM electron.exe', { stdio: 'ignore' }); } catch {}
-  try { execSync('taskkill /F /IM VoiceInk.exe', { stdio: 'ignore' }); } catch {}
+  try { execSync('taskkill /F /IM Parlys.exe', { stdio: 'ignore' }); } catch {}
 }
 
 async function waitForWindow(timeoutMs = 20000) {
   const t0 = Date.now();
   while (Date.now() - t0 < timeoutMs) {
-    const hwnd = FindWindowA(null, 'VoiceInk');
+    const hwnd = FindWindowA(null, 'Parlys');
     if (hwnd) {
       const r = {};
       if (
@@ -91,7 +91,7 @@ async function main() {
   try { fs.writeFileSync(LOG, ''); } catch {}
 
   const env = { ...process.env,
-    VOICEINK_PILL_SAMPLER: '1',
+    PARLYS_PILL_SAMPLER: '1',
     ELECTRON_ENABLE_LOGGING: '1',
   };
   // The parent shell may have ELECTRON_RUN_AS_NODE=1 left over from a
@@ -105,7 +105,7 @@ async function main() {
   );
   child.on('error', (e) => { console.error('spawn error:', e); });
 
-  console.log('Waiting for VoiceInk window…');
+  console.log('Waiting for Parlys window…');
   const found = await waitForWindow();
   if (!found) {
     killElectron();
@@ -144,7 +144,7 @@ async function main() {
   killElectron();
 
   if (samples.length === 0) {
-    console.error('FAIL: no sampler output. Was VOICEINK_PILL_SAMPLER picked up?');
+    console.error('FAIL: no sampler output. Was PARLYS_PILL_SAMPLER picked up?');
     process.exit(3);
   }
 

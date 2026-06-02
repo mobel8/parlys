@@ -1,6 +1,6 @@
 ---
 /**
- * Comparison — tilt-aware table that highlights VoiceInk vs incumbents.
+ * Comparison — tilt-aware table that highlights Parlys vs incumbents.
  *
  * We picked 3 competitors most of our ICP has heard of:
  *   - Dragon (Medical / Legal) — old, heavy, expensive
@@ -15,22 +15,22 @@
 interface Row {
   featureEn: string;
   featureFr: string;
-  voiceink: string | boolean;
+  parlys: string | boolean;
   dragon:   string | boolean;
   otter:    string | boolean;
   gtrans:   string | boolean;
 }
 
 const rows: Row[] = [
-  { featureEn: 'Voice-to-voice latency',        featureFr: 'Latence voix-à-voix',           voiceink: '< 400 ms',   dragon: 'N/A',         otter: 'N/A',          gtrans: '~ 1.8 s' },
-  { featureEn: 'Dictation (speech-to-text)',    featureFr: 'Dictée (parole vers texte)',     voiceink: true,         dragon: true,          otter: true,           gtrans: true      },
-  { featureEn: 'Live translation + speak',      featureFr: 'Traduction live + voix',         voiceink: true,         dragon: false,         otter: false,          gtrans: true      },
-  { featureEn: 'Voice cloning',                 featureFr: 'Clonage vocal',                  voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
-  { featureEn: 'Works offline (BYOK mode)',     featureFr: 'Hors-ligne (mode BYOK)',         voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
-  { featureEn: 'Virtual mic for Zoom/Discord',  featureFr: 'Micro virtuel Zoom/Discord',     voiceink: true,         dragon: false,         otter: false,          gtrans: false     },
-  { featureEn: 'Custom vocabulary',             featureFr: 'Vocabulaire personnalisé',       voiceink: true,         dragon: true,          otter: true,           gtrans: false     },
-  { featureEn: 'Starting price (pro)',          featureFr: 'Prix de départ (pro)',           voiceink: '9.90 €/mo',  dragon: '~ 699 $/yr',  otter: '17 $/mo',      gtrans: 'Free'    },
-  { featureEn: 'Desktop-native app',            featureFr: 'App bureau native',              voiceink: true,         dragon: true,          otter: false,          gtrans: false     },
+  { featureEn: 'Voice-to-voice latency',        featureFr: 'Latence voix-à-voix',           parlys: '< 400 ms',   dragon: 'N/A',         otter: 'N/A',          gtrans: '~ 1.8 s' },
+  { featureEn: 'Dictation (speech-to-text)',    featureFr: 'Dictée (parole vers texte)',     parlys: true,         dragon: true,          otter: true,           gtrans: true      },
+  { featureEn: 'Live translation + speak',      featureFr: 'Traduction live + voix',         parlys: true,         dragon: false,         otter: false,          gtrans: true      },
+  { featureEn: 'Voice cloning',                 featureFr: 'Clonage vocal',                  parlys: true,         dragon: false,         otter: false,          gtrans: false     },
+  { featureEn: 'Works offline (BYOK mode)',     featureFr: 'Hors-ligne (mode BYOK)',         parlys: true,         dragon: true,          otter: false,          gtrans: false     },
+  { featureEn: 'Virtual mic for Zoom/Discord',  featureFr: 'Micro virtuel Zoom/Discord',     parlys: true,         dragon: false,         otter: false,          gtrans: false     },
+  { featureEn: 'Custom vocabulary',             featureFr: 'Vocabulaire personnalisé',       parlys: true,         dragon: true,          otter: true,           gtrans: false     },
+  { featureEn: 'Starting price (pro)',          featureFr: 'Prix de départ (pro)',           parlys: '9.90 €/mo',  dragon: '~ 699 $/yr',  otter: '17 $/mo',      gtrans: 'Free'    },
+  { featureEn: 'Desktop-native app',            featureFr: 'App bureau native',              parlys: true,         dragon: true,          otter: false,          gtrans: false     },
 ];
 
 const badge = (v: string | boolean) => {
@@ -73,7 +73,7 @@ const badge = (v: string | boolean) => {
               <th class="px-5 py-4 font-medium text-aurora-purple">
                 <div class="flex items-center gap-2">
                   <span class="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-gradient-to-br from-aurora-purple via-aurora-pink to-aurora-cyan text-[10px] font-bold text-white">V</span>
-                  VoiceInk
+                  Parlys
                 </div>
               </th>
               <th class="px-5 py-4 font-medium">Dragon</th>
@@ -88,9 +88,9 @@ const badge = (v: string | boolean) => {
                   <span data-i18n-lang="en">{row.featureEn}</span>
                   <span data-i18n-lang="fr">{row.featureFr}</span>
                 </th>
-                {(['voiceink', 'dragon', 'otter', 'gtrans'] as const).map((col) => {
+                {(['parlys', 'dragon', 'otter', 'gtrans'] as const).map((col) => {
                   const b = badge(row[col]);
-                  const own = col === 'voiceink';
+                  const own = col === 'parlys';
                   return (
                     <td class={`px-5 py-4 text-sm ${own ? 'bg-aurora-purple/[0.05]' : ''}`}>
                       {b.kind === 'yes' && (

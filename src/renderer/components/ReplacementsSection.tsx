@@ -65,7 +65,7 @@ export function ReplacementsSection() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `voiceink-dictionary-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `parlys-dictionary-${new Date().toISOString().slice(0, 10)}.json`;
     document.body.appendChild(a);
     a.click();
     setTimeout(() => {
@@ -298,6 +298,6 @@ const TECH_PRESETS: Omit<Replacement, 'id'>[] = [
   { from: 'mongodb', to: 'MongoDB', caseSensitive: false, wholeWord: true, enabled: true },
   { from: 'docker', to: 'Docker', caseSensitive: false, wholeWord: true, enabled: true },
   { from: 'kubernetes', to: 'Kubernetes', caseSensitive: false, wholeWord: true, enabled: true },
-  { from: 'voice inc', to: 'VoiceInk', caseSensitive: false, wholeWord: true, enabled: true },
-  { from: 'voiceink', to: 'VoiceInk', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'voice inc', to: 'Parlys', caseSensitive: false, wholeWord: true, enabled: true },
+  { from: 'parlys', to: 'Parlys', caseSensitive: false, wholeWord: true, enabled: true },
 ];

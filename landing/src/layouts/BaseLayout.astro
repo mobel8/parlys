@@ -32,12 +32,12 @@ export interface Props {
 
 const {
   title,
-  description = 'VoiceInk — the fastest voice-to-voice translator on your desktop. Dictation, interpreter and live listener in one beautiful app.',
+  description = 'Parlys — the fastest voice-to-voice translator on your desktop. Dictation, interpreter and live listener in one beautiful app.',
   canonical,
-  ogImage = '/og/voiceink-og.png',
+  ogImage = '/og/parlys-og.png',
 } = Astro.props;
 
-const siteUrl = 'https://voiceink.app';
+const siteUrl = 'https://parlys.app';
 const canonicalUrl = canonical ?? `${siteUrl}${Astro.url.pathname}`;
 ---
 
@@ -52,7 +52,7 @@ const canonicalUrl = canonical ?? `${siteUrl}${Astro.url.pathname}`;
     <script is:inline>
       (function () {
         try {
-          var saved = localStorage.getItem('voiceink_lang');
+          var saved = localStorage.getItem('parlys_lang');
           var lang = saved === 'en' ? 'en' : 'fr';
           document.documentElement.setAttribute('lang', lang);
           document.documentElement.setAttribute('data-lang', lang);
@@ -85,7 +85,7 @@ const canonicalUrl = canonical ?? `${siteUrl}${Astro.url.pathname}`;
     <meta property="og:url"         content={canonicalUrl} />
     <meta property="og:image"       content={`${siteUrl}${ogImage}`} />
     <meta property="og:type"        content="website" />
-    <meta property="og:site_name"   content="VoiceInk" />
+    <meta property="og:site_name"   content="Parlys" />
 
     {/* Twitter */}
     <meta name="twitter:card"        content="summary_large_image" />
@@ -105,7 +105,7 @@ const canonicalUrl = canonical ?? `${siteUrl}${Astro.url.pathname}`;
 
     {/* Analytics — plug Plausible here when live. Free, privacy-safe,
         GDPR-ok without a cookie banner. */}
-    {/* <script defer data-domain="voiceink.app" src="https://plausible.io/js/script.js"></script> */}
+    {/* <script defer data-domain="parlys.app" src="https://plausible.io/js/script.js"></script> */}
   </head>
 
   <body class="min-h-dvh overflow-x-hidden antialiased">

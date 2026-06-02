@@ -1,5 +1,5 @@
 /**
- * VoiceInk theme system.
+ * Parlys theme system.
  *
  * Each theme is a palette of CSS variables that index.css consumes via
  * `var(--*)`. Switching a theme at runtime = overwrite those variables on
@@ -104,7 +104,7 @@ export const THEMES: Record<ThemeId, Theme> = {
   midnight: {
     id: 'midnight',
     name: 'Midnight',
-    description: 'Violet, fuchsia, cyan sur noir profond. Le thème signature de VoiceInk.',
+    description: 'Violet, fuchsia, cyan sur noir profond. Le thème signature de Parlys.',
     mode: 'dark',
     palette: {
       accent1: '#8b5cf6',

@@ -52,7 +52,7 @@ Dictated: 10 seconds. Typed: 40 seconds.
 
 ### 5. Inline chat with Copilot / Cursor
 
-If you're using Cursor, Codeium, or Continue.dev for AI code assistance, you're constantly typing prompts like "refactor this to use the builder pattern" or "write a test for the error case where the DB is unreachable". Dictating those prompts is 3-5x faster than typing them. Cursor has built-in dictation via OS; VoiceInk pipes into it seamlessly.
+If you're using Cursor, Codeium, or Continue.dev for AI code assistance, you're constantly typing prompts like "refactor this to use the builder pattern" or "write a test for the error case where the DB is unreachable". Dictating those prompts is 3-5x faster than typing them. Cursor has built-in dictation via OS; Parlys pipes into it seamlessly.
 
 ## What voice is bad at
 
@@ -78,7 +78,7 @@ Short, terse comments like "nit: rename this" are faster typed. Longer reviewer 
 ┌─────────────────────────────────────────────────────────┐
 │ Code editor (IDE)                                       │
 │  - Code: typed                                          │
-│  - Comments: voice via VoiceInk                         │
+│  - Comments: voice via Parlys                         │
 │  - AI prompts (Cursor/Copilot): voice                   │
 │                                                         │
 ├─────────────────────────────────────────────────────────┤
@@ -102,9 +102,9 @@ Short, terse comments like "nit: rename this" are faster typed. Longer reviewer 
 
 The rule: **text that a human needs to read gets dictated; text that a compiler or shell needs to parse gets typed**.
 
-## Setup for an engineer's VoiceInk
+## Setup for an engineer's Parlys
 
-1. **Global shortcut**: `Ctrl+Alt+Space` for toggle dictation (VoiceInk default).
+1. **Global shortcut**: `Ctrl+Alt+Space` for toggle dictation (Parlys default).
 2. **Push-to-talk shortcut**: right `Ctrl` (press-and-hold). Faster than toggle for short messages.
 3. **Dictation mode**: start with "Natural" — it adds punctuation and capitalisation but keeps your phrasing. Switch to "Formal" for PR descriptions and external-facing writing.
 4. **Custom vocabulary**: add your project names, internal acronyms, teammates' names. 30 entries covers 95 % of day-to-day.
@@ -127,4 +127,4 @@ Remote workers have zero excuse — dictate away.
 
 ---
 
-VoiceInk is used by ~3 000 developers as of April 2026. If you're skeptical, try it for a week: commit messages and PR descriptions only, keep typing the rest. Revert if it doesn't save time. [Download free →](/#download)
+Parlys is used by ~3 000 developers as of April 2026. If you're skeptical, try it for a week: commit messages and PR descriptions only, keep typing the rest. Revert if it doesn't save time. [Download free →](/#download)

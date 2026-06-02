@@ -52,7 +52,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: voiceink-${{ matrix.os }}
+          name: parlys-${{ matrix.os }}
           path: |
             release/*.exe
             release/*.dmg

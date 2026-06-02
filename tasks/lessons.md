@@ -52,7 +52,7 @@ Use `dev.bat`-via-cmd shortcuts ONLY for the dev launcher (HMR + tsc-watch + aut
 ## %APPDATA% / %USERPROFILE% are unset when a script runs under WSL
 
 Helper scripts that write to the app's userData (e.g. injecting an API key into
-`voiceink-settings.json`) assume Windows env vars. Under WSL `process.env.APPDATA`
+`parlys-settings.json`) assume Windows env vars. Under WSL `process.env.APPDATA`
 and `USERPROFILE` are **undefined**, so a naive `APPDATA || HOME/AppData/Roaming`
 fallback silently writes to a junk Linux path (`/home/<user>/AppData/...`) — the
 real Windows file is never touched and the change appears to do nothing. Resolve
@@ -63,7 +63,7 @@ patch landed (and that pre-existing keys like `groqApiKey` survived).
 
 ## Repeated `taskkill /F /IM electron.exe` corrupts the single-instance state
 
-VoiceInk holds `app.requestSingleInstanceLock()` (per userData dir). Force-killing
+Parlys holds `app.requestSingleInstanceLock()` (per userData dir). Force-killing
 Electron in a tight test loop doesn't let it release the Windows mutex/lock
 cleanly, so the *next* spawn can early-exit with **code=0 and no console output**
 (the "lost the lock" branch) — looks exactly like a config crash but is purely

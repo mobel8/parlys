@@ -1,5 +1,5 @@
 /**
- * VoiceInkLogo — the "V" mark, reusable at any size.
+ * ParlysLogo — the "V" mark, reusable at any size.
  *
  * Composition:
  *   - Rounded square base (gradient, spring-scaled on mount)
@@ -23,7 +23,7 @@ interface Props {
   glow?: boolean;
 }
 
-export const VoiceInkLogo: React.FC<Props> = ({
+export const ParlysLogo: React.FC<Props> = ({
   size = 240,
   delay = 0,
   preset = 'dramatic',

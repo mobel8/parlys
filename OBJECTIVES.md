@@ -1,4 +1,4 @@
-# VoiceInk - Dictée Intelligente IA
+# Parlys - Dictée Intelligente IA
 
 > Clone fonctionnel de Superwhisper — Application desktop de dictée intelligente avec transcription temps réel, post-traitement LLM et injection universelle.
 
@@ -164,7 +164,7 @@ Micro → Buffer Audio → VAD (détection voix) → Whisper STT → LLM Post-pr
 ## 📁 Structure du Projet
 
 ```
-voiceink/
+parlys/
 ├── src/
 │   ├── main/                  # Electron main process
 │   │   ├── index.ts           # Entry point

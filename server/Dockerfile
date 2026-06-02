@@ -1,12 +1,12 @@
 # ────────────────────────────────────────────────────────────────────
-#  VoiceInk backend — multi-stage Docker build
+#  Parlys backend — multi-stage Docker build
 #
 #  - Stage 1 (builder) installs dev deps + compiles TypeScript.
 #  - Stage 2 (runtime) keeps only prod deps + compiled dist/.
 #
 #  Final image: ~150 MB (node:22-alpine base + pruned node_modules).
-#  Build: `docker build -t voiceink-server -f server/Dockerfile server`
-#  Run:   `docker run --env-file server/.env -p 8787:8787 voiceink-server`
+#  Build: `docker build -t parlys-server -f server/Dockerfile server`
+#  Run:   `docker run --env-file server/.env -p 8787:8787 parlys-server`
 # ────────────────────────────────────────────────────────────────────
 
 FROM node:22-alpine AS builder
