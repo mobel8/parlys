@@ -90,3 +90,6 @@ _pill-scale-*.png
 probe-cdp.js
 *.bak
 parlys-settings.json.pre-*.bak
+
+# TypeScript incremental build cache
+*.tsbuildinfo
