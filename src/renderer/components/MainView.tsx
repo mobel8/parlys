@@ -54,7 +54,7 @@ export function MainView() {
 
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
-    onStop: async (blob, mimeType) => {
+    onStop: async (blob, mimeType, audioMs, stats) => {
       setRecState('processing');
       setAudioLevel(0);
       const t0 = Date.now();
@@ -112,6 +112,8 @@ export function MainView() {
           language: settings.language === 'auto' ? undefined : settings.language,
           translateTo: settings.translateTo || undefined,
           mode: settings.mode,
+          audioMs,
+          speechMs: stats?.speechMs,
         });
         setLastLatencyMs(Date.now() - t0);
         if (!res.ok) {
@@ -138,6 +140,14 @@ export function MainView() {
         setLastError(err?.message || String(err));
         setRecState('error');
       }
+    },
+    // stop() decided not to ship (no speech / dead mic / too short). Mirror
+    // the res.empty UX: back to idle with a dismissible warning badge — and
+    // never leave the big button stuck on 'recording'.
+    onDrop: (reason) => {
+      setAudioLevel(0);
+      setLastWarning(reason);
+      setRecState('idle');
     },
     onError: (err) => {
       setLastError(err.message);

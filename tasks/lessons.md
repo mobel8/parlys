@@ -74,3 +74,43 @@ booting identically = the change is exonerated. (2) `loop-smoke` does NOT taskki
 so it collides with any running instance; `smoke-settings` DOES taskkill (kills the
 user's app). For a non-disruptive live-console check, boot isolated and kill only
 your own child — never taskkill-all while the user's app is up.
+
+## A "warm" WebAudio capture pipeline must prove liveness, not existence
+
+`stream.active === true` + an AudioContext in state 'running' prove NOTHING
+after a Windows sleep/resume, an audio-device switch or a driver reset: the
+graph can stop delivering `onaudioprocess` callbacks forever while every
+observable flag still looks healthy (the "zombie mic"). Worse failure mode
+with a ring buffer: the write counter freezes, so a later capture slices
+STALE audio (the last second before death) and ships it to Whisper — the
+user gets a transcription of words they never said during that capture.
+Rules:
+1. Stamp a timestamp in every audio callback; "a sample arrived recently"
+   is the ONLY valid health check. Verify it at capture-start (and wait for
+   a confirmed tick after any rebuild) before promising a recording.
+2. Heal in layers: ctx.resume() first (cheap, fixes post-sleep suspension),
+   full release+getUserMedia rebuild second. Reset the ring on rebuild so a
+   healed pipeline can never ship pre-death audio.
+3. A watchdog interval catches what events miss; compare wall-clock gaps
+   between runs to detect sleep (Date.now(), not performance.now(), which
+   can pause during suspend on Windows). Also check `stream.active`
+   separately: STOPPED tracks keep ticking zeros, so tick-freshness alone
+   misses that death mode.
+4. powerMonitor 'resume'/'unlock-screen' in main → broadcast to renderers
+   → proactive verify, so the mic is alive again before the next hotkey.
+5. Every stop() exit path must notify the UI (onDrop) — a silent return on
+   "nothing captured" freezes the recording state forever.
+
+## Whisper hallucination defense belongs on BOTH sides of the API call
+
+Client side: never ship a clip without plausible speech (frame-RMS gate w/
+adaptive noise floor + minimum sustained voicing run — cumulative energy
+alone lets keyboard-click trains through), and trim head/tail silence
+(trailing silence is the classic "Merci d'avoir regardé" trigger). Server
+side: verbose_json's per-segment no_speech_prob/avg_logprob/compression_
+ratio filter must be FAIL-CLOSED when EVERY segment is flagged — falling
+back to the raw text "for the regex scrubber" re-injects exactly the
+hallucinations the regexes can't list (bare "Merci." is legitimate
+dictation, it can never be blacklisted). And never run the post-process LLM
+on an empty transcription: asked to reformulate nothing, it invents
+pleasantries.

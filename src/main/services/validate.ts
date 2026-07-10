@@ -110,7 +110,13 @@ export function validateTranscribeRequest(x: unknown): TranscribeRequest | null 
     : 'raw';
   const language = clampString(x.language, 16);
   const translateTo = clampString(x.translateTo, 16);
-  return { audioBase64, mimeType, mode, language, translateTo };
+  // Optional client-side audio stats (diagnostics + history). Clamped to a
+  // plausible dictation range; anything malformed is simply dropped.
+  const clampMs = (v: unknown): number | undefined =>
+    isNumber(v) ? Math.max(0, Math.min(600_000, Math.round(v))) : undefined;
+  const audioMs = clampMs(x.audioMs);
+  const speechMs = clampMs(x.speechMs);
+  return { audioBase64, mimeType, mode, language, translateTo, audioMs, speechMs };
 }
 
 /** Validate an interpreter request coming from the renderer. */

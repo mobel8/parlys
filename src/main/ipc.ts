@@ -239,7 +239,11 @@ export function registerIpc(): void {
       prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
       if (req.mode !== 'raw') prewarmLlm(settings);
       const buf = Buffer.from(req.audioBase64, 'base64');
-      console.log(`[transcribe] received audio: ${buf.length} bytes (${req.mimeType})`);
+      console.log(
+        `[transcribe] received audio: ${buf.length} bytes (${req.mimeType})` +
+        (req.audioMs !== undefined ? ` audioMs=${req.audioMs}` : '') +
+        (req.speechMs !== undefined ? ` speechMs=${req.speechMs}` : ''),
+      );
       // 1.2 KB ≈ a typical 100 ms opus frame + webm header — anything smaller
       // is almost certainly an empty container the user produced by mis-clicking
       // the record button. Was 500 B which was so low it accepted header-only
@@ -307,7 +311,11 @@ export function registerIpc(): void {
       // language setting — in that order.
       let final = translated ?? rawText;
       let postProcessFailed = false;
-      if (req.mode !== 'raw') {
+      // Never post-process an EMPTY transcription: an LLM asked to
+      // "reformulate" nothing tends to invent pleasantries out of thin air
+      // ("Merci de votre attention"…) — the exact parasite-words bug this
+      // pipeline is defending against.
+      if (req.mode !== 'raw' && final.trim()) {
         const ps = Date.now();
         const langHint = translateTo || r.language;
         const ppAb = abortableSignal(LLM_TIMEOUT_MS);
@@ -356,7 +364,7 @@ export function registerIpc(): void {
         language: r.language || req.language || 'auto',
         translatedTo: translateTo || undefined,
         durationMs,
-        audioMs: 0,
+        audioMs: req.audioMs ?? 0,
         tags: [],
         wordCount: wordCount(final),
       };

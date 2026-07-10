@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { analyzeSpeech, trimToSpeech } from '../../shared/speech-gate';
 
 /**
  * Audio recorder built on a CONTINUOUS PCM RING BUFFER (not MediaRecorder).
@@ -20,8 +21,40 @@ import { useCallback, useEffect, useRef } from 'react';
  *   circular Int16 ring buffer, continuously, for as long as the app runs.
  * - `start()` just records the current write position minus the pre-roll
  *   window — instant, no device spin-up, no recorder construction.
- * - `stop()` slices the ring from (start − pre-roll) to now, encodes a WAV,
- *   and ships it. The first ~1 s the user spoke is always in there.
+ * - `stop()` slices the ring from (start − pre-roll) to now, gates + trims
+ *   it (speech-gate), encodes a WAV, and ships it.
+ *
+ * LIVENESS / SELF-HEAL (the "zombie mic" fix)
+ * -------------------------------------------
+ * A warm pipeline can die SILENTLY: after Windows sleep/resume, an audio
+ * device change, or a driver reset, `stream.active` stays true and the
+ * AudioContext often still claims 'running' — but onaudioprocess stops
+ * firing forever. Symptoms in production: "je parle et rien n'est détecté",
+ * fixed only by recreating the window (density swap). Worse, stop() then
+ * sliced a STALE pre-roll (writeCount frozen) and shipped old ring content
+ * to Whisper → hallucinated words ("Merci.") the user never said.
+ *
+ * The cure is to treat "samples are actually arriving" as the ONLY truth:
+ *   - every onaudioprocess stamps `lastTickAt`;
+ *   - `start()` runs ensureLive(): fresh tick → go; stale → resume() the
+ *     ctx, wait a beat, else full rebuild (release + re-getUserMedia),
+ *     and only returns once ticks are CONFIRMED flowing;
+ *   - a 2 s watchdog heals in the background (so the pre-roll is already
+ *     warm again by the time the user presses), detects mid-capture
+ *     stalls, dead streams (stopped tracks keep ticking zeros — liveness
+ *     alone can't see those) and wall-clock jumps (= machine slept);
+ *   - track 'ended'/persistent-'mute', devicechange and the main-process
+ *     `systemResumed` broadcast trigger targeted rebuilds.
+ * Rebuilds reset the ring (writeCount=0), so a healed pipeline can never
+ * ship pre-death stale audio. `rebuild()` is the ONLY destructive path and
+ * preserves an in-flight capture by re-anchoring it on the fresh ring.
+ *
+ * Test/diagnostic hooks (see `loadRenderer` in src/main/index.ts):
+ *   - URL hash `;audioheal=0` (env PARLYS_AUDIO_HEAL=0) disables all healing
+ *     — the legacy behaviour, kept for A/B-proving the fix;
+ *   - URL hash `;audit=1` (env PARLYS_AUDIT=1) exposes
+ *     `window.__parlysAudioAudit` (state introspection + pipeline-kill
+ *     simulators) for the CDP e2e harness.
  *
  * ScriptProcessorNode is deprecated but the only CSP-safe continuous-capture
  * primitive here (AudioWorklet needs addModule(blobURL), which our
@@ -36,6 +69,31 @@ import { useCallback, useEffect, useRef } from 'react';
 const PREROLL_MS = 1000;       // capture this much audio from BEFORE the press
 const RING_SECONDS = 120;      // max single-phrase length we can hold
 const PROCESSOR_FRAMES = 2048; // ScriptProcessor buffer (~43 ms @ 48k)
+
+// --- Liveness / self-heal tuning -------------------------------------------
+// Ticks arrive every ~43 ms while the graph is alive, so "fresh" can be tight.
+const TICK_FRESH_MS = 450;       // a tick within this window = pipeline alive
+const START_CONFIRM_MS = 350;    // start(): max wait for a tick before rebuilding
+const REBUILD_CONFIRM_MS = 1500; // max wait for the FIRST tick after a rebuild
+const WATCHDOG_EVERY_MS = 2000;
+const IDLE_STALE_MS = 3500;      // idle: no tick for this long → heal
+const CAPTURE_STALE_MS = 2000;   // capturing: no tick for this long → heal
+const CLOCK_JUMP_MS = 10000;     // watchdog gap ≫ interval → machine slept
+const REBUILD_FAIL_BACKOFF_MS = 8000; // don't hammer getUserMedia when it fails
+const MUTE_PERSIST_MS = 1500;    // 'mute' older than this → device is stuck, rebuild
+const MIN_CLIP_MS = 250;         // shorter than this = accidental tap, drop
+
+/** Stats shipped alongside the WAV so the caller can log/inspect quality. */
+export interface CaptureStats {
+  /** Full captured duration (incl. pre-roll), before trimming. */
+  totalMs: number;
+  /** Cumulative speech-classified time (30 ms frames above threshold). */
+  speechMs: number;
+  /** Duration actually shipped after head/tail silence trim. */
+  shippedMs: number;
+  noiseFloor: number;
+  peakRms: number;
+}
 
 /**
  * Integer-factor downsample toward 16 kHz (Whisper's native rate) to cut the
@@ -97,7 +155,14 @@ function encodeWavMono16(samples: Int16Array, sampleRate: number): ArrayBuffer {
 
 export function useAudioRecorder(opts: {
   onLevel?: (rms: number) => void;
-  onStop?: (blob: Blob, mimeType: string, audioMs: number) => void;
+  onStop?: (blob: Blob, mimeType: string, audioMs: number, stats?: CaptureStats) => void;
+  /**
+   * A stop() that decided NOT to ship (no speech detected, dead mic, clip
+   * too short). The view MUST leave its 'recording' state here — before
+   * this callback existed, those paths returned silently and the pill
+   * stayed red forever on a dead pipeline.
+   */
+  onDrop?: (reason: string) => void;
   onError?: (err: Error) => void;
 }) {
   const optsRef = useRef(opts);
@@ -121,8 +186,43 @@ export function useAudioRecorder(opts: {
   const capturingRef = useRef(false);
   const captureStartRef = useRef<number>(0);    // absolute sample index
 
-  const ensureWarm = useCallback(async (): Promise<void> => {
-    if (streamRef.current && streamRef.current.active && procRef.current) return;
+  // Liveness bookkeeping. Date.now() (wall clock) everywhere: it jumps
+  // forward across system sleep — exactly the signal the watchdog wants —
+  // whereas performance.now() may pause during suspend on Windows.
+  const lastTickAtRef = useRef<number>(0);     // stamp of last onaudioprocess
+  const tickCountRef = useRef<number>(0);      // total callbacks ever fired
+  const rebuildsRef = useRef<number>(0);       // heal counter (diagnostics)
+  const lastRebuildFailAtRef = useRef<number>(0);
+  const rebuildingRef = useRef<Promise<void> | null>(null);
+  const suspendedByAppRef = useRef(false);     // interpreter owns the device
+  const muteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deviceChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRmsRef = useRef<number>(0);        // audit-only observability
+
+  // Behaviour flags baked into the URL hash by main (see loadRenderer).
+  // Segment-shaped (`;key=value`) per the hash-parsing lesson in
+  // tasks/lessons.md — substring checks against the full segment literal.
+  const hash = typeof location !== 'undefined' ? location.hash || '' : '';
+  const healEnabledRef = useRef(!hash.includes(';audioheal=0'));
+  const auditRef = useRef(hash.includes(';audit=1'));
+
+  const log = useCallback((...args: unknown[]) => {
+    // console.* in the renderer is forwarded to the main-process stdout by
+    // the console-message hook in src/main/index.ts, so these lines are
+    // visible in field logs — deliberately terse but greppable.
+    console.log('[recorder]', ...args);
+  }, []);
+
+  // Forward ref so closures created inside buildPipeline (track handlers)
+  // can reach rebuild() without a circular useCallback dependency.
+  const rebuildRef = useRef<((reason: string) => Promise<void>) | null>(null);
+
+  /**
+   * Pure creation: acquire the mic + wire the graph. Assumes the previous
+   * pipeline (if any) has been released. Serialized via warmingRef so
+   * concurrent callers await the same build.
+   */
+  const buildPipeline = useCallback(async (): Promise<void> => {
     if (warmingRef.current) return warmingRef.current;
     warmingRef.current = (async () => {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -157,20 +257,27 @@ export function useAudioRecorder(opts: {
       sinkRef.current = sink;
 
       proc.onaudioprocess = (e: AudioProcessingEvent) => {
+        // Liveness heartbeat FIRST — this stamp is the single source of
+        // truth for "the pipeline is actually delivering samples".
+        lastTickAtRef.current = Date.now();
+        tickCountRef.current++;
         const input = e.inputBuffer.getChannelData(0);
         const ring = ringRef.current;
         const ringLen = ringLenRef.current;
         if (!ring || ringLen === 0) return;
-        // Only accumulate RMS while capturing. The mic stays open the whole
-        // session (continuous ring), so this callback fires forever — and the
-        // recorder is idle far more than it captures. Gating the multiply-add
-        // keeps the steady-state idle path to just the Int16 write.
+        // Only accumulate RMS while capturing (or when the audit harness
+        // wants live levels). The mic stays open the whole session
+        // (continuous ring), so this callback fires forever — and the
+        // recorder is idle far more than it captures. Gating the
+        // multiply-add keeps the steady-state idle path to just the Int16
+        // write.
         const capturing = capturingRef.current;
+        const wantRms = capturing || auditRef.current;
         let sumSq = 0;
         let wc = writeCountRef.current;
         for (let i = 0; i < input.length; i++) {
           const s = input[i];
-          if (capturing) sumSq += s * s;
+          if (wantRms) sumSq += s * s;
           // Float[-1,1] → Int16
           let v = s < 0 ? s * 0x8000 : s * 0x7fff;
           if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
@@ -178,15 +285,46 @@ export function useAudioRecorder(opts: {
           wc++;
         }
         writeCountRef.current = wc;
-        if (capturing) {
+        if (wantRms) {
           const rms = Math.sqrt(sumSq / input.length);
-          optsRef.current.onLevel?.(Math.min(1, rms * 2.5));
+          lastRmsRef.current = rms;
+          if (capturing) optsRef.current.onLevel?.(Math.min(1, rms * 2.5));
         }
       };
 
       source.connect(proc);
       proc.connect(sink);
       sink.connect(ctx.destination);
+
+      // Device-level death signals. 'ended' = track gone for good (device
+      // unplugged / driver reset) → rebuild now. 'mute' can be a transient
+      // (Windows ducking, device grabbed in exclusive mode) — a muted track
+      // KEEPS ticking with zeros, so tick-liveness can't see it; rebuild
+      // only if it persists.
+      for (const t of stream.getTracks()) {
+        t.onended = () => {
+          log('track ended — device lost');
+          if (healEnabledRef.current && !suspendedByAppRef.current) {
+            void rebuildRef.current?.('track-ended').catch(() => {});
+          }
+        };
+        t.onmute = () => {
+          log('track muted');
+          if (!healEnabledRef.current || suspendedByAppRef.current) return;
+          if (muteTimerRef.current) clearTimeout(muteTimerRef.current);
+          muteTimerRef.current = setTimeout(() => {
+            const tr = streamRef.current?.getTracks()[0];
+            if (tr && tr.muted) {
+              log(`track still muted after ${MUTE_PERSIST_MS}ms — rebuilding`);
+              void rebuildRef.current?.('track-muted').catch(() => {});
+            }
+          }, MUTE_PERSIST_MS);
+        };
+        t.onunmute = () => {
+          if (muteTimerRef.current) { clearTimeout(muteTimerRef.current); muteTimerRef.current = null; }
+        };
+      }
+
       try { (window as any).parlys?.prewarm?.(); } catch { /* best-effort */ }
     })();
     try {
@@ -197,10 +335,14 @@ export function useAudioRecorder(opts: {
     } finally {
       warmingRef.current = null;
     }
-  }, []);
+  }, [log]);
 
   const release = useCallback(() => {
     capturingRef.current = false;
+    if (muteTimerRef.current) { clearTimeout(muteTimerRef.current); muteTimerRef.current = null; }
+    if (streamRef.current) {
+      for (const t of streamRef.current.getTracks()) { t.onended = null; t.onmute = null; t.onunmute = null; }
+    }
     if (procRef.current) { try { procRef.current.onaudioprocess = null as any; procRef.current.disconnect(); } catch {} procRef.current = null; }
     if (sinkRef.current) { try { sinkRef.current.disconnect(); } catch {} sinkRef.current = null; }
     if (sourceRef.current) { try { sourceRef.current.disconnect(); } catch {} sourceRef.current = null; }
@@ -209,13 +351,100 @@ export function useAudioRecorder(opts: {
     ringRef.current = null;
   }, []);
 
+  /** Resolve true as soon as a NEW tick lands (vs `baseline`), else false. */
+  const waitForTick = useCallback((baseline: number, timeoutMs: number): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      const t0 = Date.now();
+      const poll = () => {
+        if (tickCountRef.current > baseline) { resolve(true); return; }
+        if (Date.now() - t0 >= timeoutMs) { resolve(false); return; }
+        setTimeout(poll, 40);
+      };
+      poll();
+    });
+  }, []);
+
+  /**
+   * THE single destructive path: tear the whole pipeline down and bring it
+   * back up. Serialized (multiple triggers — watchdog, track events,
+   * devicechange, system resume, start() — can fire together after a
+   * wake). If a capture was in flight, it continues on the fresh ring: the
+   * stalled portion was never recorded anyway, and re-anchoring
+   * captureStart on the new ring's origin keeps the slice math valid (a
+   * stale absolute index against a reset writeCount would make stop()
+   * compute count<0).
+   */
+  const rebuild = useCallback(async (reason: string): Promise<void> => {
+    if (rebuildingRef.current) return rebuildingRef.current;
+    rebuildingRef.current = (async () => {
+      const hadPipeline = !!(streamRef.current || ctxRef.current);
+      const wasCapturing = capturingRef.current;
+      log(hadPipeline ? `rebuild (${reason})` : `warm-up (${reason})`);
+      release();
+      await buildPipeline();
+      if (wasCapturing && mountedRef.current) {
+        captureStartRef.current = 0; // fresh ring starts at writeCount 0
+        capturingRef.current = true;
+      }
+      if (hadPipeline) {
+        rebuildsRef.current++;
+        log(`rebuild done (#${rebuildsRef.current})`);
+      }
+    })();
+    try {
+      await rebuildingRef.current;
+    } catch (err) {
+      lastRebuildFailAtRef.current = Date.now();
+      throw err;
+    } finally {
+      rebuildingRef.current = null;
+    }
+  }, [buildPipeline, release, log]);
+  rebuildRef.current = rebuild;
+
+  /** Create-if-absent (or replace-if-dead). Non-destructive when healthy. */
+  const ensureWarm = useCallback(async (): Promise<void> => {
+    if (streamRef.current && streamRef.current.active && procRef.current) return;
+    await rebuild('pipeline-absent-or-dead');
+  }, [rebuild]);
+
+  /**
+   * Guarantee the pipeline EXISTS and is DELIVERING samples before we
+   * promise the caller a capture. Fast path (healthy warm pipeline: a tick
+   * landed <450 ms ago) costs nothing. Degraded paths: resume a suspended
+   * ctx → wait a beat; still nothing → full rebuild → wait for the first
+   * confirmed tick. Throws only when even a fresh getUserMedia can't
+   * produce audio.
+   */
+  const ensureLive = useCallback(async (): Promise<void> => {
+    await ensureWarm();
+    if (!healEnabledRef.current) return;         // legacy A/B behaviour
+    if (suspendedByAppRef.current) return;       // interpreter owns the mic
+    if (Date.now() - lastTickAtRef.current < TICK_FRESH_MS) return;
+
+    // Not ticking. Cheapest candidate first: a suspended/interrupted
+    // context (classic post-sleep state) often just needs resume().
+    const ctx = ctxRef.current;
+    if (ctx && ctx.state !== 'running') {
+      try { await ctx.resume(); } catch { /* rebuild below */ }
+    }
+    if (await waitForTick(tickCountRef.current, START_CONFIRM_MS)) {
+      log('ensureLive: resume/wait sufficed');
+      return;
+    }
+    await rebuild('stale-at-start');
+    if (!(await waitForTick(tickCountRef.current, REBUILD_CONFIRM_MS))) {
+      throw new Error('Micro indisponible — aucun signal audio après réinitialisation');
+    }
+  }, [ensureWarm, rebuild, waitForTick, log]);
+
   // Warm on mount, keep warm the whole session (no idle release — that was
-  // the cause of the intermittent "pas du tout" cold starts). Re-warm on
+  // the cause of the intermittent "pas du tout" cold starts). Re-verify on
   // focus/visibility if the stream ever died.
   useEffect(() => {
     mountedRef.current = true;
-    void ensureWarm().catch(() => { /* retried on start() */ });
-    const onShow = () => { if (document.visibilityState === 'visible') void ensureWarm().catch(() => {}); };
+    void ensureLive().catch(() => { /* retried on start() / watchdog */ });
+    const onShow = () => { if (document.visibilityState === 'visible') void ensureLive().catch(() => {}); };
     window.addEventListener('focus', onShow);
     document.addEventListener('visibilitychange', onShow);
     return () => {
@@ -224,11 +453,104 @@ export function useAudioRecorder(opts: {
       document.removeEventListener('visibilitychange', onShow);
       release();
     };
-  }, [ensureWarm, release]);
+  }, [ensureLive, release]);
+
+  // Watchdog — the always-on safety net. Every 2 s: if the pipeline should
+  // be ticking but isn't (idle >3.5 s / capturing >2 s without a tick), the
+  // stream itself died (stopped tracks keep ticking ZEROS, so tick
+  // freshness alone can't see that), or the wall clock jumped (machine
+  // slept through the interval), heal: resume() first (cheap), full
+  // rebuild if that doesn't restore ticks. Proactive healing here means
+  // the pre-roll is usually warm again BEFORE the user presses the hotkey
+  // — start() then costs nothing extra.
+  useEffect(() => {
+    if (!healEnabledRef.current) return;
+    let lastRun = Date.now();
+    let healing = false;
+    const id = setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastRun;
+      lastRun = now;
+      if (healing || suspendedByAppRef.current || rebuildingRef.current || warmingRef.current) return;
+      if (!mountedRef.current) return;
+      const sinceTick = now - lastTickAtRef.current;
+      const stale = capturingRef.current ? sinceTick > CAPTURE_STALE_MS : sinceTick > IDLE_STALE_MS;
+      const streamDead = !!streamRef.current && !streamRef.current.active;
+      const clockJumped = gap > CLOCK_JUMP_MS;
+      if (!stale && !clockJumped && !streamDead) return;
+      if (now - lastRebuildFailAtRef.current < REBUILD_FAIL_BACKOFF_MS) return;
+      healing = true;
+      void (async () => {
+        try {
+          if (!streamDead) {
+            // Cheap candidate first — only meaningful while the stream is alive.
+            const ctx = ctxRef.current;
+            if (ctx && ctx.state !== 'running') { try { await ctx.resume(); } catch { /* fall through */ } }
+            if (await waitForTick(tickCountRef.current, 400)) {
+              log(`watchdog: resume healed the pipeline (${clockJumped ? 'clock-jump' : `stale ${sinceTick}ms`})`);
+              return;
+            }
+          }
+          await rebuild(
+            streamDead ? 'stream-dead' : clockJumped ? 'wake-from-sleep' : `stale-${sinceTick}ms`,
+          );
+        } catch (e: any) {
+          log('watchdog: heal failed —', e?.message || e);
+        } finally {
+          healing = false;
+        }
+      })();
+    }, WATCHDOG_EVERY_MS);
+    return () => clearInterval(id);
+  }, [rebuild, waitForTick, log]);
+
+  // Device topology changed (headset plugged/unplugged, default mic
+  // switched). While idle, grab a fresh stream so we follow the NEW
+  // default device; mid-capture we leave the current stream alone (the
+  // watchdog + next start() heal if it actually died).
+  useEffect(() => {
+    if (!healEnabledRef.current) return;
+    const md = navigator.mediaDevices;
+    if (!md?.addEventListener) return;
+    const onChange = () => {
+      if (deviceChangeTimerRef.current) clearTimeout(deviceChangeTimerRef.current);
+      deviceChangeTimerRef.current = setTimeout(() => {
+        deviceChangeTimerRef.current = null;
+        if (capturingRef.current || suspendedByAppRef.current || !mountedRef.current) return;
+        log('devicechange — re-acquiring default input');
+        void rebuild('device-change').catch(() => {});
+      }, 700);
+    };
+    md.addEventListener('devicechange', onChange);
+    return () => {
+      md.removeEventListener('devicechange', onChange);
+      if (deviceChangeTimerRef.current) { clearTimeout(deviceChangeTimerRef.current); deviceChangeTimerRef.current = null; }
+    };
+  }, [rebuild, log]);
+
+  // Main broadcasts powerMonitor resume/unlock. The pipeline is the prime
+  // suspect after a sleep — verify it within a beat and heal proactively,
+  // instead of waiting for the user's first (failed) dictation.
+  useEffect(() => {
+    if (!healEnabledRef.current) return;
+    const unsub = (window as any).parlys?.onSystemResumed?.(() => {
+      log('system resumed — verifying pipeline');
+      setTimeout(() => {
+        if (suspendedByAppRef.current || !mountedRef.current) return;
+        void (async () => {
+          const ctx = ctxRef.current;
+          if (ctx && ctx.state !== 'running') { try { await ctx.resume(); } catch { /* fall through */ } }
+          if (await waitForTick(tickCountRef.current, 500)) { log('post-resume: pipeline alive'); return; }
+          try { await rebuild('system-resume'); } catch (e: any) { log('post-resume heal failed —', e?.message || e); }
+        })();
+      }, 700); // give WASAPI a moment to re-enumerate endpoints after wake
+    });
+    return () => { try { unsub?.(); } catch { /* ignore */ } };
+  }, [rebuild, waitForTick, log]);
 
   const start = useCallback(async () => {
     try {
-      await ensureWarm();
+      await ensureLive();
       if (!ringRef.current) throw new Error('Microphone indisponible');
       const prerollSamples = Math.floor(sampleRateRef.current * PREROLL_MS / 1000);
       // Capture from (now − pre-roll), clamped so we never read before the
@@ -240,14 +562,20 @@ export function useAudioRecorder(opts: {
       capturingRef.current = false;
       optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [ensureWarm]);
+  }, [ensureLive]);
 
   const stop = useCallback(() => {
     if (!capturingRef.current) return;
     capturingRef.current = false;
+    // Every non-ship exit goes through onDrop so the view ALWAYS leaves its
+    // 'recording' state — a silent return here used to freeze the pill red.
+    const drop = (reason: string, detail?: string) => {
+      log(`drop: ${reason}${detail ? ` (${detail})` : ''}`);
+      optsRef.current.onDrop?.(reason);
+    };
     const ring = ringRef.current;
     const ringLen = ringLenRef.current;
-    if (!ring || ringLen === 0) return;
+    if (!ring || ringLen === 0) { drop('Micro indisponible'); return; }
     const endAbs = writeCountRef.current;
     // CRITICAL: re-clamp the start to the ring's CURRENT oldest valid sample.
     // captureStartRef was clamped at start() time, but for a capture longer
@@ -258,13 +586,18 @@ export function useAudioRecorder(opts: {
     // correct chronological order. count <= ringLen by construction.
     const startAbs = Math.max(captureStartRef.current, endAbs - ringLen);
     const count = endAbs - startAbs;
-    // Skip trivially short captures (accidental tap / stop-right-after-start).
-    // With the 1 s pre-roll a truly empty blob is rare, but a sub-250 ms slice
-    // is noise — shipping it wastes a Whisper call and can surface a
-    // hallucinated result. Mirrors MIN_PHRASE_MS in the sibling pipelines.
     const sr = sampleRateRef.current;
     const audioMs = Math.round((count / sr) * 1000);
-    if (count === 0 || audioMs < 250) return;
+    // count<=0 means the ring never advanced past our start point — a dead
+    // pipeline that start()'s liveness check missed (or heal disabled).
+    // Never ship: the slice would be stale/garbage audio → hallucinations.
+    if (count <= 0) {
+      drop('Micro muet — aucun audio capturé');
+      if (healEnabledRef.current) void rebuild('dead-at-stop').catch(() => {});
+      return;
+    }
+    // Skip trivially short captures (accidental tap / stop-right-after-start).
+    if (audioMs < MIN_CLIP_MS) { drop('Enregistrement trop court'); return; }
     // Extract the slice with at most two memcpy-speed subarray copies instead
     // of a per-sample modulo loop (this runs on the main thread in stop()).
     const pcm = new Int16Array(count);
@@ -276,13 +609,44 @@ export function useAudioRecorder(opts: {
       pcm.set(ring.subarray(r));
       pcm.set(ring.subarray(0, count - first), first);
     }
+    // Speech gate: no plausible speech → no API call. This is the primary
+    // barrier against Whisper's silence hallucinations ("Merci.", "Thank
+    // you.") — silence never leaves the machine any more. The clip always
+    // includes the 1 s pre-roll, so the adaptive noise floor has real
+    // ambience to calibrate against.
+    const analysis = analyzeSpeech(pcm, sr);
+    const fmt = (x: number) => x.toFixed(4);
+    if (!analysis.hasSpeech) {
+      drop(
+        'Aucune parole détectée',
+        `total=${analysis.totalMs}ms speech=${analysis.speechMs}ms run=${analysis.longestRunFrames} ` +
+        `floor=${fmt(analysis.noiseFloor)} peak=${fmt(analysis.peakRms)} thr=${fmt(analysis.threshold)}`,
+      );
+      return;
+    }
+    // Trim head/tail silence (with natural margins). Trailing silence is
+    // Whisper's other hallucination trigger — a real phrase used to come
+    // back with ", Merci." appended when the user paused before pressing
+    // stop. Also shrinks the upload.
+    const speechPcm = trimToSpeech(pcm, analysis);
+    const shippedMs = Math.round((speechPcm.length / sr) * 1000);
+    log(
+      `ship: total=${analysis.totalMs}ms speech=${analysis.speechMs}ms shipped=${shippedMs}ms ` +
+      `floor=${fmt(analysis.noiseFloor)} peak=${fmt(analysis.peakRms)} thr=${fmt(analysis.threshold)}`,
+    );
     // Downsample toward 16 kHz before encoding — smaller upload, zero quality
     // loss for Whisper (it resamples to 16 kHz internally anyway).
-    const { data: ds, rate: dsRate } = downsampleToward16k(pcm, sr);
+    const { data: ds, rate: dsRate } = downsampleToward16k(speechPcm, sr);
     const wav = encodeWavMono16(ds, dsRate);
     const blob = new Blob([wav], { type: 'audio/wav' });
-    optsRef.current.onStop?.(blob, 'audio/wav', audioMs);
-  }, []);
+    optsRef.current.onStop?.(blob, 'audio/wav', audioMs, {
+      totalMs: analysis.totalMs,
+      speechMs: analysis.speechMs,
+      shippedMs,
+      noiseFloor: analysis.noiseFloor,
+      peakRms: analysis.peakRms,
+    });
+  }, [rebuild, log]);
 
   const isRecording = useCallback(() => capturingRef.current, []);
 
@@ -291,14 +655,59 @@ export function useAudioRecorder(opts: {
   // two getUserMedia streams on the same device simultaneously (WASAPI
   // contention + wasted CPU). suspend() pauses the AudioContext (stops the
   // onaudioprocess ring writes) without releasing the device; resume()
-  // restarts it. No-op if not warm or already in the target state.
+  // restarts it. The suspendedByApp flag keeps the watchdog/liveness checks
+  // dormant meanwhile — an app-suspended context is NOT a zombie.
   const suspend = useCallback(() => {
+    suspendedByAppRef.current = true;
     const ctx = ctxRef.current;
     if (ctx && ctx.state === 'running') { try { void ctx.suspend(); } catch { /* ignore */ } }
   }, []);
   const resume = useCallback(() => {
+    suspendedByAppRef.current = false;
     const ctx = ctxRef.current;
     if (ctx && ctx.state === 'suspended') { try { void ctx.resume(); } catch { /* ignore */ } }
+    // The device may have died WHILE we were suspended (sleep during an
+    // interpreter session) — verify and heal in the background.
+    if (healEnabledRef.current) {
+      void (async () => {
+        if (await waitForTick(tickCountRef.current, 600)) return;
+        try { await rebuild('resume-after-suspend'); } catch { /* watchdog retries */ }
+      })();
+    }
+  }, [rebuild, waitForTick]);
+
+  // Test/audit hooks — exposed ONLY when main baked `;audit=1` into the URL
+  // hash (env PARLYS_AUDIT=1). getState() is a read-only snapshot; kill()
+  // reproduces the two real-world death modes against the LIVE pipeline:
+  //   'suspend'    → ctx.suspend() without the app flag = post-sleep zombie
+  //                  (stream stays "active", ticks stop);
+  //   'stoptracks' → track.stop() = device disappeared (unplug/driver reset).
+  useEffect(() => {
+    if (!auditRef.current) return;
+    (window as any).__parlysAudioAudit = {
+      getState: () => ({
+        ctxState: ctxRef.current?.state ?? 'none',
+        streamActive: !!streamRef.current?.active,
+        capturing: capturingRef.current,
+        writeCount: writeCountRef.current,
+        tickCount: tickCountRef.current,
+        lastTickAgoMs: lastTickAtRef.current ? Date.now() - lastTickAtRef.current : -1,
+        sampleRate: sampleRateRef.current,
+        rebuilds: rebuildsRef.current,
+        healEnabled: healEnabledRef.current,
+        suspendedByApp: suspendedByAppRef.current,
+        lastRms: lastRmsRef.current,
+      }),
+      kill: (mode: 'suspend' | 'stoptracks') => {
+        if (mode === 'suspend') {
+          try { void ctxRef.current?.suspend(); } catch { /* ignore */ }
+        } else {
+          try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch { /* ignore */ }
+        }
+        return mode;
+      },
+    };
+    return () => { try { delete (window as any).__parlysAudioAudit; } catch { /* ignore */ } };
   }, []);
 
   return { start, stop, isRecording, suspend, resume };

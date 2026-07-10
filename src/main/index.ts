@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, Menu, powerMonitor, screen, shell } from 'electron';
 import { join } from 'path';
 import { existsSync, cpSync, renameSync } from 'fs';
 import { IPC, Density } from '../shared/types';
@@ -43,7 +43,12 @@ try {
 }
 
 app.setName('parlys');
-app.setPath('userData', _newDir);
+// Test/diagnostic escape hatch: PARLYS_USERDATA points the WHOLE app state
+// (settings, history, single-instance lock) at an isolated directory, so a
+// harness instance can boot NEXT TO the user's running app without stealing
+// its lock or polluting its data. Unset in normal use.
+const _userDataOverride = (process.env.PARLYS_USERDATA || '').trim();
+app.setPath('userData', _userDataOverride || _newDir);
 
 // Single-instance lock. Without this, double-clicking the desktop
 // shortcut spawns a second Electron process that:
@@ -204,6 +209,11 @@ function clampToDisplays(x: number, y: number): { x: number; y: number } {
  */
 function buildWindow(density: Density): WindowCtx {
   const s = getSettings();
+  // Explicit window icon so the taskbar / Alt-Tab shows the Parlys logo even
+  // when the app runs from the stock electron.exe (the daily-use launch mode
+  // on this machine — see tasks/lessons.md "target the GUI binary directly").
+  // Resolves both in dev (dist/main → ../../assets) and packaged (app.asar).
+  const appIcon = join(__dirname, '..', '..', 'assets', 'icon.ico');
   // Read the user's theme bg0 so the native window backgroundColor matches
   // the renderer's bg0 from the very first frame. With the previous
   // hardcoded '#07070d', a non-midnight theme briefly painted the wrong
@@ -269,6 +279,7 @@ function buildWindow(density: Density): WindowCtx {
       show: false,
       focusable: true,
       paintWhenInitiallyHidden: true,
+      icon: appIcon,
       webPreferences: commonWebPrefs,
     });
     // 'floating' (HWND_TOPMOST) — stays above every ordinary window
@@ -298,6 +309,7 @@ function buildWindow(density: Density): WindowCtx {
       show: false,
       alwaysOnTop: !!s.alwaysOnTop,
       paintWhenInitiallyHidden: true,
+      icon: appIcon,
       webPreferences: commonWebPrefs,
     });
   }
@@ -383,7 +395,16 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   const pillScaleSeg = ctx.density === 'compact'
     ? `;pillscale=${pillDimensions().scale.toFixed(3)}`
     : '';
-  const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg;
+  // Audio-pipeline test flags (consumed by useAudioRecorder):
+  //   PARLYS_AUDIO_HEAL=0 → `;audioheal=0` disables the liveness self-heal
+  //     (legacy behaviour, used to A/B-prove the zombie-mic fix);
+  //   PARLYS_AUDIT=1      → `;audit=1` exposes window.__parlysAudioAudit
+  //     (state snapshots + pipeline-kill simulators for the CDP harness).
+  // Both are inert in normal production launches.
+  const audioFlags =
+    (process.env.PARLYS_AUDIO_HEAL === '0' ? ';audioheal=0' : '') +
+    (process.env.PARLYS_AUDIT === '1' ? ';audit=1' : '');
+  const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg + audioFlags;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
     if (process.env.PARLYS_DEVTOOLS === '1' && ctx.density === 'comfortable') {
@@ -718,6 +739,16 @@ if (process.env.PARLYS_CDP === '1') {
   app.commandLine.appendSwitch('remote-allow-origins', '*');
 }
 
+// Test-only: feed getUserMedia from a WAV file instead of the real mic so
+// the e2e harness (scripts/_e2e-mic.js) is deterministic — speech, silence
+// and noise fixtures produce reproducible pipeline behaviour. Env-driven
+// (not argv) so the harness doesn't depend on Electron's argv→Chromium
+// switch forwarding. Never set in production.
+if (process.env.PARLYS_FAKE_AUDIO) {
+  app.commandLine.appendSwitch('use-fake-device-for-media-stream');
+  app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.PARLYS_FAKE_AUDIO);
+}
+
 app.whenReady().then(async () => {
   installNavigationGuards();
   registerIpc();
@@ -757,6 +788,25 @@ app.whenReady().then(async () => {
   // Focus tracking runs the whole app lifetime so the HWND history is
   // always up to date regardless of density / recreates.
   try { initFocusTracking(); } catch (e) { console.warn('[focus]', e); }
+
+  // System sleep/wake → tell every renderer to re-verify its warm audio
+  // pipeline. After Windows resume, a getUserMedia stream + AudioContext
+  // frequently keep claiming they're fine while onaudioprocess never fires
+  // again ("zombie mic": speech silently undetected until the window was
+  // recreated). The recorder hook rebuilds proactively on this signal so
+  // the mic is alive again seconds after wake — before the next dictation.
+  // 'unlock-screen' included: some sleep paths only surface as a lock.
+  const broadcastSystemResumed = (why: string) => {
+    console.log(`[power] ${why} → renderers notified (audio pipeline re-check)`);
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue;
+      try { win.webContents.send('parlys:systemResumed'); } catch { /* ignore */ }
+    }
+  };
+  try {
+    powerMonitor.on('resume', () => broadcastSystemResumed('resume'));
+    powerMonitor.on('unlock-screen', () => broadcastSystemResumed('unlock-screen'));
+  } catch (e) { console.warn('[power]', e); }
 
   await createWindow();
   try { createTray(getWin); } catch (e) { console.warn('[tray]', e); }

@@ -44,7 +44,7 @@ export function CompactView() {
 
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
-    onStop: async (blob, mimeType) => {
+    onStop: async (blob, mimeType, audioMs, stats) => {
       setRecState('processing');
       setAudioLevel(0);
       const t0 = Date.now();
@@ -56,6 +56,8 @@ export function CompactView() {
           language: settings.language === 'auto' ? undefined : settings.language,
           translateTo: settings.translateTo || undefined,
           mode: settings.mode,
+          audioMs,
+          speechMs: stats?.speechMs,
         });
         setLastLatencyMs(Date.now() - t0);
         if (!res.ok) {
@@ -87,6 +89,13 @@ export function CompactView() {
         setLastError(err?.message || String(err));
         setRecState('error');
       }
+    },
+    // stop() decided not to ship (no speech / dead mic / too short) — leave
+    // the 'recording' state with an explanatory note instead of hanging red.
+    onDrop: (reason) => {
+      setAudioLevel(0);
+      setLastError(reason);
+      setRecState('error');
     },
     onError: (err) => {
       setLastError(err.message);

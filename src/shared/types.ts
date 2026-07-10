@@ -420,6 +420,10 @@ export interface TranscribeRequest {
   language?: string;       // ISO code or undefined
   translateTo?: string;    // target language, overrides settings
   mode: Mode;
+  /** Captured duration (ms, incl. pre-roll) — diagnostics + history. */
+  audioMs?: number;
+  /** Speech-classified duration (ms) measured by the client speech gate. */
+  speechMs?: number;
 }
 
 export interface TranscribeResponse {

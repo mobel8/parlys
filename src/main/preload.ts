@@ -183,6 +183,17 @@ const api = {
     return () => ipcRenderer.removeListener('parlys:densitySwapOut', listener);
   },
 
+  /**
+   * Main broadcasts this on powerMonitor resume/unlock-screen. The audio
+   * recorder subscribes to re-verify (and heal) its warm mic pipeline,
+   * which frequently dies silently across a Windows sleep.
+   */
+  onSystemResumed: (cb: () => void) => {
+    const listener = () => cb();
+    ipcRenderer.on('parlys:systemResumed', listener);
+    return () => ipcRenderer.removeListener('parlys:systemResumed', listener);
+  },
+
   // Main process broadcasts this whenever the user moves the pill-scale
   // slider, so the compact renderer can re-stamp `--pill-scale` +
   // `data-window` in the same frame as the native setBounds.

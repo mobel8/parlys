@@ -5,6 +5,25 @@ Toutes les modifications notables de Parlys sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.8.1] — 2026-07-08
+
+### Corrigé
+
+- **Micro « zombie » : la dictée qui ne détecte plus rien après une veille Windows, un changement de périphérique ou une longue inactivité.** Le pipeline PCM chaud de `useAudioRecorder` pouvait mourir en silence (le flux getUserMedia restait `active`, l'AudioContext prétendait tourner, mais `onaudioprocess` ne tirait plus jamais). Il fallait basculer compact/confortable pour recréer la fenêtre et ranimer le micro. Le hook traite désormais « des échantillons arrivent réellement » comme seule vérité : horodatage de chaque callback, `ensureLive()` au démarrage de chaque dictée (resume puis reconstruction complète si le signal ne revient pas, capture confirmée avant de promettre l'enregistrement), watchdog 2 s qui répare en tâche de fond (idle, mi-capture, flux mort, saut d'horloge = veille), écouteurs `track.ended`/`mute` persistant/`devicechange`, et broadcast `powerMonitor` resume/unlock-screen depuis le main (`parlys:systemResumed`). Les reconstructions réinitialisent le ring buffer : un pipeline ranimé ne peut plus expédier de l'audio antérieur à sa mort.
+- **Mots « parasites » jamais prononcés (« Merci. », etc.).** Trois barrières :
+  1. *Barrière client (nouveau `src/shared/speech-gate.ts`)* : analyse RMS par trames de 30 ms avec plancher de bruit adaptatif; un clip sans parole plausible (durée cumulée < 180 ms ou aucune tenue vocale ≥ 120 ms) est abandonné localement, l'API n'est même pas appelée, la pilule affiche « Aucune parole détectée ». Le silence ne quitte plus la machine.
+  2. *Trim tête/queue* : les silences avant/après la parole sont coupés (marges 250/320 ms) avant l'envoi, ce qui supprime le déclencheur classique des hallucinations de fin de clip et allège l'upload.
+  3. *Filtre serveur fail-closed* : quand Groq marque TOUS les segments comme silence/bruit (`no_speech_prob`…), `applySegmentFilter` renvoie désormais chaîne vide au lieu de retomber sur le texte halluciné (c'est exactement ainsi qu'un « Merci. » sur silence atteignait le presse-papiers, « merci » nu ne pouvant pas figurer dans les regex).
+  En prime, le post-processing LLM n'est plus invoqué sur une transcription vide (un LLM à qui on demande de reformuler « rien » invente des politesses).
+- **Pilule bloquée en rouge « enregistrement »** quand `stop()` n'avait rien à expédier (micro mort, clip trop court) : tous les chemins sans envoi passent maintenant par un callback `onDrop` qui rend la main à l'UI avec un message explicite.
+
+### Ajouté
+
+- Icône de fenêtre explicite (`assets/icon.ico`) sur la pilule et la fenêtre confortable : Alt-Tab et la barre des tâches montrent le logo Parlys même en lançant via electron.exe (mode de lancement quotidien sur cette machine). Fin du rebranding côté OS : raccourcis Bureau + menu Démarrer renommés « Parlys » (même cible), ancienne installation NSIS « VoiceInk 1.7.0 » désinstallée (~420 Mo libérés sur C:).
+- `audioMs`/`speechMs` optionnels dans la requête de transcription (diagnostics + `audioMs` réel dans l'historique, qui restait à 0).
+- Crochets de test : `PARLYS_USERDATA` (instance isolée, verrou single-instance séparé), `PARLYS_FAKE_AUDIO` (getUserMedia alimenté par un WAV), `PARLYS_AUDIT=1` (hooks d'introspection du pipeline), `PARLYS_AUDIO_HEAL=0` (désactive l'auto-guérison, sert à prouver le fix en A/B).
+- Tests : `scripts/test-speech-gate.js` (14 asserts DSP sur le build compilé), `scripts/test-hallucination-filter.js` (11 asserts filtre segments + regex), `scripts/_e2e-mic.js` (6 scénarios CDP sur le build exact avec faux périphérique audio : parole, silence, bruit, baseline-bug reproduit, guérison suspend, guérison périphérique mort — 17/17).
+
 ## [1.7.0] — 2026-04-22
 
 ### Ajouté

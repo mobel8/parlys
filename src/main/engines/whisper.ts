@@ -264,13 +264,21 @@ function normalizeLangToISO(lang?: string): string | undefined {
  * segment whose confidence signals flag it as a hallucination
  * (`isLowConfidence`).
  *
- * Falls back to the response's `text` field if segments are absent
- * (older API versions) or if every segment was filtered (we don't
- * want to return an empty string when the model produced *something*
- * confident enough — that case is handled by callers via the regex
- * hallucination scrubber).
+ * Falls back to the response's `text` field ONLY when segments are
+ * absent (older API versions / stripped responses).
+ *
+ * When segments ARE present and EVERY one of them is low-confidence,
+ * the answer is the empty string — FAIL-CLOSED. This used to fall back
+ * to the full text "for the regex scrubber", which is exactly how a
+ * silence-only clip became a pasted "Merci." : the model itself said
+ * no_speech on every segment, but the hallucinated token wasn't in the
+ * regex bank (bare "merci" can't be — it's legitimate dictation), so
+ * the fail-open path shipped it to the user's cursor. When the model
+ * flags everything it produced as silence/noise, believe it.
+ *
+ * Exported for the unit-test harness (scripts/test-hallucination-filter.js).
  */
-function applySegmentFilter(data: {
+export function applySegmentFilter(data: {
   text?: string;
   segments?: VerboseSegment[];
 }): string {
@@ -296,13 +304,15 @@ function applySegmentFilter(data: {
     kept.push(seg.text);
   }
   if (kept.length === 0) {
-    // Every segment was flagged — fall back to the full text. Downstream
-    // hallucination regex will likely scrub the obvious bits ("Merci
-    // d'avoir regardé"), and if NOTHING survives the user simply gets
-    // an empty result, which is correct: their audio was unintelligible.
     if (droppedCount > 0) {
-      console.warn(`[whisper] every segment (${droppedCount}) was low-confidence; returning full text for regex scrubber`);
+      console.warn(
+        `[whisper] every segment (${droppedCount}) was low-confidence → returning EMPTY ` +
+        `(discarded: "${fallback.slice(0, 60)}")`,
+      );
+      return '';
     }
+    // No segment carried usable text at all (all missing/typeless) —
+    // treat like a segment-less response.
     return fallback;
   }
   // Joining with a single space matches Whisper's own segment concat.
