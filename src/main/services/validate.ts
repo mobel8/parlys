@@ -14,7 +14,7 @@
  * TypeScript types (and electron-store's merge) are for.
  */
 
-import { Settings, TranscribeRequest, InterpretRequest } from '../../shared/types';
+import { Settings, TranscribeRequest, TranscribeCommitRequest, InterpretRequest } from '../../shared/types';
 
 /** Upper bound on how big an audio payload we accept in a single IPC call. */
 const MAX_AUDIO_BASE64_LEN = 32 * 1024 * 1024; // ~24 MB decoded, enough for long dictations
@@ -116,7 +116,49 @@ export function validateTranscribeRequest(x: unknown): TranscribeRequest | null 
     isNumber(v) ? Math.max(0, Math.min(600_000, Math.round(v))) : undefined;
   const audioMs = clampMs(x.audioMs);
   const speechMs = clampMs(x.speechMs);
-  return { audioBase64, mimeType, mode, language, translateTo, audioMs, speechMs };
+  // Optional client speech geometry (speech-gate) — bounded list of
+  // [startMs, endMs) pairs plus first/last speech instant. Malformed →
+  // dropped entirely (the server filter then skips its timestamp rules,
+  // never rejects the transcription).
+  let speech: TranscribeRequest['speech'];
+  if (isObject(x.speech)) {
+    const sp = x.speech as Record<string, unknown>;
+    const endMs = clampMs(sp.endMs);
+    const startMs = clampMs(sp.startMs);
+    if (endMs !== undefined && startMs !== undefined && Array.isArray(sp.intervalsMs)
+      && sp.intervalsMs.length <= 400) {
+      const intervalsMs: Array<[number, number]> = [];
+      for (const iv of sp.intervalsMs) {
+        if (!Array.isArray(iv) || iv.length !== 2) { intervalsMs.length = 0; break; }
+        const a = clampMs(iv[0]);
+        const b = clampMs(iv[1]);
+        if (a === undefined || b === undefined || b <= a) { intervalsMs.length = 0; break; }
+        intervalsMs.push([a, b]);
+      }
+      if (intervalsMs.length > 0) speech = { intervalsMs, endMs, startMs };
+    }
+  }
+  // Speculative correlation id: short printable token, no path separators.
+  const speculative = x.speculative === true;
+  let specId: string | undefined;
+  if (isString(x.specId)) {
+    const s = x.specId.trim();
+    if (s.length > 0 && s.length <= 96 && !/[\\/\0\r\n]/.test(s)) specId = s;
+  }
+  if (speculative && !specId) return null; // speculative REQUIRES a valid id
+  return {
+    audioBase64, mimeType, mode, language, translateTo, audioMs, speechMs,
+    speech, speculative: speculative || undefined, specId,
+  };
+}
+
+/** Validate a speculative-commit request coming from the renderer. */
+export function validateTranscribeCommitRequest(x: unknown): TranscribeCommitRequest | null {
+  if (!isObject(x)) return null;
+  if (!isString(x.specId)) return null;
+  const s = x.specId.trim();
+  if (s.length === 0 || s.length > 96 || /[\\/\0\r\n]/.test(s)) return null;
+  return { specId: s };
 }
 
 /** Validate an interpreter request coming from the renderer. */
@@ -281,6 +323,7 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     'listenerEnabled',
     'speakTranslations',
     'vadCalibrated',
+    'speculativeStt',
   ];
   for (const k of boolFields) {
     if (isBoolean(p[k as string])) (out as any)[k] = p[k as string];

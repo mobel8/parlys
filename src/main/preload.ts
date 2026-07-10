@@ -24,6 +24,7 @@ type ExportFormat = 'json' | 'markdown' | 'txt' | 'csv';
  */
 const IPC = {
   TRANSCRIBE: 'parlys:transcribe',
+  TRANSCRIBE_COMMIT: 'parlys:transcribeCommit',
   INTERPRET: 'parlys:interpret',
   ON_INTERPRET_CHUNK: 'parlys:interpretChunk',
   LIST_VOICES: 'parlys:listVoices',
@@ -68,6 +69,16 @@ const api = {
 
   transcribe: (req: TranscribeRequest): Promise<TranscribeResponse> =>
     ipcRenderer.invoke(IPC.TRANSCRIBE, req),
+
+  /**
+   * Commit a parked SPECULATIVE transcription (fired mid-capture via
+   * transcribe({speculative: true, specId})): main awaits the parked
+   * pipeline (usually already resolved) and applies the side effects
+   * (clipboard + paste + history) NOW. On specMiss the caller falls back
+   * to a classic transcribe() of the final clip.
+   */
+  transcribeCommit: (req: { specId: string }): Promise<TranscribeResponse> =>
+    ipcRenderer.invoke(IPC.TRANSCRIBE_COMMIT, req),
 
   /**
    * Voice interpreter — streams translated audio back over

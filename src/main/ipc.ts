@@ -1,7 +1,10 @@
 import { ipcMain, clipboard, app, dialog, BrowserWindow } from 'electron';
 import { randomUUID } from 'crypto';
 import { writeFile } from 'fs/promises';
-import { IPC, TranscribeResponse, InterpretResponse, InterpretChunkEvent, Settings, VoiceInfo, TTSProvider } from '../shared/types';
+import {
+  IPC, TranscribeRequest, TranscribeResponse, InterpretResponse, InterpretChunkEvent,
+  Settings, VoiceInfo, TTSProvider, HistoryEntry,
+} from '../shared/types';
 import { getSettings, setSettings } from './services/config';
 import { transcribeWithGroq } from './engines/whisper';
 import { postProcess, translateText, streamTranslate, prewarmGroq, prewarmLlm } from './engines/llm';
@@ -33,6 +36,7 @@ import {
   validateSpeakRequest,
   validateListenerTranscribeRequest,
   validateHistoryEntry,
+  validateTranscribeCommitRequest,
   sanitizeInjectionText,
 } from './services/validate';
 
@@ -90,6 +94,61 @@ let currentSpeakAbort: AbortController | null = null;
 function isSupersededReason(reason: unknown): boolean {
   return reason === 'superseded'
     || (typeof reason === 'object' && reason !== null && (reason as any).message === 'superseded');
+}
+
+// ---------------------------------------------------------------------
+// SPECULATIVE TRANSCRIPTION registry.
+//
+// While the user is still recording, the renderer detects end-of-utterance
+// silence and fires TRANSCRIBE with { speculative: true, specId }: the full
+// pipeline runs (Whisper + cleanup + replacements + translation + LLM mode)
+// but with ZERO side effects, and the in-flight/finished result is parked
+// here. When the user presses stop without having spoken again, the
+// renderer sends TRANSCRIBE_COMMIT { specId }: we await the parked promise
+// (usually already resolved — the network round-trip happened during the
+// user's natural end-of-utterance pause) and apply the side effects
+// (clipboard + paste + history). Perceived stop→paste latency collapses
+// from ~350-800 ms (Whisper+LLM) to the few ms of the commit IPC.
+//
+// Consistency: the speculated clip is byte-identical to what stop() would
+// ship for the same utterance (same gate/trim/encode path, and the commit
+// only happens when the speech end did not move) — so speculation can never
+// paste something different from what the classic path would have pasted.
+//
+// Hygiene: ONE dictation at a time — a new speculative call aborts every
+// older entry, a classic transcription aborts them all, entries expire
+// after SPEC_TTL_MS. Speculative Whisper calls run with maxRetries=0 so a
+// 429 never burns the rate limit on a result the user may never commit.
+// ---------------------------------------------------------------------
+interface PipelineResult {
+  response: TranscribeResponse;
+  final: string;
+  historyEntry: HistoryEntry | null;
+}
+interface SpecEntry {
+  promise: Promise<PipelineResult>;
+  abort: AbortController;
+  createdAt: number;
+}
+const specRegistry = new Map<string, SpecEntry>();
+const SPEC_TTL_MS = 120_000;
+
+function abortSpecEntries(reason: string): void {
+  for (const [id, e] of specRegistry) {
+    try { e.abort.abort('superseded'); } catch { /* already settled */ }
+    specRegistry.delete(id);
+    console.log(`[transcribe] spec ${id} discarded (${reason})`);
+  }
+}
+
+function purgeExpiredSpecs(): void {
+  const now = Date.now();
+  for (const [id, e] of specRegistry) {
+    if (now - e.createdAt > SPEC_TTL_MS) {
+      try { e.abort.abort('expired'); } catch { /* already settled */ }
+      specRegistry.delete(id);
+    }
+  }
 }
 
 export function registerIpc(): void {
@@ -224,167 +283,241 @@ export function registerIpc(): void {
     return injectText(safe);
   });
 
-  ipcMain.handle(IPC.TRANSCRIBE, async (_e, rawReq: unknown): Promise<TranscribeResponse> => {
-    const req = validateTranscribeRequest(rawReq);
-    if (!req) {
-      return { ok: false, rawText: '', finalText: '', durationMs: 0, error: 'invalid request' };
+  /**
+   * The FULL dictation pipeline (Whisper → cleanup → replacements →
+   * translation → LLM mode), with NO side effects — pure audio→text.
+   * Shared verbatim by the classic path, the speculative path and (via the
+   * parked PipelineResult) the commit. Throws on failure; callers map to an
+   * error TranscribeResponse.
+   */
+  async function runTranscription(
+    req: TranscribeRequest,
+    t0: number,
+    signal?: AbortSignal,
+  ): Promise<PipelineResult> {
+    const settings = getSettings();
+    const tag = req.speculative ? `spec ${req.specId}` : 'classic';
+    const buf = Buffer.from(req.audioBase64, 'base64');
+    console.log(
+      `[transcribe] received audio (${tag}): ${buf.length} bytes (${req.mimeType})` +
+      (req.audioMs !== undefined ? ` audioMs=${req.audioMs}` : '') +
+      (req.speechMs !== undefined ? ` speechMs=${req.speechMs}` : '') +
+      (req.speech ? ` speechEnd=${req.speech.endMs}ms intervals=${req.speech.intervalsMs.length}` : ''),
+    );
+    // 1.2 KB ≈ a typical 100 ms opus frame + webm header — anything smaller
+    // is almost certainly an empty container the user produced by mis-clicking
+    // the record button. Was 500 B which was so low it accepted header-only
+    // blobs and shipped them to Whisper, which returned hallucinated text.
+    if (buf.length < 1200) {
+      throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
     }
-    const t0 = Date.now();
+
+    const t1 = Date.now();
+    // Per-stage deadline so a stalled Groq socket can't hang this handler
+    // forever. dispose() in finally guarantees the timer never leaks. The
+    // external `signal` (speculative supersede) chains in so an obsolete
+    // speculation stops burning bandwidth the moment it's replaced.
+    const sttAb = abortableSignal(STT_TIMEOUT_MS, signal);
+    let r: Awaited<ReturnType<typeof transcribeWithGroq>>;
     try {
-      const settings = getSettings();
-      // Self-prewarm (belt-and-suspenders): warm the Whisper origin AND the
-      // configured post-process LLM origin in case the renderer's record-start
-      // PREWARM was dropped. Fire-and-forget; the pooled socket is reused by
-      // the Whisper POST + post-process below.
-      prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
-      if (req.mode !== 'raw') prewarmLlm(settings);
-      const buf = Buffer.from(req.audioBase64, 'base64');
-      console.log(
-        `[transcribe] received audio: ${buf.length} bytes (${req.mimeType})` +
-        (req.audioMs !== undefined ? ` audioMs=${req.audioMs}` : '') +
-        (req.speechMs !== undefined ? ` speechMs=${req.speechMs}` : ''),
-      );
-      // 1.2 KB ≈ a typical 100 ms opus frame + webm header — anything smaller
-      // is almost certainly an empty container the user produced by mis-clicking
-      // the record button. Was 500 B which was so low it accepted header-only
-      // blobs and shipped them to Whisper, which returned hallucinated text.
-      if (buf.length < 1200) {
-        throw new Error('Audio trop court / silencieux. Parlez un peu plus longtemps.');
-      }
-
-      const t1 = Date.now();
-      // Per-stage deadline so a stalled Groq socket can't hang this handler
-      // forever. dispose() in finally guarantees the timer never leaks.
-      const sttAb = abortableSignal(STT_TIMEOUT_MS);
-      let r: Awaited<ReturnType<typeof transcribeWithGroq>>;
-      try {
-        r = await transcribeWithGroq(buf, req.mimeType, settings, sttAb.signal);
-      } finally {
-        sttAb.dispose();
-      }
-      const t2 = Date.now();
-      console.log(`[transcribe] groq whisper: ${t2 - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'})`);
-
-      // Hallucination + filler scrubbing — runs in EVERY mode (incl. raw)
-      // because the LLM modes are the only thing that used to strip
-      // "euh"/"um" and we don't want raw mode to be the broken one. The
-      // hallucination filter also catches "Merci d'avoir regardé"-style
-      // YouTube tails Whisper emits on trailing silence.
-      const cleaned = cleanupTranscription(r.text, r.language || settings.language);
-      if (cleaned !== r.text) {
-        console.log(`[transcribe] cleanup: ${r.text.length}→${cleaned.length}ch (fillers/hallucinations)`);
-      }
-
-      // Custom dictionary (replacements) — applied to the cleaned Whisper
-      // output before anything else so translation / LLM see the corrected
-      // text.
-      let rawText = cleaned;
-      if (settings.replacementsEnabled !== false && settings.replacements?.length) {
-        const rs = Date.now();
-        rawText = applyReplacements(rawText, settings.replacements);
-        if (rawText !== cleaned) {
-          console.log(`[transcribe] applied ${settings.replacements.length} replacement rule(s) in ${Date.now() - rs}ms`);
-        }
-      }
-
-      // Automatic translation if target language requested (explicit in request
-      // takes precedence over stored setting).
-      const translateTo = (req.translateTo !== undefined ? req.translateTo : settings.translateTo) || '';
-      let translated: string | null = null;
-      let translateFailed = false;
-      if (translateTo && rawText.trim()) {
-        const ts = Date.now();
-        const trAb = abortableSignal(LLM_TIMEOUT_MS);
-        try {
-          translated = await translateText(rawText, translateTo, settings, r.language, () => { translateFailed = true; }, trAb.signal);
-        } finally {
-          trAb.dispose();
-        }
-        console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms${translateFailed ? ' (FAILED → source text)' : ''}`);
-      }
-
-      // LLM post-processing operates on whichever text we'll present
-      // (translated if any, else raw) so the reformulation is in the
-      // final target language. postProcess resolves the {{LANG}}
-      // placeholder internally from (1) the explicit translation
-      // target, (2) Whisper's detected language, or (3) the user's
-      // language setting — in that order.
-      let final = translated ?? rawText;
-      let postProcessFailed = false;
-      // Never post-process an EMPTY transcription: an LLM asked to
-      // "reformulate" nothing tends to invent pleasantries out of thin air
-      // ("Merci de votre attention"…) — the exact parasite-words bug this
-      // pipeline is defending against.
-      if (req.mode !== 'raw' && final.trim()) {
-        const ps = Date.now();
-        const langHint = translateTo || r.language;
-        const ppAb = abortableSignal(LLM_TIMEOUT_MS);
-        try {
-          final = await postProcess(final, req.mode, settings, langHint, () => { postProcessFailed = true; }, ppAb.signal);
-        } finally {
-          ppAb.dispose();
-        }
-        console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms${postProcessFailed ? ' (FAILED → raw text)' : ''}`);
-      }
-      // The mode/translation silently degraded to raw/source text — flag it
-      // so the renderer can warn the user instead of presenting it as success.
-      const empty = !final.trim();
-
-      const durationMs = Date.now() - t0;
-
-      // Write the clipboard NOW (cheap, sync).
-      if (settings.autoCopy || settings.autoInject) {
-        try { clipboard.writeText(final); } catch {}
-      }
-
-      // Inject DIRECTLY from main when autoInject is on, instead of returning
-      // to the renderer and waiting for it to call back injectText(). This
-      // removes a full renderer round-trip (IPC reply → React processing →
-      // IPC call) from the paste path — the Ctrl+V fires the instant Whisper
-      // + cleanup finish here. The renderer skips its own injectText when it
-      // sees `injected: true`, so there's no double paste.
-      let injected = false;
-      if (settings.autoInject && final.trim()) {
-        try { await injectText(final); injected = true; }
-        catch (e) { console.warn('[transcribe] main-side inject failed, renderer will retry:', e); }
-      }
-
-      // Defer the history write OFF the critical path. addHistory() does a
-      // synchronous load + JSON.parse + JSON.stringify + writeFileSync of the
-      // ENTIRE history file (up to 1000 entries / 500 KB+), which blocks the
-      // main-process event loop for 20-100 ms — including the injectText IPC
-      // the renderer fires right after this response. setImmediate runs it
-      // after the IPC reply is flushed, so the paste is never delayed by disk.
-      const historyEntry = {
-        id: randomUUID(),
-        createdAt: Date.now(),
-        rawText,
-        finalText: final,
-        mode: req.mode,
-        language: r.language || req.language || 'auto',
-        translatedTo: translateTo || undefined,
-        durationMs,
-        audioMs: req.audioMs ?? 0,
-        tags: [],
-        wordCount: wordCount(final),
-      };
-      setImmediate(() => {
-        try { addHistory(historyEntry); }
-        catch (e) { console.warn('[transcribe] deferred addHistory failed:', e); }
+      r = await transcribeWithGroq(buf, req.mimeType, settings, sttAb.signal, {
+        // Client speech geometry → timestamp cross-check in the segment/word
+        // hallucination filter (dictation pipeline only).
+        speechMeta: req.speech,
+        // Never spend 429 retries on a speculative call the user may never
+        // commit; the classic path at stop-time retries as usual.
+        maxRetries: req.speculative ? 0 : undefined,
       });
+    } finally {
+      sttAb.dispose();
+    }
+    const t2 = Date.now();
+    // NOTE: the `groq whisper:` prefix is parsed by scripts/_e2e-mic.js and
+    // scripts/_bench-latency.js — keep it stable, tag goes at the end.
+    console.log(`[transcribe] groq whisper: ${t2 - t1}ms → "${r.text.slice(0, 80)}" (lang=${r.language || '?'}) [${tag}]`);
 
-      return {
+    // Hallucination + filler scrubbing — runs in EVERY mode (incl. raw)
+    // because the LLM modes are the only thing that used to strip
+    // "euh"/"um" and we don't want raw mode to be the broken one. The
+    // hallucination filter also catches "Merci d'avoir regardé"-style
+    // YouTube tails Whisper emits on trailing silence.
+    const cleaned = cleanupTranscription(r.text, r.language || settings.language);
+    if (cleaned !== r.text) {
+      console.log(`[transcribe] cleanup: ${r.text.length}→${cleaned.length}ch (fillers/hallucinations)`);
+    }
+
+    // Custom dictionary (replacements) — applied to the cleaned Whisper
+    // output before anything else so translation / LLM see the corrected
+    // text.
+    let rawText = cleaned;
+    if (settings.replacementsEnabled !== false && settings.replacements?.length) {
+      const rs = Date.now();
+      rawText = applyReplacements(rawText, settings.replacements);
+      if (rawText !== cleaned) {
+        console.log(`[transcribe] applied ${settings.replacements.length} replacement rule(s) in ${Date.now() - rs}ms`);
+      }
+    }
+
+    // Automatic translation if target language requested (explicit in request
+    // takes precedence over stored setting).
+    const translateTo = (req.translateTo !== undefined ? req.translateTo : settings.translateTo) || '';
+    let translated: string | null = null;
+    let translateFailed = false;
+    if (translateTo && rawText.trim()) {
+      const ts = Date.now();
+      const trAb = abortableSignal(LLM_TIMEOUT_MS, signal);
+      try {
+        translated = await translateText(rawText, translateTo, settings, r.language, () => { translateFailed = true; }, trAb.signal);
+      } finally {
+        trAb.dispose();
+      }
+      console.log(`[transcribe] translation → ${translateTo}: ${Date.now() - ts}ms${translateFailed ? ' (FAILED → source text)' : ''}`);
+    }
+
+    // LLM post-processing operates on whichever text we'll present
+    // (translated if any, else raw) so the reformulation is in the
+    // final target language. postProcess resolves the {{LANG}}
+    // placeholder internally from (1) the explicit translation
+    // target, (2) Whisper's detected language, or (3) the user's
+    // language setting — in that order.
+    let final = translated ?? rawText;
+    let postProcessFailed = false;
+    // Never post-process an EMPTY transcription: an LLM asked to
+    // "reformulate" nothing tends to invent pleasantries out of thin air
+    // ("Merci de votre attention"…) — the exact parasite-words bug this
+    // pipeline is defending against.
+    if (req.mode !== 'raw' && final.trim()) {
+      const ps = Date.now();
+      const langHint = translateTo || r.language;
+      const ppAb = abortableSignal(LLM_TIMEOUT_MS, signal);
+      try {
+        final = await postProcess(final, req.mode, settings, langHint, () => { postProcessFailed = true; }, ppAb.signal);
+      } finally {
+        ppAb.dispose();
+      }
+      console.log(`[transcribe] llm post-process mode=${req.mode}: ${Date.now() - ps}ms${postProcessFailed ? ' (FAILED → raw text)' : ''}`);
+    }
+    // The mode/translation silently degraded to raw/source text — flag it
+    // so the renderer can warn the user instead of presenting it as success.
+    const empty = !final.trim();
+
+    const durationMs = Date.now() - t0;
+    const historyEntry: HistoryEntry = {
+      id: randomUUID(),
+      createdAt: Date.now(),
+      rawText,
+      finalText: final,
+      mode: req.mode,
+      language: r.language || req.language || 'auto',
+      translatedTo: translateTo || undefined,
+      durationMs,
+      audioMs: req.audioMs ?? 0,
+      tags: [],
+      wordCount: wordCount(final),
+    };
+    return {
+      final,
+      historyEntry,
+      response: {
         ok: true,
         rawText,
         finalText: final,
         detectedLanguage: r.language,
         translatedTo: translateTo || undefined,
         durationMs,
-        injected,
         postProcessFailed: postProcessFailed || undefined,
         translateFailed: translateFailed || undefined,
         empty: empty || undefined,
-      };
+      },
+    };
+  }
+
+  /**
+   * Side effects of a finished dictation: clipboard, direct main-side
+   * paste, deferred history write. Shared by the classic path and the
+   * speculative commit so both behave byte-for-byte the same.
+   * Returns whether the text was injected from main.
+   */
+  async function applyTranscriptionSideEffects(pr: PipelineResult): Promise<boolean> {
+    const settings = getSettings();
+    const final = pr.final;
+
+    // Write the clipboard NOW (cheap, sync).
+    if (settings.autoCopy || settings.autoInject) {
+      try { clipboard.writeText(final); } catch { /* clipboard busy */ }
+    }
+
+    // Inject DIRECTLY from main when autoInject is on, instead of returning
+    // to the renderer and waiting for it to call back injectText(). This
+    // removes a full renderer round-trip (IPC reply → React processing →
+    // IPC call) from the paste path — the Ctrl+V fires the instant Whisper
+    // + cleanup finish here. The renderer skips its own injectText when it
+    // sees `injected: true`, so there's no double paste.
+    let injected = false;
+    if (settings.autoInject && final.trim()) {
+      try { await injectText(final); injected = true; }
+      catch (e) { console.warn('[transcribe] main-side inject failed, renderer will retry:', e); }
+    }
+
+    // Defer the history write OFF the critical path. addHistory() does a
+    // synchronous load + JSON.parse + JSON.stringify + writeFileSync of the
+    // ENTIRE history file (up to 1000 entries / 500 KB+), which blocks the
+    // main-process event loop for 20-100 ms — including the injectText IPC
+    // the renderer fires right after this response. setImmediate runs it
+    // after the IPC reply is flushed, so the paste is never delayed by disk.
+    if (pr.historyEntry) {
+      const entry = pr.historyEntry;
+      setImmediate(() => {
+        try { addHistory(entry); }
+        catch (e) { console.warn('[transcribe] deferred addHistory failed:', e); }
+      });
+    }
+    return injected;
+  }
+
+  ipcMain.handle(IPC.TRANSCRIBE, async (_e, rawReq: unknown): Promise<TranscribeResponse> => {
+    const req = validateTranscribeRequest(rawReq);
+    if (!req) {
+      return { ok: false, rawText: '', finalText: '', durationMs: 0, error: 'invalid request' };
+    }
+    const t0 = Date.now();
+    const settings = getSettings();
+    // Self-prewarm (belt-and-suspenders): warm the Whisper origin AND the
+    // configured post-process LLM origin in case the renderer's record-start
+    // PREWARM was dropped. Fire-and-forget; the pooled socket is reused by
+    // the Whisper POST + post-process below.
+    prewarmGroq(settings.groqApiKey || settings.llmApiKey || '');
+    if (req.mode !== 'raw') prewarmLlm(settings);
+
+    // --- SPECULATIVE: run the pipeline sans side effects, park the result.
+    if (req.speculative && req.specId) {
+      purgeExpiredSpecs();
+      // One dictation at a time: any older parked speculation is dead
+      // weight (stop() only ever commits the NEWEST spec id) — abort it so
+      // an obsolete Whisper call stops burning bandwidth/rate-limit.
+      abortSpecEntries('superseded by newer speculation');
+      const abort = new AbortController();
+      const promise = runTranscription(req, t0, abort.signal).catch((err: any): PipelineResult => ({
+        final: '',
+        historyEntry: null,
+        response: {
+          ok: false, rawText: '', finalText: '',
+          durationMs: Date.now() - t0, error: err?.message || String(err),
+        },
+      }));
+      specRegistry.set(req.specId, { promise, abort, createdAt: Date.now() });
+      const pr = await promise;
+      console.log(`[latency] spec ${req.specId} pipeline=${Date.now() - t0}ms ok=${pr.response.ok}`);
+      return pr.response;
+    }
+
+    // --- CLASSIC: any parked speculation is now obsolete by definition.
+    abortSpecEntries('superseded by classic transcription');
+    try {
+      const pr = await runTranscription(req, t0);
+      const injected = await applyTranscriptionSideEffects(pr);
+      console.log(`[latency] classic total=${Date.now() - t0}ms injected=${injected}`);
+      return { ...pr.response, injected, durationMs: Date.now() - t0 };
     } catch (err: any) {
       console.error('[transcribe] error:', err?.message || err);
       return {
@@ -395,6 +528,40 @@ export function registerIpc(): void {
         error: err?.message || String(err),
       };
     }
+  });
+
+  // Commit a parked speculative transcription: await it (usually already
+  // resolved), apply the side effects NOW, return the full response. On any
+  // miss (unknown id, expired, pipeline failed) → specMiss: the renderer
+  // falls back to a classic transcription of the final clip it still holds,
+  // i.e. exactly today's behaviour.
+  ipcMain.handle(IPC.TRANSCRIBE_COMMIT, async (_e, rawReq: unknown): Promise<TranscribeResponse> => {
+    const req = validateTranscribeCommitRequest(rawReq);
+    const t0 = Date.now();
+    const miss = (why: string): TranscribeResponse => ({
+      ok: false, rawText: '', finalText: '', durationMs: Date.now() - t0,
+      specMiss: true, error: why,
+    });
+    if (!req) return miss('invalid request');
+    purgeExpiredSpecs();
+    const entry = specRegistry.get(req.specId);
+    if (!entry) {
+      console.warn(`[latency] spec-commit MISS ${req.specId} (not in registry)`);
+      return miss('speculation introuvable');
+    }
+    specRegistry.delete(req.specId);
+    const pr = await entry.promise;
+    const waitedMs = Date.now() - t0;
+    if (!pr.response.ok) {
+      console.warn(`[latency] spec-commit ${req.specId} pipeline had FAILED (${pr.response.error}) → renderer falls back`);
+      return { ...pr.response, specMiss: true };
+    }
+    const injected = await applyTranscriptionSideEffects(pr);
+    console.log(
+      `[latency] spec-commit ${req.specId} waited=${waitedMs}ms total=${Date.now() - t0}ms ` +
+      `injected=${injected} → "${pr.final.slice(0, 60)}"`,
+    );
+    return { ...pr.response, injected, durationMs: Date.now() - t0 };
   });
 
   // -------------------------------------------------------------------

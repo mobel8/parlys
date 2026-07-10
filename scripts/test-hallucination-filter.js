@@ -83,6 +83,131 @@ check(
   'Première phrase. Deuxième phrase.',
 );
 
+// ------------------------------------------------ v1.9: timestamp cross-check
+// Client speech geometry (speech-gate) vs Whisper segment/word timestamps.
+// meta times are ms relative to the shipped clip.
+
+// TAIL-SEGMENT rule: a segment starting way after the client's measured end
+// of speech is invented (the clip physically ends ~320 ms after endMs).
+check(
+  'meta: segment starting after speech end → dropped',
+  applySegmentFilter({
+    text: 'Voici mon rapport. Merci de votre attention.',
+    segments: [
+      { start: 0.2, end: 2.1, text: 'Voici mon rapport.', no_speech_prob: 0.01, avg_logprob: -0.2 },
+      { start: 3.0, end: 4.2, text: ' Merci de votre attention.', no_speech_prob: 0.32, avg_logprob: -0.5 },
+    ],
+  }, { intervalsMs: [[200, 2050]], endMs: 2050, startMs: 200 }),
+  'Voici mon rapport.',
+);
+
+// GAP rule: a segment entirely inside a client-measured mid-clip silence.
+check(
+  'meta: segment inside client silence gap → dropped',
+  applySegmentFilter({
+    text: 'Premier point. Abonnez-vous. Deuxième point.',
+    segments: [
+      { start: 0.1, end: 1.6, text: 'Premier point.', no_speech_prob: 0.02, avg_logprob: -0.2 },
+      { start: 3.1, end: 4.0, text: ' Abonnez-vous.', no_speech_prob: 0.4, avg_logprob: -0.6 },
+      { start: 5.6, end: 7.2, text: ' Deuxième point.', no_speech_prob: 0.03, avg_logprob: -0.25 },
+    ],
+  }, { intervalsMs: [[100, 1650], [5580, 7150]], endMs: 7150, startMs: 100 }),
+  'Premier point. Deuxième point.',
+);
+
+// Slop guard: a segment only slightly past the measured end (word decay,
+// timestamp jitter) must SURVIVE.
+check(
+  'meta: segment within the ±450ms slop → kept',
+  applySegmentFilter({
+    text: 'Bonjour. À demain.',
+    segments: [
+      { start: 0.1, end: 1.4, text: 'Bonjour.', no_speech_prob: 0.02, avg_logprob: -0.2 },
+      { start: 1.75, end: 2.4, text: ' À demain.', no_speech_prob: 0.05, avg_logprob: -0.3 },
+    ],
+  }, { intervalsMs: [[100, 2100]], endMs: 2100, startMs: 100 }),
+  'Bonjour. À demain.',
+);
+
+// WORD tail-cut: invented words appended to the FINAL (valid) segment.
+check(
+  'meta+words: invented tail words inside the last segment → cut',
+  applySegmentFilter({
+    text: 'Voilà le résumé du projet et merci à tous',
+    segments: [
+      { start: 0.0, end: 5.9, text: 'Voilà le résumé du projet et merci à tous', no_speech_prob: 0.05, avg_logprob: -0.35 },
+    ],
+    words: [
+      { word: 'Voilà', start: 0.3, end: 0.6 },
+      { word: 'le', start: 0.6, end: 0.7 },
+      { word: 'résumé', start: 0.7, end: 1.1 },
+      { word: 'du', start: 1.1, end: 1.2 },
+      { word: 'projet', start: 1.2, end: 1.7 },
+      { word: 'et', start: 3.4, end: 3.6 },
+      { word: 'merci', start: 3.6, end: 4.1 },
+      { word: 'à', start: 4.1, end: 4.2 },
+      { word: 'tous', start: 4.2, end: 4.6 },
+    ],
+  }, { intervalsMs: [[300, 1750]], endMs: 1750, startMs: 300 }),
+  'Voilà le résumé du projet',
+);
+
+// Word cut guard: if "everything" looks past the end (global timestamp
+// drift), do NOT shred the dictation.
+check(
+  'meta+words: >60% tokens past end → tailcut SKIPPED (guard)',
+  applySegmentFilter({
+    text: 'Un deux trois quatre cinq',
+    segments: [
+      { start: 0.0, end: 4.0, text: 'Un deux trois quatre cinq', no_speech_prob: 0.05, avg_logprob: -0.3 },
+    ],
+    words: [
+      { word: 'Un', start: 0.2, end: 0.4 },
+      { word: 'deux', start: 1.2, end: 1.4 },
+      { word: 'trois', start: 2.2, end: 2.4 },
+      { word: 'quatre', start: 2.9, end: 3.1 },
+      { word: 'cinq', start: 3.5, end: 3.7 },
+    ],
+  }, { intervalsMs: [[200, 900]], endMs: 900, startMs: 200 }),
+  'Un deux trois quatre cinq',
+);
+
+// COMBO confidence rule: moderately-unsure on BOTH axes = hallucination zone.
+check(
+  'combo rule: no_speech 0.6 + logprob -1.0 → dropped',
+  applySegmentFilter({
+    text: 'Bonjour. et la suite bizarre',
+    segments: [
+      { text: 'Bonjour.', no_speech_prob: 0.02, avg_logprob: -0.2 },
+      { text: ' et la suite bizarre', no_speech_prob: 0.6, avg_logprob: -1.0 },
+    ],
+  }),
+  'Bonjour.',
+);
+check(
+  'combo rule boundary: no_speech 0.6 + logprob -0.5 (confident tokens) → kept',
+  applySegmentFilter({
+    text: 'Oui. Non.',
+    segments: [
+      { text: 'Oui.', no_speech_prob: 0.6, avg_logprob: -0.5 },
+      { text: ' Non.', no_speech_prob: 0.4, avg_logprob: -0.9 },
+    ],
+  }),
+  'Oui. Non.',
+);
+
+// meta ABSENT (interpreter/listener paths) → timestamp rules disengaged,
+// historical behaviour preserved even with word data present.
+check(
+  'no meta → no timestamp rule, text intact',
+  applySegmentFilter({
+    text: 'Salut tout le monde',
+    segments: [{ start: 9.0, end: 10.0, text: 'Salut tout le monde', no_speech_prob: 0.05, avg_logprob: -0.3 }],
+    words: [{ word: 'Salut', start: 9.0, end: 9.3 }],
+  }),
+  'Salut tout le monde',
+);
+
 // ------------------------------------------------ cleanupTranscription
 check(
   'pure YouTube outro → EMPTY',

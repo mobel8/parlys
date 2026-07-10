@@ -7,7 +7,7 @@
 
 'use strict';
 const path = require('path');
-const { analyzeSpeech, trimToSpeech } = require(path.join(__dirname, '..', 'dist', 'shared', 'speech-gate.js'));
+const { analyzeSpeech, trimToSpeech, analyzeFrameSeries, frameRmsOf, speechMetaFor } = require(path.join(__dirname, '..', 'dist', 'shared', 'speech-gate.js'));
 
 const SR = 48000;
 let failures = 0;
@@ -169,6 +169,90 @@ const rnd = mulberry32(0xC0FFEE);
   pushSpeech(a, 500, 0.25);
   const level = rmsOf(toPcm(a));
   check('fixture sanity: speech RMS ≈ 0.1', level > 0.05 && level < 0.25, `rms=${level.toFixed(3)}`);
+}
+
+// ------------------------------------------------------------------
+// v1.9 additions: run-qualified boundaries, speech intervals, frame-series
+// analysis (speculative checker), speech meta for the server cross-check.
+
+// 10) THE "bruit parasite en fin de phrase" case: isolated clicks AFTER the
+//     phrase must not extend the speech boundary — the shipped clip ends on
+//     the phrase, the clicks never reach Whisper.
+{
+  const a = [];
+  pushNoise(a, 800, 0.0012, rnd);
+  pushSpeech(a, 1200, 0.22);
+  pushNoise(a, 350, 0.0012, rnd);
+  // 5 sharp 10 ms clicks, 60 ms apart (mic bump / key click train)
+  for (let c = 0; c < 5; c++) {
+    const clickSamples = Math.round(0.010 * SR);
+    for (let i = 0; i < clickSamples; i++) {
+      a.push(Math.round(Math.sin(Math.PI * (i / clickSamples)) * 0.4 * 32767 * Math.sin(2 * Math.PI * 3000 * i / SR)));
+    }
+    const gapSamples = Math.round(0.050 * SR);
+    for (let i = 0; i < gapSamples; i++) a.push(0);
+  }
+  pushNoise(a, 2000, 0.0012, rnd);
+  const pcm = toPcm(a);
+  const r = analyzeSpeech(pcm, SR);
+  const speechEndMs = Math.round((r.lastSpeechEndSample / SR) * 1000);
+  // Phrase ends at 800+1200 = 2000 ms; clicks start at 2350 ms.
+  check('trailing clicks do NOT extend the speech boundary', r.hasSpeech && speechEndMs <= 2150 && speechEndMs >= 1850,
+    `speechEnd=${speechEndMs}ms (phrase ends at 2000ms, clicks at 2350ms)`);
+  const trimmedEndMs = Math.round((r.trimEnd / SR) * 1000);
+  check('shipped clip ends BEFORE the clicks', trimmedEndMs <= 2350,
+    `trimEnd=${trimmedEndMs}ms (clicks at 2350ms)`);
+}
+
+// 11) speechIntervalsMs: two utterances separated by 800 ms → two intervals;
+//     the 800 ms gap (> mergeGap 240 ms) survives as a gap.
+{
+  const a = [];
+  pushNoise(a, 600, 0.0012, rnd);
+  pushSpeech(a, 900, 0.2);
+  pushNoise(a, 800, 0.0012, rnd);
+  pushSpeech(a, 700, 0.2);
+  pushNoise(a, 600, 0.0012, rnd);
+  const r = analyzeSpeech(toPcm(a), SR);
+  check('two utterances → two speech intervals', r.hasSpeech && r.speechIntervalsMs.length === 2,
+    `intervals=${JSON.stringify(r.speechIntervalsMs)}`);
+  if (r.speechIntervalsMs.length === 2) {
+    const [i1, i2] = r.speechIntervalsMs;
+    check('interval boundaries ≈ ground truth', Math.abs(i1[0] - 600) <= 90 && Math.abs(i1[1] - 1500) <= 90 && Math.abs(i2[0] - 2300) <= 90,
+      `i1=[${i1}] i2=[${i2}] (truth: [600,1500] [2300,3000])`);
+  }
+  const meta = speechMetaFor(r, SR);
+  check('speechMetaFor: relative to trimmed clip, endMs consistent',
+    !!meta && meta.intervalsMs.length === 2 && Math.abs(meta.endMs - meta.intervalsMs[1][1]) <= 30 && meta.intervalsMs[0][0] <= 300,
+    meta ? `endMs=${meta.endMs} intervals=${JSON.stringify(meta.intervalsMs)}` : 'null');
+}
+
+// 12) analyzeFrameSeries (incremental checker path): trailing silence counts
+//     from the last QUALIFIED frame — straight through an isolated click.
+{
+  const a = [];
+  pushSpeech(a, 1000, 0.2);
+  pushNoise(a, 700, 0.0012, rnd);
+  {
+    const clickSamples = Math.round(0.010 * SR);
+    for (let i = 0; i < clickSamples; i++) a.push(Math.round(0.5 * 32767 * Math.sin(2 * Math.PI * 2500 * i / SR)));
+  }
+  pushNoise(a, 1300, 0.0012, rnd);
+  const rms = frameRmsOf(toPcm(a), SR);
+  const fs = analyzeFrameSeries(rms);
+  // Ground truth: speech ends at 1000 ms; total ≈ 3010 ms → trailing ≈ 2010 ms.
+  check('frame series: trailing silence counts through an isolated click',
+    fs.hasSpeech && fs.trailingSilenceMs >= 1700,
+    `trailing=${fs.trailingSilenceMs}ms (speech ends at 1000ms, click at 1710ms)`);
+}
+
+// 13) analyzeFrameSeries on ALL-silence frames → hasSpeech false (the
+//     speculative checker must never fire on room tone).
+{
+  const a = [];
+  pushNoise(a, 2000, 0.0015, rnd);
+  const fs = analyzeFrameSeries(frameRmsOf(toPcm(a), SR));
+  check('frame series: silence only → no speech, no spec trigger', fs.hasSpeech === false && fs.firstSpeechFrame === -1);
 }
 
 console.log(failures === 0 ? '\nALL SPEECH-GATE TESTS PASSED' : `\n${failures} FAILURE(S)`);

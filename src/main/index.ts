@@ -399,11 +399,14 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   //   PARLYS_AUDIO_HEAL=0 → `;audioheal=0` disables the liveness self-heal
   //     (legacy behaviour, used to A/B-prove the zombie-mic fix);
   //   PARLYS_AUDIT=1      → `;audit=1` exposes window.__parlysAudioAudit
-  //     (state snapshots + pipeline-kill simulators for the CDP harness).
-  // Both are inert in normal production launches.
+  //     (state snapshots + pipeline-kill simulators for the CDP harness);
+  //   PARLYS_SPECULATIVE=0 → `;spec=0` disables speculative transcription
+  //     (A/B latency benches — the setting speculativeStt is the user knob).
+  // All are inert in normal production launches.
   const audioFlags =
     (process.env.PARLYS_AUDIO_HEAL === '0' ? ';audioheal=0' : '') +
-    (process.env.PARLYS_AUDIT === '1' ? ';audit=1' : '');
+    (process.env.PARLYS_AUDIT === '1' ? ';audit=1' : '') +
+    (process.env.PARLYS_SPECULATIVE === '0' ? ';spec=0' : '');
   const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg + audioFlags;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);

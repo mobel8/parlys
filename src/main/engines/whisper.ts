@@ -61,6 +61,24 @@ interface VerboseSegment {
   compression_ratio?: number;
 }
 
+/** One word of a verbose_json response with timestamp_granularities=word. */
+interface VerboseWord {
+  word?: string;
+  start?: number;
+  end?: number;
+}
+
+/**
+ * Client-side speech geometry forwarded from the renderer's speech gate.
+ * Times in ms, same timeline as the shipped clip / Whisper timestamps.
+ * See src/shared/speech-gate.ts::speechMetaFor.
+ */
+export interface ClientSpeechMeta {
+  intervalsMs: Array<[number, number]>;
+  endMs: number;
+  startMs: number;
+}
+
 /**
  * Confidence thresholds for the verbose_json hallucination filter.
  *
@@ -73,20 +91,80 @@ interface VerboseSegment {
  *   - no_speech_prob > 0.7    → segment is probably pure silence/noise
  *   - avg_logprob    < -1.2   → model very uncertain about the tokens
  *   - compression_ratio > 2.6 → text is repeating itself (looped)
+ *   - no_speech_prob > 0.5 AND avg_logprob < -0.85 → the COMBO zone where
+ *     noise-fed hallucinations live: each signal alone is too weak to act
+ *     on, but "probably not speech" + "not confident in the tokens"
+ *     together is (per the whisper-timestamped / WhisperX literature) a
+ *     reliable hallucination signature. Real faint speech with a correct
+ *     forced language decodes with logprob ≳ -0.6.
  *
- * A segment is filtered if AT LEAST ONE threshold is breached. We
- * count the filter as fail-open: if the field is missing (older API
- * version, Groq decided to omit it) we keep the segment.
+ * A segment is filtered if AT LEAST ONE rule fires. We count the filter
+ * as fail-open: if the field is missing (older API version, Groq decided
+ * to omit it) we keep the segment.
  */
 const NO_SPEECH_PROB_MAX = 0.7;
 const AVG_LOGPROB_MIN = -1.2;
 const COMPRESSION_RATIO_MAX = 2.6;
+const COMBO_NO_SPEECH_MIN = 0.5;
+const COMBO_LOGPROB_MAX = -0.85;
 
 function isLowConfidence(seg: VerboseSegment): boolean {
   if (typeof seg.no_speech_prob === 'number' && seg.no_speech_prob > NO_SPEECH_PROB_MAX) return true;
   if (typeof seg.avg_logprob === 'number' && seg.avg_logprob < AVG_LOGPROB_MIN) return true;
   if (typeof seg.compression_ratio === 'number' && seg.compression_ratio > COMPRESSION_RATIO_MAX) return true;
+  if (
+    typeof seg.no_speech_prob === 'number' && typeof seg.avg_logprob === 'number' &&
+    seg.no_speech_prob > COMBO_NO_SPEECH_MIN && seg.avg_logprob < COMBO_LOGPROB_MAX
+  ) return true;
   return false;
+}
+
+/**
+ * Cross-check thresholds between Whisper timestamps and the CLIENT-side
+ * speech geometry (speech-gate). Whisper's segment/word timestamps are
+ * accurate to roughly ±0.3 s on clean speech, so every rule carries a
+ * generous slop — a real word must never die to a timestamp jitter.
+ *
+ *   - INTERVAL_SLOP_MS   expands every client speech interval both ways
+ *     before the overlap test; a segment overlapping NO expanded interval
+ *     sits entirely inside client-measured silence → hallucination.
+ *   - TAIL_SEG_SLOP_MS   a segment STARTING this far after the client's
+ *     last speech instant is invented (the shipped clip physically ends
+ *     ~320 ms after that instant).
+ *   - WORD_TAIL_SLOP_MS  same idea per WORD — the surgical rule that kills
+ *     "…ma vraie phrase. et n'oubliez pas de liker" tails where Whisper
+ *     appends inventions to an otherwise-valid segment.
+ */
+const INTERVAL_SLOP_MS = 450;
+const TAIL_SEG_SLOP_MS = 500;
+const WORD_TAIL_SLOP_MS = 350;
+
+function overlapsClientSpeech(
+  segStartMs: number,
+  segEndMs: number,
+  intervals: Array<[number, number]>,
+): boolean {
+  for (const [s, e] of intervals) {
+    if (segStartMs < e + INTERVAL_SLOP_MS && segEndMs > s - INTERVAL_SLOP_MS) return true;
+  }
+  return false;
+}
+
+export interface TranscribeOptions {
+  /** External cancellation / per-call deadline. */
+  signal?: AbortSignal;
+  /**
+   * Client speech geometry — enables the timestamp cross-check rules in
+   * applySegmentFilter (dictation pipeline only; interpreter/listener
+   * don't send it and keep the historical behaviour).
+   */
+  speechMeta?: ClientSpeechMeta;
+  /**
+   * Cap on 429/5xx retries. Speculative calls pass 0: burning the rate
+   * limit on a call the user may never commit is wrong — if it fails, the
+   * classic path at stop-time retries as usual.
+   */
+  maxRetries?: number;
 }
 
 export async function transcribeWithGroq(
@@ -94,6 +172,7 @@ export async function transcribeWithGroq(
   mimeType: string,
   settings: Settings,
   signal?: AbortSignal,
+  opts?: Omit<TranscribeOptions, 'signal'>,
 ): Promise<WhisperResult> {
   if (!settings.groqApiKey) {
     throw new Error(
@@ -120,6 +199,12 @@ export async function transcribeWithGroq(
     // compression_ratio — the three signals we use to drop hallucinated
     // segments. Cost is negligible (~5% bigger response payload).
     form.append('response_format', 'verbose_json');
+    // Word-level timestamps power the tail-word hallucination cut (drop
+    // words that "start" after the client measured end-of-speech). Groq
+    // returns BOTH words and segments when both granularities are asked
+    // (verified live 2026-07-10); the payload grows by a few hundred bytes.
+    form.append('timestamp_granularities[]', 'word');
+    form.append('timestamp_granularities[]', 'segment');
     // temperature=0 = pure greedy decoding, no sampling fallback. This is
     // the SAFER setting against hallucinations; the OpenAI default of
     // temperature-fallback can decode louder hallucinations on a silent
@@ -152,7 +237,10 @@ export async function transcribeWithGroq(
   // clears near-invisibly on the interactive dictation path. A genuine
   // sustained rate-limit that supplies a "try again in Xs" hint is still
   // honoured via Math.max below.
-  const backoff = [350, 1200, 3000];
+  const backoffAll = [350, 1200, 3000];
+  const backoff = typeof opts?.maxRetries === 'number'
+    ? backoffAll.slice(0, Math.max(0, opts.maxRetries))
+    : backoffAll;
   for (let attempt = 0; attempt <= backoff.length; attempt++) {
     const res = await fetch(GROQ_ENDPOINT, {
       method: 'POST',
@@ -175,8 +263,9 @@ export async function transcribeWithGroq(
         text?: string;
         language?: string;
         segments?: VerboseSegment[];
+        words?: VerboseWord[];
       };
-      const cleanText = applySegmentFilter(data);
+      const cleanText = applySegmentFilter(data, opts?.speechMeta);
       // Normalise Whisper's language to an ISO-639-1 code at the source.
       // Groq returns the full name ("french", "english"), which then leaked
       // into history badges ("FRENCH"), CSV/MD exports, and byLanguage stats.
@@ -262,13 +351,15 @@ function normalizeLangToISO(lang?: string): string | undefined {
 /**
  * Build the final text from a verbose_json response, dropping any
  * segment whose confidence signals flag it as a hallucination
- * (`isLowConfidence`).
+ * (`isLowConfidence`) — and, when the CLIENT speech geometry is
+ * available (`meta`), dropping segments/words whose timestamps land
+ * where the client measured silence.
  *
  * Falls back to the response's `text` field ONLY when segments are
  * absent (older API versions / stripped responses).
  *
- * When segments ARE present and EVERY one of them is low-confidence,
- * the answer is the empty string — FAIL-CLOSED. This used to fall back
+ * When segments ARE present and EVERY one of them is dropped, the
+ * answer is the empty string — FAIL-CLOSED. This used to fall back
  * to the full text "for the regex scrubber", which is exactly how a
  * silence-only clip became a pasted "Merci." : the model itself said
  * no_speech on every segment, but the hallucinated token wasn't in the
@@ -276,37 +367,68 @@ function normalizeLangToISO(lang?: string): string | undefined {
  * the fail-open path shipped it to the user's cursor. When the model
  * flags everything it produced as silence/noise, believe it.
  *
+ * TIMESTAMP CROSS-CHECK (meta present — dictation pipeline only):
+ *   1. SEGMENT rule — a segment overlapping NO client speech interval
+ *      (each expanded ±INTERVAL_SLOP_MS) sits entirely inside measured
+ *      silence: dropped. Catches inventions during mid-dictation pauses.
+ *   2. TAIL-SEGMENT rule — a segment STARTING > endMs+TAIL_SEG_SLOP_MS is
+ *      beyond the physical end of shipped audio (the clip stops ~320 ms
+ *      after the last word): dropped.
+ *   3. TAIL-WORD rule — the surgical one. Whisper often APPENDS invented
+ *      words to the final, otherwise-valid segment ("…ma phrase. Merci.").
+ *      Word-level timestamps expose them: every trailing word whose start
+ *      is > endMs+WORD_TAIL_SLOP_MS gets cut from the final text. Guarded:
+ *      never cuts more than MAX_TAIL_WORDS_CUT or >60% of the tokens (a
+ *      global timestamp drift must not shred a real dictation).
+ *
  * Exported for the unit-test harness (scripts/test-hallucination-filter.js).
  */
-export function applySegmentFilter(data: {
-  text?: string;
-  segments?: VerboseSegment[];
-}): string {
+const MAX_TAIL_WORDS_CUT = 12;
+
+export function applySegmentFilter(
+  data: {
+    text?: string;
+    segments?: VerboseSegment[];
+    words?: VerboseWord[];
+  },
+  meta?: ClientSpeechMeta,
+): string {
   const fallback = (data.text || '').trim();
   if (!Array.isArray(data.segments) || data.segments.length === 0) {
     return fallback;
   }
-  const kept: string[] = [];
+  const hasMeta = !!(meta && Array.isArray(meta.intervalsMs) && meta.intervalsMs.length > 0
+    && typeof meta.endMs === 'number' && meta.endMs > 0);
+  const kept: VerboseSegment[] = [];
   let droppedCount = 0;
+  const drop = (seg: VerboseSegment, why: string) => {
+    droppedCount += 1;
+    console.log(
+      `[whisper] dropped segment (${why}) ` +
+      `t=[${seg.start?.toFixed(2) ?? '?'}-${seg.end?.toFixed(2) ?? '?'}s] ` +
+      `no_speech=${seg.no_speech_prob?.toFixed(3) ?? '?'} ` +
+      `logprob=${seg.avg_logprob?.toFixed(3) ?? '?'} ` +
+      `cr=${seg.compression_ratio?.toFixed(2) ?? '?'} ` +
+      `→ "${(seg.text || '').slice(0, 60).trim()}"`,
+    );
+  };
   for (const seg of data.segments) {
     if (!seg || typeof seg.text !== 'string') continue;
-    if (isLowConfidence(seg)) {
-      droppedCount += 1;
-      console.log(
-        `[whisper] dropped low-confidence segment ` +
-        `no_speech=${seg.no_speech_prob?.toFixed(3) ?? '?'} ` +
-        `logprob=${seg.avg_logprob?.toFixed(3) ?? '?'} ` +
-        `cr=${seg.compression_ratio?.toFixed(2) ?? '?'} ` +
-        `→ "${seg.text.slice(0, 60).trim()}"`,
-      );
-      continue;
+    if (isLowConfidence(seg)) { drop(seg, 'low-confidence'); continue; }
+    if (hasMeta && typeof seg.start === 'number') {
+      const segStartMs = seg.start * 1000;
+      const segEndMs = typeof seg.end === 'number' ? seg.end * 1000 : segStartMs;
+      if (segStartMs > meta!.endMs + TAIL_SEG_SLOP_MS) { drop(seg, 'starts-after-speech-end'); continue; }
+      if (!overlapsClientSpeech(segStartMs, segEndMs, meta!.intervalsMs)) {
+        drop(seg, 'inside-client-silence'); continue;
+      }
     }
-    kept.push(seg.text);
+    kept.push(seg);
   }
   if (kept.length === 0) {
     if (droppedCount > 0) {
       console.warn(
-        `[whisper] every segment (${droppedCount}) was low-confidence → returning EMPTY ` +
+        `[whisper] every segment (${droppedCount}) was dropped → returning EMPTY ` +
         `(discarded: "${fallback.slice(0, 60)}")`,
       );
       return '';
@@ -315,8 +437,73 @@ export function applySegmentFilter(data: {
     // treat like a segment-less response.
     return fallback;
   }
-  // Joining with a single space matches Whisper's own segment concat.
-  return kept.join('').replace(/\s+/g, ' ').trim();
+  // Joining then collapsing whitespace matches Whisper's own segment concat.
+  let text = kept.map((s) => s.text as string).join('').replace(/\s+/g, ' ').trim();
+
+  // TAIL-WORD rule — only with client geometry AND word timestamps.
+  if (hasMeta && Array.isArray(data.words) && data.words.length > 0 && text) {
+    text = cutTailWords(text, kept, data.words, meta!);
+  }
+  return text;
+}
+
+/**
+ * Cut trailing words whose word-level timestamp starts after the client
+ * measured end-of-speech (+slop). Operates on whitespace tokens of the
+ * KEPT text; only words belonging to kept segments are considered (words
+ * of dropped segments are already gone from the text).
+ */
+function cutTailWords(
+  text: string,
+  keptSegments: VerboseSegment[],
+  words: VerboseWord[],
+  meta: ClientSpeechMeta,
+): string {
+  const cutoffMs = meta.endMs + WORD_TAIL_SLOP_MS;
+  // Words inside any kept segment's span (±200 ms tolerance on both ends —
+  // Groq word/segment boundaries disagree by a few 10s of ms routinely).
+  const spans = keptSegments
+    .filter((s) => typeof s.start === 'number')
+    .map((s) => [
+      (s.start as number) * 1000 - 200,
+      (typeof s.end === 'number' ? s.end : (s.start as number)) * 1000 + 200,
+    ] as [number, number]);
+  const inKept = (w: VerboseWord) => {
+    if (typeof w.start !== 'number') return false;
+    const ms = w.start * 1000;
+    return spans.some(([a, b]) => ms >= a && ms <= b);
+  };
+  const keptWords = words.filter(inKept);
+  if (keptWords.length === 0) return text;
+
+  let trailing = 0;
+  for (let i = keptWords.length - 1; i >= 0; i--) {
+    const w = keptWords[i];
+    if (typeof w.start === 'number' && w.start * 1000 > cutoffMs) trailing++;
+    else break;
+  }
+  if (trailing === 0) return text;
+
+  const tokens = text.split(/\s+/).filter(Boolean);
+  // Safety bounds: a GLOBAL timestamp drift (rare, odd audio) must never
+  // shred a real dictation. Cutting HALF the tokens or more means Whisper's
+  // timeline and the client's fundamentally disagree — distrust the cut,
+  // keep the text, let the segment rules / regex scrubber deal with it.
+  if (trailing >= tokens.length || trailing > MAX_TAIL_WORDS_CUT || trailing * 2 >= tokens.length) {
+    console.warn(
+      `[whisper] tailcut SKIPPED (guard): ${trailing} trailing word(s) beyond ` +
+      `speechEnd+${WORD_TAIL_SLOP_MS}ms of ${tokens.length} tokens`,
+    );
+    return text;
+  }
+  const cut = tokens.slice(tokens.length - trailing).join(' ');
+  const keptText = tokens.slice(0, tokens.length - trailing).join(' ')
+    .replace(/[\s,;:]+$/, '');
+  console.log(
+    `[whisper] tailcut dropped ${trailing} trailing word(s) starting after ` +
+    `speechEnd+${WORD_TAIL_SLOP_MS}ms (client endMs=${meta.endMs}) → cut "${cut.slice(0, 60)}"`,
+  );
+  return keptText;
 }
 
 function mimeToExt(mime: string): string {

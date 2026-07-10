@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { analyzeSpeech, trimToSpeech } from '../../shared/speech-gate';
+import {
+  analyzeSpeech,
+  analyzeFrameSeries,
+  trimToSpeech,
+  speechMetaFor,
+  SpeechAnalysis,
+  SpeechMeta,
+} from '../../shared/speech-gate';
 
 /**
  * Audio recorder built on a CONTINUOUS PCM RING BUFFER (not MediaRecorder).
@@ -83,6 +90,33 @@ const REBUILD_FAIL_BACKOFF_MS = 8000; // don't hammer getUserMedia when it fails
 const MUTE_PERSIST_MS = 1500;    // 'mute' older than this → device is stuck, rebuild
 const MIN_CLIP_MS = 250;         // shorter than this = accidental tap, drop
 
+// --- Speculative transcription -----------------------------------------
+// While the user is STILL recording, the checker below watches the
+// incrementally-built frame series; once it sees ≥ SPEC_SILENCE_MS of
+// silence after real speech, the recorder slices/encodes the clip up to
+// the end of speech and hands it to onSpeculativeReady — the view fires
+// the full transcription pipeline in the background (zero side effects).
+// If the user then presses stop WITHOUT having spoken again (the normal
+// end-of-dictation gesture: finish the phrase, reach for the key), the
+// final clip is byte-identical to the speculated one → the view commits
+// the parked result and the paste is near-instant. If the user resumed
+// speaking, the speech end moved → the speculation is invalid → classic
+// path, exactly as today.
+const SPEC_CHECK_EVERY_MS = 180;  // checker cadence while capturing
+const SPEC_SILENCE_MS = 600;      // trailing silence that triggers a fire
+// |specEnd − finalEnd| ≤ this at stop → same utterance, commit is safe. A
+// genuine resume moves the end by ≥ SPEC_SILENCE_MS + a word (≫ 800 ms);
+// what this tolerance absorbs is adaptive-threshold drift re-classifying
+// the LAST frames of the SAME utterance as silence accumulates (the audio
+// within the tolerance is inside the 320 ms tail margin either way).
+const SPEC_TOL_MS = 250;
+// Dedupe window for FIRING: don't re-speculate while the measured speech
+// end wobbles around the same utterance end (each refire = a wasted API
+// call). Kept wider than SPEC_TOL_MS: a suppressed refire at worst costs a
+// classic-path stop, never a wrong paste.
+const SPEC_DEDUPE_MS = 400;
+const SPEC_MIN_FRAMES = 20;       // don't even analyze under ~600 ms captured
+
 /** Stats shipped alongside the WAV so the caller can log/inspect quality. */
 export interface CaptureStats {
   /** Full captured duration (incl. pre-roll), before trimming. */
@@ -93,6 +127,17 @@ export interface CaptureStats {
   shippedMs: number;
   noiseFloor: number;
   peakRms: number;
+  /**
+   * Client speech geometry relative to the shipped clip — forwarded to the
+   * server so the hallucination filter can cross-check Whisper timestamps.
+   */
+  speechMeta?: SpeechMeta | null;
+  /**
+   * Set on onStop when a speculative transcription fired for THIS exact
+   * utterance (speech end unchanged since the fire): the view should
+   * commit `spec.id` instead of re-transcribing.
+   */
+  spec?: { id: string } | null;
 }
 
 /**
@@ -164,6 +209,18 @@ export function useAudioRecorder(opts: {
    */
   onDrop?: (reason: string) => void;
   onError?: (err: Error) => void;
+  /**
+   * Fired mid-capture when the user has been silent ≥ SPEC_SILENCE_MS after
+   * speaking: `blob` is the clip up to the end of speech, encoded exactly
+   * like a stop() ship. The view should launch a SPECULATIVE transcription
+   * (speculative: true, specId) — see CaptureStats.spec for the commit
+   * handshake at stop time. May fire again if the user resumes then pauses.
+   */
+  onSpeculativeReady?: (
+    blob: Blob, mimeType: string, audioMs: number, stats: CaptureStats, specId: string,
+  ) => void;
+  /** Master switch from settings (speculativeStt). Default true. */
+  speculative?: boolean;
 }) {
   const optsRef = useRef(opts);
   optsRef.current = opts;
@@ -205,6 +262,27 @@ export function useAudioRecorder(opts: {
   const hash = typeof location !== 'undefined' ? location.hash || '' : '';
   const healEnabledRef = useRef(!hash.includes(';audioheal=0'));
   const auditRef = useRef(hash.includes(';audit=1'));
+  // env PARLYS_SPECULATIVE=0 → ';spec=0' → hard-disable (A/B benches).
+  const specHashDisabledRef = useRef(hash.includes(';spec=0'));
+
+  // --- Speculative capture state ----------------------------------------
+  // Incremental 30 ms frame-RMS series for the CURRENT capture (starts at
+  // the press — the pre-roll is not part of it). Built inside
+  // onaudioprocess for ~2 flops/sample, consumed by the checker interval.
+  const capFramesRef = useRef<{ originAbs: number; rms: number[]; acc: number; accN: number }>(
+    { originAbs: -1, rms: [], acc: 0, accN: 0 },
+  );
+  const frameLenRef = useRef<number>(1440); // samples per 30 ms frame (set per ctx rate)
+  const captureIdRef = useRef<string>('');
+  const specSeqRef = useRef(0);
+  // Last fired speculation: endAbs = ABSOLUTE ring sample index of the end
+  // of qualified speech in the speculated clip (full-slice coordinates).
+  const lastSpecRef = useRef<{ id: string; endAbs: number; firedAt: number } | null>(null);
+  const specBusyRef = useRef(false);
+  const resetCaptureFrames = useCallback(() => {
+    capFramesRef.current = { originAbs: -1, rms: [], acc: 0, accN: 0 };
+    lastSpecRef.current = null;
+  }, []);
 
   const log = useCallback((...args: unknown[]) => {
     // console.* in the renderer is forwarded to the main-process stdout by
@@ -241,6 +319,7 @@ export function useAudioRecorder(opts: {
       ctxRef.current = ctx;
       const sr = ctx.sampleRate || 48000;
       sampleRateRef.current = sr;
+      frameLenRef.current = Math.max(1, Math.round((sr * 30) / 1000));
       ringLenRef.current = Math.floor(sr * RING_SECONDS);
       ringRef.current = new Int16Array(ringLenRef.current);
       writeCountRef.current = 0;
@@ -275,9 +354,22 @@ export function useAudioRecorder(opts: {
         const wantRms = capturing || auditRef.current;
         let sumSq = 0;
         let wc = writeCountRef.current;
+        // Incremental 30 ms frame RMS for the current capture — feeds the
+        // speculative end-of-utterance checker without any per-check
+        // full-clip rescan. Idle path (not capturing) pays nothing.
+        const fa = capturing ? capFramesRef.current : null;
+        if (fa && fa.originAbs < 0) fa.originAbs = wc;
+        const frameLen = frameLenRef.current;
         for (let i = 0; i < input.length; i++) {
           const s = input[i];
           if (wantRms) sumSq += s * s;
+          if (fa) {
+            fa.acc += s * s;
+            if (++fa.accN >= frameLen) {
+              fa.rms.push(Math.sqrt(fa.acc / fa.accN));
+              fa.acc = 0; fa.accN = 0;
+            }
+          }
           // Float[-1,1] → Int16
           let v = s < 0 ? s * 0x8000 : s * 0x7fff;
           if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
@@ -385,6 +477,10 @@ export function useAudioRecorder(opts: {
       if (wasCapturing && mountedRef.current) {
         captureStartRef.current = 0; // fresh ring starts at writeCount 0
         capturingRef.current = true;
+        // The pre-rebuild frames/speculation refer to ring coordinates that
+        // no longer exist (writeCount reset) — and possibly to audio a
+        // healed pipeline must never ship. Start clean on the fresh ring.
+        resetCaptureFrames();
       }
       if (hadPipeline) {
         rebuildsRef.current++;
@@ -399,7 +495,7 @@ export function useAudioRecorder(opts: {
     } finally {
       rebuildingRef.current = null;
     }
-  }, [buildPipeline, release, log]);
+  }, [buildPipeline, release, log, resetCaptureFrames]);
   rebuildRef.current = rebuild;
 
   /** Create-if-absent (or replace-if-dead). Non-destructive when healthy. */
@@ -548,58 +644,23 @@ export function useAudioRecorder(opts: {
     return () => { try { unsub?.(); } catch { /* ignore */ } };
   }, [rebuild, waitForTick, log]);
 
-  const start = useCallback(async () => {
-    try {
-      await ensureLive();
-      if (!ringRef.current) throw new Error('Microphone indisponible');
-      const prerollSamples = Math.floor(sampleRateRef.current * PREROLL_MS / 1000);
-      // Capture from (now − pre-roll), clamped so we never read before the
-      // ring's oldest valid sample.
-      const oldest = Math.max(0, writeCountRef.current - ringLenRef.current);
-      captureStartRef.current = Math.max(oldest, writeCountRef.current - prerollSamples);
-      capturingRef.current = true;
-    } catch (err: any) {
-      capturingRef.current = false;
-      optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
-    }
-  }, [ensureLive]);
-
-  const stop = useCallback(() => {
-    if (!capturingRef.current) return;
-    capturingRef.current = false;
-    // Every non-ship exit goes through onDrop so the view ALWAYS leaves its
-    // 'recording' state — a silent return here used to freeze the pill red.
-    const drop = (reason: string, detail?: string) => {
-      log(`drop: ${reason}${detail ? ` (${detail})` : ''}`);
-      optsRef.current.onDrop?.(reason);
-    };
+  /**
+   * Copy [startAbs, endAbs) out of the ring with at most two memcpy-speed
+   * subarray copies. Re-clamps the start to the ring's CURRENT oldest valid
+   * sample: for a capture longer than RING_SECONDS the ring has wrapped and
+   * overwritten the old slots — reading from the stale absolute index would
+   * walk the ring at the wrong phase → temporally scrambled audio. Clamping
+   * makes an over-length capture cleanly return the most-recent
+   * RING_SECONDS in correct chronological order.
+   * Returns null when the ring never advanced past startAbs (dead pipeline).
+   */
+  const sliceRing = useCallback((startAbsRaw: number, endAbs: number): { pcm: Int16Array; startAbs: number } | null => {
     const ring = ringRef.current;
     const ringLen = ringLenRef.current;
-    if (!ring || ringLen === 0) { drop('Micro indisponible'); return; }
-    const endAbs = writeCountRef.current;
-    // CRITICAL: re-clamp the start to the ring's CURRENT oldest valid sample.
-    // captureStartRef was clamped at start() time, but for a capture longer
-    // than RING_SECONDS the ring has since wrapped and overwritten those
-    // slots. Reading from the stale absolute index would walk the ring at the
-    // wrong phase → temporally scrambled / garbled audio. Clamping here makes
-    // an over-length capture cleanly return the most-recent RING_SECONDS in
-    // correct chronological order. count <= ringLen by construction.
-    const startAbs = Math.max(captureStartRef.current, endAbs - ringLen);
+    if (!ring || ringLen === 0) return null;
+    const startAbs = Math.max(startAbsRaw, endAbs - ringLen);
     const count = endAbs - startAbs;
-    const sr = sampleRateRef.current;
-    const audioMs = Math.round((count / sr) * 1000);
-    // count<=0 means the ring never advanced past our start point — a dead
-    // pipeline that start()'s liveness check missed (or heal disabled).
-    // Never ship: the slice would be stale/garbage audio → hallucinations.
-    if (count <= 0) {
-      drop('Micro muet — aucun audio capturé');
-      if (healEnabledRef.current) void rebuild('dead-at-stop').catch(() => {});
-      return;
-    }
-    // Skip trivially short captures (accidental tap / stop-right-after-start).
-    if (audioMs < MIN_CLIP_MS) { drop('Enregistrement trop court'); return; }
-    // Extract the slice with at most two memcpy-speed subarray copies instead
-    // of a per-sample modulo loop (this runs on the main thread in stop()).
+    if (count <= 0) return null;
     const pcm = new Int16Array(count);
     const r = startAbs % ringLen;
     if (r + count <= ringLen) {
@@ -609,14 +670,100 @@ export function useAudioRecorder(opts: {
       pcm.set(ring.subarray(r));
       pcm.set(ring.subarray(0, count - first), first);
     }
+    return { pcm, startAbs };
+  }, []);
+
+  /**
+   * Gate + trim + downsample + encode one clip — the SINGLE path shared by
+   * stop() and the speculative fire so both ship byte-identical audio for
+   * the same utterance. blob is null when the gate found no speech.
+   */
+  const buildClip = useCallback((pcm: Int16Array, sr: number): {
+    analysis: SpeechAnalysis;
+    blob: Blob | null;
+    stats: CaptureStats | null;
+  } => {
     // Speech gate: no plausible speech → no API call. This is the primary
     // barrier against Whisper's silence hallucinations ("Merci.", "Thank
     // you.") — silence never leaves the machine any more. The clip always
     // includes the 1 s pre-roll, so the adaptive noise floor has real
     // ambience to calibrate against.
     const analysis = analyzeSpeech(pcm, sr);
+    if (!analysis.hasSpeech) return { analysis, blob: null, stats: null };
+    // Trim head/tail silence (with natural margins). Trailing silence is
+    // Whisper's other hallucination trigger — a real phrase used to come
+    // back with ", Merci." appended when the user paused before pressing
+    // stop. Also shrinks the upload.
+    const speechPcm = trimToSpeech(pcm, analysis);
+    const shippedMs = Math.round((speechPcm.length / sr) * 1000);
+    // Downsample toward 16 kHz before encoding — smaller upload, zero quality
+    // loss for Whisper (it resamples to 16 kHz internally anyway).
+    const { data: ds, rate: dsRate } = downsampleToward16k(speechPcm, sr);
+    const wav = encodeWavMono16(ds, dsRate);
+    const blob = new Blob([wav], { type: 'audio/wav' });
+    const stats: CaptureStats = {
+      totalMs: analysis.totalMs,
+      speechMs: analysis.speechMs,
+      shippedMs,
+      noiseFloor: analysis.noiseFloor,
+      peakRms: analysis.peakRms,
+      // Speech geometry for the server-side hallucination cross-check.
+      speechMeta: speechMetaFor(analysis, sr),
+    };
+    return { analysis, blob, stats };
+  }, []);
+
+  const start = useCallback(async () => {
+    try {
+      await ensureLive();
+      if (!ringRef.current) throw new Error('Microphone indisponible');
+      const prerollSamples = Math.floor(sampleRateRef.current * PREROLL_MS / 1000);
+      // Capture from (now − pre-roll), clamped so we never read before the
+      // ring's oldest valid sample.
+      const oldest = Math.max(0, writeCountRef.current - ringLenRef.current);
+      captureStartRef.current = Math.max(oldest, writeCountRef.current - prerollSamples);
+      resetCaptureFrames();
+      captureIdRef.current =
+        (typeof crypto !== 'undefined' && (crypto as any).randomUUID)
+          ? (crypto as any).randomUUID()
+          : `cap-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+      capturingRef.current = true;
+    } catch (err: any) {
+      capturingRef.current = false;
+      optsRef.current.onError?.(err instanceof Error ? err : new Error(String(err)));
+    }
+  }, [ensureLive, resetCaptureFrames]);
+
+  const stop = useCallback(() => {
+    if (!capturingRef.current) return;
+    capturingRef.current = false;
+    // Snapshot the speculation BEFORE the state resets below.
+    const finishedSpec = lastSpecRef.current;
+    // Every non-ship exit goes through onDrop so the view ALWAYS leaves its
+    // 'recording' state — a silent return here used to freeze the pill red.
+    const drop = (reason: string, detail?: string) => {
+      log(`drop: ${reason}${detail ? ` (${detail})` : ''}`);
+      resetCaptureFrames();
+      optsRef.current.onDrop?.(reason);
+    };
+    if (!ringRef.current || ringLenRef.current === 0) { drop('Micro indisponible'); return; }
+    const endAbs = writeCountRef.current;
+    const slice = sliceRing(captureStartRef.current, endAbs);
+    // No slice = the ring never advanced past our start point — a dead
+    // pipeline that start()'s liveness check missed (or heal disabled).
+    // Never ship: the slice would be stale/garbage audio → hallucinations.
+    if (!slice) {
+      drop('Micro muet — aucun audio capturé');
+      if (healEnabledRef.current) void rebuild('dead-at-stop').catch(() => {});
+      return;
+    }
+    const sr = sampleRateRef.current;
+    const audioMs = Math.round((slice.pcm.length / sr) * 1000);
+    // Skip trivially short captures (accidental tap / stop-right-after-start).
+    if (audioMs < MIN_CLIP_MS) { drop('Enregistrement trop court'); return; }
+    const { analysis, blob, stats } = buildClip(slice.pcm, sr);
     const fmt = (x: number) => x.toFixed(4);
-    if (!analysis.hasSpeech) {
+    if (!blob || !stats) {
       drop(
         'Aucune parole détectée',
         `total=${analysis.totalMs}ms speech=${analysis.speechMs}ms run=${analysis.longestRunFrames} ` +
@@ -624,29 +771,77 @@ export function useAudioRecorder(opts: {
       );
       return;
     }
-    // Trim head/tail silence (with natural margins). Trailing silence is
-    // Whisper's other hallucination trigger — a real phrase used to come
-    // back with ", Merci." appended when the user paused before pressing
-    // stop. Also shrinks the upload.
-    const speechPcm = trimToSpeech(pcm, analysis);
-    const shippedMs = Math.round((speechPcm.length / sr) * 1000);
+    // Speculation handshake: valid iff the end of qualified speech hasn't
+    // moved since the speculative clip was built (the user did NOT speak
+    // again between the fire and the stop). Compared in ABSOLUTE ring
+    // samples with a small tolerance for frame-boundary jitter.
+    let spec: { id: string } | null = null;
+    if (finishedSpec) {
+      const finalEndAbs = slice.startAbs + analysis.lastSpeechEndSample;
+      const tolSamples = Math.round((SPEC_TOL_MS / 1000) * sr);
+      if (Math.abs(finalEndAbs - finishedSpec.endAbs) <= tolSamples) {
+        spec = { id: finishedSpec.id };
+      } else {
+        log(`spec invalid at stop: speech end moved ${finishedSpec.endAbs}→${finalEndAbs}`);
+      }
+    }
     log(
-      `ship: total=${analysis.totalMs}ms speech=${analysis.speechMs}ms shipped=${shippedMs}ms ` +
-      `floor=${fmt(analysis.noiseFloor)} peak=${fmt(analysis.peakRms)} thr=${fmt(analysis.threshold)}`,
+      `ship: total=${analysis.totalMs}ms speech=${analysis.speechMs}ms shipped=${stats.shippedMs}ms ` +
+      `floor=${fmt(analysis.noiseFloor)} peak=${fmt(analysis.peakRms)} thr=${fmt(analysis.threshold)}` +
+      (spec ? ` spec=${spec.id}` : ''),
     );
-    // Downsample toward 16 kHz before encoding — smaller upload, zero quality
-    // loss for Whisper (it resamples to 16 kHz internally anyway).
-    const { data: ds, rate: dsRate } = downsampleToward16k(speechPcm, sr);
-    const wav = encodeWavMono16(ds, dsRate);
-    const blob = new Blob([wav], { type: 'audio/wav' });
-    optsRef.current.onStop?.(blob, 'audio/wav', audioMs, {
-      totalMs: analysis.totalMs,
-      speechMs: analysis.speechMs,
-      shippedMs,
-      noiseFloor: analysis.noiseFloor,
-      peakRms: analysis.peakRms,
-    });
-  }, [rebuild, log]);
+    resetCaptureFrames();
+    optsRef.current.onStop?.(blob, 'audio/wav', audioMs, { ...stats, spec });
+  }, [rebuild, log, sliceRing, buildClip, resetCaptureFrames]);
+
+  // --- Speculative end-of-utterance checker ------------------------------
+  // Every 180 ms while capturing: analyze the incrementally-built frame
+  // series (one sort of ≤ a few thousand floats — sub-millisecond). When
+  // the user has been silent ≥ SPEC_SILENCE_MS after real speech, build the
+  // clip up to end-of-speech through the SAME gate/trim/encode path stop()
+  // uses and hand it to the view, which fires the transcription pipeline in
+  // the background. One fire per distinct end-of-speech: the fire is
+  // deduped on the absolute sample index, so a 10 s silence doesn't refire,
+  // and resumed speech naturally re-arms it.
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!capturingRef.current || specBusyRef.current) return;
+      if (specHashDisabledRef.current || optsRef.current.speculative === false) return;
+      const cb = optsRef.current.onSpeculativeReady;
+      if (!cb) return;
+      const fa = capFramesRef.current;
+      if (fa.originAbs < 0 || fa.rms.length < SPEC_MIN_FRAMES) return;
+      const res = analyzeFrameSeries(fa.rms);
+      if (!res.hasSpeech || res.lastSpeechFrame < 0) return;
+      if (res.trailingSilenceMs < SPEC_SILENCE_MS) return;
+      const sr = sampleRateRef.current;
+      const dedupeSamples = Math.round((SPEC_DEDUPE_MS / 1000) * sr);
+      const endAbsGuess = fa.originAbs + (res.lastSpeechFrame + 1) * frameLenRef.current;
+      if (lastSpecRef.current && Math.abs(lastSpecRef.current.endAbs - endAbsGuess) <= dedupeSamples) return;
+      specBusyRef.current = true;
+      try {
+        // Slice up to speech-end + 500 ms of the observed silence so the
+        // full-path analysis/trim sees the same tail a stop() would.
+        const sliceEnd = Math.min(writeCountRef.current, endAbsGuess + Math.round(sr * 0.5));
+        const slice = sliceRing(captureStartRef.current, sliceEnd);
+        if (!slice) return;
+        const { analysis, blob, stats } = buildClip(slice.pcm, sr);
+        if (!blob || !stats) return;
+        const specEndAbs = slice.startAbs + analysis.lastSpeechEndSample;
+        if (lastSpecRef.current && Math.abs(lastSpecRef.current.endAbs - specEndAbs) <= dedupeSamples) return;
+        const specId = `${captureIdRef.current}#${++specSeqRef.current}`;
+        lastSpecRef.current = { id: specId, endAbs: specEndAbs, firedAt: Date.now() };
+        log(
+          `spec fire ${specId} trailing=${res.trailingSilenceMs}ms ` +
+          `shipped=${stats.shippedMs}ms speech=${stats.speechMs}ms`,
+        );
+        cb(blob, 'audio/wav', analysis.totalMs, stats, specId);
+      } finally {
+        specBusyRef.current = false;
+      }
+    }, SPEC_CHECK_EVERY_MS);
+    return () => clearInterval(id);
+  }, [sliceRing, buildClip, log]);
 
   const isRecording = useCallback(() => capturingRef.current, []);
 
@@ -685,19 +880,36 @@ export function useAudioRecorder(opts: {
   useEffect(() => {
     if (!auditRef.current) return;
     (window as any).__parlysAudioAudit = {
-      getState: () => ({
-        ctxState: ctxRef.current?.state ?? 'none',
-        streamActive: !!streamRef.current?.active,
-        capturing: capturingRef.current,
-        writeCount: writeCountRef.current,
-        tickCount: tickCountRef.current,
-        lastTickAgoMs: lastTickAtRef.current ? Date.now() - lastTickAtRef.current : -1,
-        sampleRate: sampleRateRef.current,
-        rebuilds: rebuildsRef.current,
-        healEnabled: healEnabledRef.current,
-        suspendedByApp: suspendedByAppRef.current,
-        lastRms: lastRmsRef.current,
-      }),
+      getState: () => {
+        // Live capture VAD view for the harness: trailing silence + speech
+        // time measured exactly like the speculative checker does.
+        let trailingSilenceMs = -1;
+        let captureSpeechMs = -1;
+        const fa = capFramesRef.current;
+        if (capturingRef.current && fa.originAbs >= 0 && fa.rms.length >= 4) {
+          const res = analyzeFrameSeries(fa.rms);
+          trailingSilenceMs = res.hasSpeech ? res.trailingSilenceMs : -1;
+          captureSpeechMs = res.speechMs;
+        }
+        return {
+          ctxState: ctxRef.current?.state ?? 'none',
+          streamActive: !!streamRef.current?.active,
+          capturing: capturingRef.current,
+          writeCount: writeCountRef.current,
+          tickCount: tickCountRef.current,
+          lastTickAgoMs: lastTickAtRef.current ? Date.now() - lastTickAtRef.current : -1,
+          sampleRate: sampleRateRef.current,
+          rebuilds: rebuildsRef.current,
+          healEnabled: healEnabledRef.current,
+          suspendedByApp: suspendedByAppRef.current,
+          lastRms: lastRmsRef.current,
+          specEnabled: !specHashDisabledRef.current && optsRef.current.speculative !== false,
+          specSeq: specSeqRef.current,
+          lastSpecId: lastSpecRef.current?.id ?? null,
+          trailingSilenceMs,
+          captureSpeechMs,
+        };
+      },
       kill: (mode: 'suspend' | 'stoptracks') => {
         if (mode === 'suspend') {
           try { void ctxRef.current?.suspend(); } catch { /* ignore */ }

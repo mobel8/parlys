@@ -118,6 +118,43 @@ const CASES = [
     lang: 'jp',
     expectContains: 'euh',
   },
+  // ─── v1.9: FR trailing-hallucination bank additions ───────────────
+  {
+    label: "FR: merci d'avoir écouté stripped",
+    input: "Voici le compte rendu. Merci d'avoir écouté !",
+    lang: 'fr',
+    expect: 'Voici le compte rendu.',
+  },
+  {
+    label: "FR: n'oubliez pas de vous abonner stripped",
+    input: "Le rapport est prêt. N'oubliez pas de vous abonner à la chaîne.",
+    lang: 'fr',
+    expect: 'Le rapport est prêt.',
+  },
+  {
+    label: 'FR: à la prochaine (fois) end-anchored stripped (accent-boundary fix)',
+    input: "On se voit demain, à la prochaine fois !",
+    lang: 'fr',
+    expect: 'On se voit demain',
+  },
+  {
+    label: 'FR: à bientôt end-anchored stripped (accent-boundary fix)',
+    input: "On se retrouve lundi. À bientôt !",
+    lang: 'fr',
+    expect: 'On se retrouve lundi.',
+  },
+  {
+    label: 'FR: "la prochaine" mid-sentence NOT stripped',
+    input: "La prochaine réunion est jeudi.",
+    lang: 'fr',
+    expect: 'La prochaine réunion est jeudi.',
+  },
+  {
+    label: 'FR: "écouter" as verb NOT stripped',
+    input: "Je vais écouter le podcast demain.",
+    lang: 'fr',
+    expect: 'Je vais écouter le podcast demain.',
+  },
 ];
 
 let pass = 0, fail = 0;

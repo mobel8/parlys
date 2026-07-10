@@ -94,7 +94,9 @@ const HALLUCINATIONS_SAFE: Record<string, RegExp[]> = {
     /\bsous[-\s]?titres?\s+effectués\s+par[^.!?\n]*[.!?…]?/gi,
     // YouTube outros — distinctive literal phrases.
     /\bmerci\s+d['']?avoir\s+regardé[^.!?\n]*[.!?…]?/gi,
+    /\bmerci\s+d['']?avoir\s+écouté[^.!?\n]*[.!?…]?/gi,
     /\bn['']?(?:hésitez|hesitez)\s+pas\s+à\s+(?:vous\s+)?(?:abonner|liker)[^.!?\n]*[.!?…]?/gi,
+    /\bn['']?oubliez\s+pas\s+de\s+(?:vous\s+abonner|liker|partager|mettre\s+un\s+(?:like|pouce))[^.!?\n]*[.!?…]?/gi,
     /\babonnez[-\s]?vous(?:\s+à\s+(?:ma|notre)\s+chaî?ne)?[^.!?\n]*[.!?…]?/gi,
     /\blike(?:r|z)?\s+et\s+abonnez[-\s]?vous\b[^.!?\n]*[.!?…]?/gi,
   ],
@@ -140,8 +142,12 @@ const HALLUCINATIONS_BROAD: Record<string, RegExp[]> = {
   fr: [
     // End-anchored sign-offs that CAN be legitimate French dictation
     // ("à bientôt" / "à la prochaine"); only strip when audio is French.
-    /\bà\s+la\s+prochaine\s*!?$/gi,
-    /\bà\s+bientôt\s*!?$/gi,
+    // NOTE: JS `\b` is ASCII-only — before an accented letter ("à") it
+    // requires the PREVIOUS char to be a word char, so `\bà` never matches
+    // after a space. Unicode-aware lookbehind (u flag) is the correct
+    // boundary here; without it these two patterns were dead code.
+    /(?<![\p{L}\p{N}])à\s+la\s+prochaine(?:\s+fois)?\s*!?$/giu,
+    /(?<![\p{L}\p{N}])à\s+bientôt\s*!?$/giu,
   ],
   en: [
     // YouTube "like/subscribe" CTA. REWRITTEN so a bare "subscribe"/"like"

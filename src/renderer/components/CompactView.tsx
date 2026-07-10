@@ -42,23 +42,41 @@ export function CompactView() {
 
   const [justDone, setJustDone] = useState(false);
 
+  // Speculative transcription bookkeeping: id of the last speculative
+  // request actually DISPATCHED to main (the recorder may report a spec id
+  // whose IPC we haven't finished sending — commit would miss, we fall back).
+  const dispatchedSpecRef = useRef<string | null>(null);
+
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
-    onStop: async (blob, mimeType, audioMs, stats) => {
-      setRecState('processing');
-      setAudioLevel(0);
-      const t0 = Date.now();
+    speculative: settings.speculativeStt !== false,
+    // Mid-capture end-of-utterance: run the WHOLE pipeline now, park the
+    // result in main (zero side effects). By the time the user presses
+    // stop, the Whisper round-trip already happened inside their natural
+    // pause → the commit in onStop pastes near-instantly.
+    onSpeculativeReady: async (blob, mimeType, _audioMs, stats, specId) => {
       try {
         const audioBase64 = await blobToBase64(blob);
-        const res = await window.parlys.transcribe({
+        dispatchedSpecRef.current = specId;
+        void window.parlys.transcribe({
           audioBase64,
           mimeType,
           language: settings.language === 'auto' ? undefined : settings.language,
           translateTo: settings.translateTo || undefined,
           mode: settings.mode,
-          audioMs,
-          speechMs: stats?.speechMs,
-        });
+          audioMs: stats.totalMs,
+          speechMs: stats.speechMs,
+          speech: stats.speechMeta ?? undefined,
+          speculative: true,
+          specId,
+        }).catch(() => { /* commit falls back to classic */ });
+      } catch { /* base64 failed — classic path at stop */ }
+    },
+    onStop: async (blob, mimeType, audioMs, stats) => {
+      setRecState('processing');
+      setAudioLevel(0);
+      const t0 = Date.now();
+      const finish = async (res: import('../../shared/types').TranscribeResponse) => {
         setLastLatencyMs(Date.now() - t0);
         if (!res.ok) {
           setLastError(res.error || 'Erreur inconnue');
@@ -85,6 +103,30 @@ export function CompactView() {
         setTimeout(() => setJustDone(false), 1500);
         // History refresh last — lowest priority, never blocks the paste.
         loadHistory();
+      };
+      try {
+        // FAST PATH: a speculation covers this exact utterance → commit the
+        // parked result (paste happens in main during this call). ANY commit
+        // failure (miss, IPC error) falls through to the classic path — the
+        // final clip is still in hand, worst case is today's latency.
+        if (stats?.spec?.id && stats.spec.id === dispatchedSpecRef.current) {
+          try {
+            const res = await window.parlys.transcribeCommit({ specId: stats.spec.id });
+            if (res && !res.specMiss) { await finish(res); return; }
+          } catch { /* classic below */ }
+        }
+        const audioBase64 = await blobToBase64(blob);
+        const res = await window.parlys.transcribe({
+          audioBase64,
+          mimeType,
+          language: settings.language === 'auto' ? undefined : settings.language,
+          translateTo: settings.translateTo || undefined,
+          mode: settings.mode,
+          audioMs,
+          speechMs: stats?.speechMs,
+          speech: stats?.speechMeta ?? undefined,
+        });
+        await finish(res);
       } catch (err: any) {
         setLastError(err?.message || String(err));
         setRecState('error');

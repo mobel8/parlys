@@ -293,6 +293,17 @@ export interface Settings {
    * Empty = use built-in defaults only.
    */
   sttPrompt: string;
+  /**
+   * Speculative transcription (default ON). While the user is still
+   * recording, the moment the recorder detects ~600 ms of trailing silence
+   * after speech it fires the FULL transcription pipeline in the
+   * background; pressing stop then commits the parked result instantly
+   * instead of paying the Whisper round-trip. Costs at most a few extra
+   * Whisper calls per dictation (one per long mid-dictation pause). Turn
+   * OFF to guarantee exactly one API call per dictation.
+   * Env kill-switch for A/B tests: PARLYS_SPECULATIVE=0.
+   */
+  speculativeStt: boolean;
 
   // --- VAD calibration (Voice Activity Detection thresholds) ------------
   /**
@@ -379,6 +390,7 @@ export const DEFAULT_SETTINGS: Settings = {
   listenerTargetLang: 'fr',
   listenerMode: 'text',
   sttPrompt: '',
+  speculativeStt: true,
   vadCalibrated: false,
   vadNoiseFloor: 0,
   vadSoftThreshold: 0,
@@ -424,6 +436,37 @@ export interface TranscribeRequest {
   audioMs?: number;
   /** Speech-classified duration (ms) measured by the client speech gate. */
   speechMs?: number;
+  /**
+   * Client speech geometry (speech-gate) — merged speech intervals + first/
+   * last speech instant, in ms RELATIVE TO THE SHIPPED CLIP (the same
+   * timeline Whisper's verbose_json timestamps use). The server-side
+   * hallucination filter cross-checks Whisper segments/words against it and
+   * drops anything that starts where the client measured silence — the
+   * classic "invented tail after the last word".
+   */
+  speech?: {
+    intervalsMs: Array<[number, number]>;
+    endMs: number;
+    startMs: number;
+  };
+  /**
+   * SPECULATIVE call: fired by the renderer while the user is STILL
+   * recording, the moment the recorder sees enough trailing silence after
+   * speech. The pipeline runs fully (Whisper + cleanup + mode/translation)
+   * but with ZERO side effects (no paste, no clipboard, no history); the
+   * result is parked in the main process under `specId`. If the user then
+   * presses stop without having spoken again, the renderer commits via
+   * TRANSCRIBE_COMMIT and the text pastes near-instantly — the network
+   * round-trip happened inside the user's natural end-of-utterance pause.
+   */
+  speculative?: boolean;
+  /** Correlation id for speculative → commit. Required when speculative. */
+  specId?: string;
+}
+
+/** Commit a previously parked speculative transcription (side effects now). */
+export interface TranscribeCommitRequest {
+  specId: string;
 }
 
 export interface TranscribeResponse {
@@ -446,6 +489,12 @@ export interface TranscribeResponse {
   translateFailed?: boolean;
   /** Whisper produced no intelligible speech (everything scrubbed). */
   empty?: boolean;
+  /**
+   * TRANSCRIBE_COMMIT only: the speculative result is missing or failed —
+   * the renderer must fall back to a classic transcription of the final
+   * clip (which it still holds). Never set on the classic path.
+   */
+  specMiss?: boolean;
 }
 
 /**
@@ -541,6 +590,7 @@ export interface ListenerSegment {
 
 export const IPC = {
   TRANSCRIBE: 'parlys:transcribe',
+  TRANSCRIBE_COMMIT: 'parlys:transcribeCommit',
   INTERPRET: 'parlys:interpret',
   ON_INTERPRET_CHUNK: 'parlys:interpretChunk',
   LIST_VOICES: 'parlys:listVoices',

@@ -52,19 +52,44 @@ export function MainView() {
     };
   }, []);
 
+  // Speculative transcription bookkeeping (classic dictation only): id of
+  // the last speculative request actually DISPATCHED to main.
+  const dispatchedSpecRef = useRef<string | null>(null);
+
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
+    // The interpreter routes audio to a different pipeline — speculative
+    // DICTATION calls would be pure waste there.
+    speculative: settings.speculativeStt !== false && !settings.interpreterEnabled,
+    onSpeculativeReady: async (blob, mimeType, _audioMs, stats, specId) => {
+      if (settings.interpreterEnabled) return;
+      try {
+        const audioBase64 = await blobToBase64(blob);
+        dispatchedSpecRef.current = specId;
+        void window.parlys.transcribe({
+          audioBase64,
+          mimeType,
+          language: settings.language === 'auto' ? undefined : settings.language,
+          translateTo: settings.translateTo || undefined,
+          mode: settings.mode,
+          audioMs: stats.totalMs,
+          speechMs: stats.speechMs,
+          speech: stats.speechMeta ?? undefined,
+          speculative: true,
+          specId,
+        }).catch(() => { /* commit falls back to classic */ });
+      } catch { /* base64 failed — classic path at stop */ }
+    },
     onStop: async (blob, mimeType, audioMs, stats) => {
       setRecState('processing');
       setAudioLevel(0);
       const t0 = Date.now();
       try {
-        const audioBase64 = await blobToBase64(blob);
-
         // ----- Interpreter path ---------------------------------------------
         // When the toggle is ON, route through the voice-to-voice
         // pipeline instead of the classic dictation pipeline.
         if (settings.interpreterEnabled) {
+          const audioBase64 = await blobToBase64(blob);
           playerRef.current?.dispose();
           const requestId = `int-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const targetLang = settings.interpretTargetLang || 'en';
@@ -106,15 +131,31 @@ export function MainView() {
         }
 
         // ----- Classic dictation path ---------------------------------------
-        const res = await window.parlys.transcribe({
-          audioBase64,
-          mimeType,
-          language: settings.language === 'auto' ? undefined : settings.language,
-          translateTo: settings.translateTo || undefined,
-          mode: settings.mode,
-          audioMs,
-          speechMs: stats?.speechMs,
-        });
+        // FAST PATH: a speculation covers this exact utterance → commit the
+        // parked result (paste happens in main during this call). specMiss
+        // → transparent fallback to a full transcription below.
+        let res: import('../../shared/types').TranscribeResponse | null = null;
+        if (stats?.spec?.id && stats.spec.id === dispatchedSpecRef.current) {
+          try {
+            const committed = await window.parlys.transcribeCommit({ specId: stats.spec.id });
+            if (committed && !committed.specMiss) res = committed;
+          } catch { /* classic below */ }
+        }
+        if (!res) {
+          const audioBase64 = await blobToBase64(blob);
+          const classic: import('../../shared/types').TranscribeResponse =
+            await window.parlys.transcribe({
+              audioBase64,
+              mimeType,
+              language: settings.language === 'auto' ? undefined : settings.language,
+              translateTo: settings.translateTo || undefined,
+              mode: settings.mode,
+              audioMs,
+              speechMs: stats?.speechMs,
+              speech: stats?.speechMeta ?? undefined,
+            });
+          res = classic;
+        }
         setLastLatencyMs(Date.now() - t0);
         if (!res.ok) {
           setLastError(res.error || 'Erreur inconnue');
