@@ -5,6 +5,16 @@ Toutes les modifications notables de Parlys sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.9.1] — 2026-07-11
+
+### Corrigé
+
+- **Le collage qui déclenche des raccourcis clavier au lieu d'insérer le texte.** Le raccourci de dictée est une combinaison à modificateurs (Ctrl+Shift+Espace) et, depuis la STT spéculative (v1.9.0), l'injection part ~25 ms après l'appui — pendant que Ctrl et Shift sont encore physiquement enfoncés. L'OS combinait alors les modificateurs tenus avec les touches injectées : en mode `type`, CHAQUE caractère SendInput devenait `Ctrl+Shift+<lettre>` (une rafale de raccourcis dans l'app cible — onglets qui s'ouvrent, navigation, panneaux) ; en mode `paste`, Ctrl+V devenait `Ctrl+Shift+V`. `injection.ts` attend désormais le relâchement physique complet de Ctrl/Shift/Alt/Win (sonde `GetAsyncKeyState` toutes les 5 ms, nouvelle liaison koffi dans `win32.ts`) juste avant la frappe, dans les deux modes. Zéro latence ajoutée quand rien n'est tenu (mesuré 8 ms bout-en-bout) ; sinon l'attente dure le temps que le doigt se lève (~50-150 ms). Si la combinaison reste tenue > 800 ms, des KEYUP synthétiques la neutralisent et le collage part proprement quand même.
+
+### Ajouté
+
+- Tests : `scripts/_e2e-modifiers.js` + `scripts/_e2e-keylog-form.ps1` — harnais e2e sur le build exact : fenêtre WinForms qui journalise chaque touche reçue (code + modificateurs), modificateurs tenus synthétiquement via `keybd_event` (même état `GetAsyncKeyState` qu'une touche physique), injection déclenchée par CDP. Reproduit mécaniquement le bug sur l'ancien code (35/35 caractères pollués `Shift, Control`) et prouve le correctif (texte intact au caractère près, zéro combo, les 3 chemins : relâchement humain, aucun modificateur, timeout forcé) — 11/11. Barrière d'inactivité (`GetLastInputInfo`) pour ne jamais injecter pendant que l'utilisateur se sert de la machine.
+
 ## [1.8.1] — 2026-07-08
 
 ### Corrigé

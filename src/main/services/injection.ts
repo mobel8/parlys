@@ -27,6 +27,76 @@ function diagLog(...parts: unknown[]): void {
 /** Win32 ShowWindow verbs we actually use. */
 const SW_RESTORE = 9;
 
+/**
+ * Modifier keys that MUST be physically released before we inject
+ * anything. The user's dictation hotkey is a modifier combo
+ * (Ctrl+Shift+Space by default) and with speculative STT the paste fires
+ * ~25 ms after the keypress — while Ctrl and Shift are still physically
+ * held. The OS then combines the held modifiers with our injected keys:
+ *   - paste mode: Ctrl+V becomes Ctrl+Shift+V (paste-special, clipboard
+ *     history, terminal menus…)
+ *   - type mode: EVERY typed character becomes Ctrl+Shift+<char> — a
+ *     burst of app shortcuts that "navigates elsewhere several times"
+ *     instead of inserting text.
+ * Generic VK_SHIFT/VK_CONTROL/VK_MENU cover both left and right variants;
+ * Win keys only exist as L/R.
+ */
+const MODIFIER_VKS: number[] = [VK.SHIFT, VK.CONTROL, VK.MENU, VK.LWIN, VK.RWIN];
+
+/** How long we're willing to wait for the user to lift the hotkey keys.
+ *  Human release-after-press is typically 50-150 ms; 800 ms only triggers
+ *  if the user deliberately keeps the combo held. */
+const MODIFIER_RELEASE_TIMEOUT_MS = 800;
+const MODIFIER_POLL_MS = 5;
+
+/** VKs currently reported down by GetAsyncKeyState (high bit set). */
+function heldModifiers(w: any): number[] {
+  const held: number[] = [];
+  for (const vk of MODIFIER_VKS) {
+    try {
+      if ((w.GetAsyncKeyState(vk) & 0x8000) !== 0) held.push(vk);
+    } catch { /* treat unreadable as released */ }
+  }
+  return held;
+}
+
+/**
+ * Block until no modifier key is physically held, so injected keystrokes
+ * reach the target as plain text — never as shortcut combos.
+ *
+ * Strategy: poll every 5 ms (near-zero cost, near-zero added latency once
+ * the user's fingers lift — the common case is 0 iterations because the
+ * user already released, or ~10-20 iterations ≈ 50-100 ms while the finger
+ * comes up). If the user is still holding the combo after the timeout,
+ * force-release with synthetic KEYUPs and proceed: the target then sees
+ * the modifiers as up for the duration of the injection. The user's real
+ * key release afterwards produces an unmatched WM_KEYUP, which apps
+ * ignore.
+ */
+async function waitModifiersReleased(w: any): Promise<void> {
+  if (!w?.GetAsyncKeyState) return; // old koffi surface — nothing we can do
+  const start = Date.now();
+  let held = heldModifiers(w);
+  if (held.length === 0) return;
+  diagLog(`modifiers held at inject time: [${held.map((v) => '0x' + v.toString(16)).join(',')}] — waiting for release`);
+  while (held.length > 0 && Date.now() - start < MODIFIER_RELEASE_TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, MODIFIER_POLL_MS));
+    held = heldModifiers(w);
+  }
+  if (held.length > 0) {
+    // Timeout: user is deliberately holding the combo. Force the keys up
+    // so the injection still lands as plain text.
+    for (const vk of held) {
+      try { w.keybd_event(vk, 0, VK.KEYEVENTF_KEYUP, 0); } catch {}
+    }
+    diagLog(`modifiers force-released after ${Date.now() - start} ms: [${held.map((v) => '0x' + v.toString(16)).join(',')}]`);
+    // Give the input queue a beat to process the keyups before we inject.
+    await new Promise((r) => setTimeout(r, 10));
+  } else {
+    diagLog(`modifiers released after ${Date.now() - start} ms`);
+  }
+}
+
 export function copyToClipboard(text: string): void {
   clipboard.writeText(sanitizeInjectionText(text));
 }
@@ -314,6 +384,11 @@ async function sendPasteNative(hwnd: string | null): Promise<boolean> {
       diagLog(`pre-keystroke foreground=${finalFg}`);
     } catch {}
 
+    // The user's hotkey modifiers may still be physically held (speculative
+    // STT pastes ~25 ms after the keypress). Injecting now would deliver
+    // Ctrl+Shift+V / Ctrl+Alt+V instead of Ctrl+V — wait for release first.
+    await waitModifiersReleased(w);
+
     // Ctrl down, V down, V up, Ctrl up — deliver Ctrl+V.
     w.keybd_event(VK.CONTROL, 0, 0, 0);
     w.keybd_event(VK.V, 0, 0, 0);
@@ -364,6 +439,13 @@ async function sendTextNative(text: string, hwnd: string | null): Promise<boolea
     // TUI/Claude-Code use case the target is already foreground → 0 ms wait,
     // eliminating ~40 ms of dead time on every typed paste.
     if (focusChanged) await new Promise((r) => setTimeout(r, 25));
+
+    // CRITICAL: if the user still physically holds the hotkey modifiers
+    // (Ctrl+Shift+Space release lags the speculative paste by 50-150 ms),
+    // every KEYEVENTF_UNICODE event below would reach the target app as
+    // Ctrl+Shift+<char> — one shortcut per character. Wait until the
+    // modifiers are up before typing.
+    await waitModifiersReleased(w);
 
     const KEYBDINPUT = (w as any)._KEYBDINPUT;
     const VK_RETURN = 0x0D;

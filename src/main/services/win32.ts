@@ -23,6 +23,16 @@ export interface Win32Api {
   SetForegroundWindow: (hwnd: bigint) => number;  // returns BOOL
   keybd_event: (vk: number, scan: number, flags: number, extra: number) => void;
   /**
+   * Physical/logical key state, updated as input events are processed by
+   * the system (both hardware and SendInput-injected). High bit set
+   * (value & 0x8000) means the key is currently DOWN. Used to detect
+   * modifier keys the user is still holding (their dictation hotkey)
+   * before we inject keystrokes — injecting while Ctrl/Shift/Alt/Win are
+   * physically down turns every injected key into a shortcut combo in
+   * the target app.
+   */
+  GetAsyncKeyState: (vk: number) => number;
+  /**
    * Modern keyboard input API. We use it to type characters via
    * KEYEVENTF_UNICODE which works inside terminal TUI apps (Claude Code,
    * vim, tmux, etc.) that consume Ctrl+V as a raw key event without
@@ -76,6 +86,7 @@ export function getWin32(): Win32Api | null {
     const keybd_event = user32.func(
       'void __stdcall keybd_event(uint8_t bVk, uint8_t bScan, uint32_t dwFlags, uintptr_t dwExtraInfo)',
     );
+    const GetAsyncKeyState = user32.func('int16_t __stdcall GetAsyncKeyState(int vKey)');
     const BringWindowToTop = user32.func('int __stdcall BringWindowToTop(void* hWnd)');
     const IsWindow = user32.func('int __stdcall IsWindow(void* hWnd)');
     const IsIconic = user32.func('int __stdcall IsIconic(void* hWnd)');
@@ -150,6 +161,7 @@ export function getWin32(): Win32Api | null {
       GetForegroundWindow,
       SetForegroundWindow,
       keybd_event,
+      GetAsyncKeyState,
       SendInput,
       INPUT_KEYBOARD,
       makeKeyInput,
@@ -192,7 +204,12 @@ export function pointerToHwnd(ptr: any, w: Win32Api): string | null {
 
 /** Virtual key codes + KEYEVENTF flags. */
 export const VK = {
+  SHIFT: 0x10,
   CONTROL: 0x11,
+  /** VK_MENU = Alt (covers both left Alt and AltGr). */
+  MENU: 0x12,
+  LWIN: 0x5B,
+  RWIN: 0x5C,
   V: 0x56,
   /** Indicates a key release. Without this flag a key event is a press. */
   KEYEVENTF_KEYUP: 0x0002,
