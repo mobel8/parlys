@@ -134,8 +134,11 @@ const DEV_URL = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
 const COMFORTABLE = { w: 1180, h: 760, minW: 880, minH: 560 };
 
 // Compact pill widget — small floating badge (Superwhisper-style).
-// 176x52 is the stock size at pillScale=1.0; user-configurable in Settings.
-const WIDGET_BASE = { w: 176, h: 52 };
+// 176x42 is the stock size at pillScale=1.0 (user-configurable in
+// Settings). Height slimmed from 52 in v1.10.6 at the user's request
+// ("moins épais") — the inner layout (pill 36, mic 30, expand 24) is
+// recalibrated to match, everything still strictly proportional.
+const WIDGET_BASE = { w: 176, h: 42 };
 
 // Compute actual pill bounds from the user's pillScale. Reading the
 // setting lazily (not at module load) means a SET_SETTINGS change can

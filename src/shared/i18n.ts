@@ -104,7 +104,7 @@ const en: Dict = {
   'settings.density.label':       'Density',
   'settings.density.comfortable': 'Comfortable',
   'settings.density.compact':     'Compact / minimalist',
-  'settings.density.hint':        'Compact turns the app into a tiny floating pill (176×52 px), transparent and always on top — ideal for overlay dictation.',
+  'settings.density.hint':        'Compact turns the app into a tiny floating pill (176×42 px), transparent and always on top — ideal for overlay dictation.',
   'settings.alwaysOnTop':         'Always on top',
   'settings.alwaysOnTop.desc':    'Keeps the Parlys window above your other apps.',
 
@@ -212,7 +212,7 @@ const fr: Dict = {
   'settings.density.label':       'Densité',
   'settings.density.comfortable': 'Confortable',
   'settings.density.compact':     'Compact / minimaliste',
-  'settings.density.hint':        'Le mode compact transforme l\u2019app en une petite pilule flottante (176×52 px) transparente, toujours au premier plan — idéale pour dicter en surimpression.',
+  'settings.density.hint':        'Le mode compact transforme l\u2019app en une petite pilule flottante (176×42 px) transparente, toujours au premier plan — idéale pour dicter en surimpression.',
   'settings.alwaysOnTop':         'Toujours au premier plan',
   'settings.alwaysOnTop.desc':    'Garde la fenêtre Parlys visible au-dessus de vos autres applications.',
 

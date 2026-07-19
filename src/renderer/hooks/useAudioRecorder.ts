@@ -74,7 +74,17 @@ import {
  */
 
 const PREROLL_MS = 1000;       // capture this much audio from BEFORE the press
-const RING_SECONDS = 120;      // max single-phrase length we can hold
+/**
+ * Max single-dictation length the ring can hold. 300 s (was 120): the user
+ * dictates multi-minute monologues, and a capture longer than the ring
+ * SILENTLY LOSES ITS BEGINNING (sliceRing clamps to the most-recent
+ * RING_SECONDS — proven live: a 218 s capture shipped exactly 120 000 ms,
+ * first sentences gone). 300 s × 48 kHz × 2 B = 28.8 MB preallocated, and
+ * the shipped 16 kHz WAV stays ≈ 9.6 MB, well under Groq's 25 MB cap.
+ * Beyond 300 s the clamp still applies but is now DETECTED and surfaced
+ * (stats.truncatedMs → UI warning) instead of being silent.
+ */
+const RING_SECONDS = 300;
 const PROCESSOR_FRAMES = 2048; // ScriptProcessor buffer (~43 ms @ 48k)
 
 // --- Liveness / self-heal tuning -------------------------------------------
@@ -116,6 +126,14 @@ const SPEC_TOL_MS = 250;
 // classic-path stop, never a wrong paste.
 const SPEC_DEDUPE_MS = 400;
 const SPEC_MIN_FRAMES = 20;       // don't even analyze under ~600 ms captured
+/**
+ * Don't fire speculations once the capture exceeds this. Every fire
+ * uploads the WHOLE clip-so-far: on a multi-minute dictation with pauses
+ * that used to mean dozens of increasingly heavy Whisper calls (rate-limit
+ * pressure + cost) for a shrinking latency benefit. Long dictations take
+ * the classic path at stop, exactly as with speculation disabled.
+ */
+const SPEC_MAX_CLIP_MS = 45_000;
 
 /** Stats shipped alongside the WAV so the caller can log/inspect quality. */
 export interface CaptureStats {
@@ -138,6 +156,12 @@ export interface CaptureStats {
    * commit `spec.id` instead of re-transcribing.
    */
   spec?: { id: string } | null;
+  /**
+   * > 0 when the capture outgrew the ring and its BEGINNING was clamped
+   * away (how many ms were lost). The views surface a warning so the
+   * loss is never silent again.
+   */
+  truncatedMs?: number;
 }
 
 /**
@@ -748,7 +772,8 @@ export function useAudioRecorder(opts: {
     };
     if (!ringRef.current || ringLenRef.current === 0) { drop('Micro indisponible'); return; }
     const endAbs = writeCountRef.current;
-    const slice = sliceRing(captureStartRef.current, endAbs);
+    const requestedStartAbs = captureStartRef.current;
+    const slice = sliceRing(requestedStartAbs, endAbs);
     // No slice = the ring never advanced past our start point — a dead
     // pipeline that start()'s liveness check missed (or heal disabled).
     // Never ship: the slice would be stale/garbage audio → hallucinations.
@@ -785,13 +810,23 @@ export function useAudioRecorder(opts: {
         log(`spec invalid at stop: speech end moved ${finishedSpec.endAbs}→${finalEndAbs}`);
       }
     }
+    // Ring-overflow detection: sliceRing clamps the start when the capture
+    // outgrew the ring — the beginning is GONE. That loss must never be
+    // silent (it used to be: first sentences of very long dictations
+    // vanished with zero feedback).
+    const truncatedMs = slice.startAbs > requestedStartAbs
+      ? Math.round(((slice.startAbs - requestedStartAbs) / sr) * 1000)
+      : 0;
+    if (truncatedMs > 0) {
+      log(`ship TRUNCATED: capture outgrew the ${RING_SECONDS}s ring — first ${truncatedMs}ms LOST`);
+    }
     log(
       `ship: total=${analysis.totalMs}ms speech=${analysis.speechMs}ms shipped=${stats.shippedMs}ms ` +
       `floor=${fmt(analysis.noiseFloor)} peak=${fmt(analysis.peakRms)} thr=${fmt(analysis.threshold)}` +
       (spec ? ` spec=${spec.id}` : ''),
     );
     resetCaptureFrames();
-    optsRef.current.onStop?.(blob, 'audio/wav', audioMs, { ...stats, spec });
+    optsRef.current.onStop?.(blob, 'audio/wav', audioMs, { ...stats, spec, truncatedMs });
   }, [rebuild, log, sliceRing, buildClip, resetCaptureFrames]);
 
   // --- Speculative end-of-utterance checker ------------------------------
@@ -811,6 +846,11 @@ export function useAudioRecorder(opts: {
       if (!cb) return;
       const fa = capFramesRef.current;
       if (fa.originAbs < 0 || fa.rms.length < SPEC_MIN_FRAMES) return;
+      // Long-capture cap: past SPEC_MAX_CLIP_MS every fire would upload the
+      // ever-growing whole clip for a shrinking benefit — stop speculating,
+      // the classic path at stop() handles it.
+      const capturedMs = ((writeCountRef.current - captureStartRef.current) / Math.max(1, sampleRateRef.current)) * 1000;
+      if (capturedMs > SPEC_MAX_CLIP_MS) return;
       const res = analyzeFrameSeries(fa.rms);
       if (!res.hasSpeech || res.lastSpeechFrame < 0) return;
       if (res.trailingSilenceMs < SPEC_SILENCE_MS) return;

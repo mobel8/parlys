@@ -330,11 +330,11 @@ export interface Settings {
   vadSilenceEnd: number;
 
   /**
-   * Proportional size of the compact pill. 1.0 = stock 176×52. Range
+   * Proportional size of the compact pill. 1.0 = stock 176×42. Range
    * clamped to [0.3, 1.5] in validate.ts (UI exposes 0.3 – 1.2).
    *
-   * UNIFORM model (v1.10.3, the user's final contract): the window
-   * measures (176, 52) × pillScale — computed once per slider value,
+   * UNIFORM model (v1.10.3+, the user's final contract): the window
+   * measures (176, 42) × pillScale — computed once per slider value,
    * NEVER changed at runtime — and the renderer zooms the whole
    * single-face pill by the same factor. Every state (idle, recording,
    * processing, done, error) shares ONE constant footprint; buttons and

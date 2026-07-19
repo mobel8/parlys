@@ -1,6 +1,6 @@
 {
   "name": "parlys",
-  "version": "1.10.4",
+  "version": "1.10.6",
   "description": "Intelligent voice-to-text dictation app with LLM post-processing",
   "author": {
     "name": "Parlys",

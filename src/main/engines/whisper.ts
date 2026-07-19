@@ -111,7 +111,19 @@ const COMBO_LOGPROB_MAX = -0.85;
 function isLowConfidence(seg: VerboseSegment): boolean {
   if (typeof seg.no_speech_prob === 'number' && seg.no_speech_prob > NO_SPEECH_PROB_MAX) return true;
   if (typeof seg.avg_logprob === 'number' && seg.avg_logprob < AVG_LOGPROB_MIN) return true;
-  if (typeof seg.compression_ratio === 'number' && seg.compression_ratio > COMPRESSION_RATIO_MAX) return true;
+  // High compression_ratio flags the decoder's LOOP failure — but it ALSO
+  // fires on legitimately repetitive dictation (numbered lists, refrains):
+  // measured live, a real spoken enumeration came back as one 17 s segment
+  // with cr=4.43, no_speech=0.000, logprob=-0.31, and the old cr-only rule
+  // DELETED it. A genuine loop decodes with degraded confidence, so cr only
+  // kills a segment when the model is NOT confidently hearing speech
+  // (no_speech ≥ 0.2 or logprob ≤ -0.5, or those signals are missing).
+  if (typeof seg.compression_ratio === 'number' && seg.compression_ratio > COMPRESSION_RATIO_MAX) {
+    const confidentSpeech =
+      typeof seg.no_speech_prob === 'number' && seg.no_speech_prob < 0.2 &&
+      typeof seg.avg_logprob === 'number' && seg.avg_logprob > -0.5;
+    if (!confidentSpeech) return true;
+  }
   if (
     typeof seg.no_speech_prob === 'number' && typeof seg.avg_logprob === 'number' &&
     seg.no_speech_prob > COMBO_NO_SPEECH_MIN && seg.avg_logprob < COMBO_LOGPROB_MAX

@@ -186,7 +186,7 @@ export function registerIpc(): void {
             // hover/activity/states.
             const scale = Math.max(0.3, Math.min(1.5, (next as any).pillScale || 1));
             const newW = Math.round(176 * scale);
-            const newH = Math.round(52 * scale);
+            const newH = Math.round(42 * scale);
             // Relax min/max BEFORE resize — they were locked at constructor
             // time to the prior dimensions and would otherwise refuse the
             // new format.

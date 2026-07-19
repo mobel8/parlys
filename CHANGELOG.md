@@ -5,6 +5,24 @@ Toutes les modifications notables de Parlys sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.10.6] — 2026-07-19
+
+### Modifié
+
+- **Pastille moins épaisse.** Hauteur de base réduite de 52 à 42 px (−19 %), largeur inchangée, à la demande de l'utilisateur. Intérieur recalibré pour rester contenu et harmonieux : corps 36 px (padding 2), micro 30 px, bouton d'agrandissement 24 px, onde 16/13 px. Tous les contrats tiennent : strictement proportionnel au réglage, une seule face à empreinte constante, boutons dans la zone noire, zéro redimensionnement à l'exécution.
+
+## [1.10.5] — 2026-07-19
+
+### Corrigé
+
+- **Débuts de longues dictées perdus au collage.** Cause racine mesurée en direct : le ring PCM plafonnait à 120 s (`RING_SECONDS`), et `sliceRing` clampe silencieusement au plus récent — une capture de 218 s expédiait EXACTEMENT 120 000 ms, premières phrases disparues sans aucun avertissement. Le ring passe à **300 s** (28,8 Mo préalloués ; WAV expédié 16 kHz ≈ 9,6 Mo, sous la limite API de 25 Mo), et au-delà la troncature est désormais DÉTECTÉE (`stats.truncatedMs`, log `ship TRUNCATED`) et affichée en mode confortable (« les N premières secondes ont été tronquées ») au lieu d'être muette.
+- **Segments de vraie parole supprimés par la règle compression_ratio.** Mesuré en direct : une énumération réellement prononcée revenait en un segment de 17 s avec cr=4,43, no_speech=0,000, logprob=-0,31 — et la règle « cr seul » le SUPPRIMAIT intégralement (les dictées répétitives, listes numérotées, refrains perdaient des blocs entiers : « pas une grande fidélité »). La règle exige désormais une corroboration : un cr élevé ne tue le segment que si le modèle n'entend PAS de la parole avec confiance (no_speech ≥ 0,2 ou logprob ≤ −0,5, ou signaux absents) — une vraie boucle de décodeur décode toujours avec une confiance dégradée.
+- **Tempête de spéculations sur les longues dictées.** Chaque tir spéculatif ré-uploade TOUT le clip accumulé : sur une dictée de plusieurs minutes avec pauses, des dizaines d'appels Whisper de plus en plus lourds (pression sur la limite de débit + coût) pour un bénéfice décroissant. Les tirs s'arrêtent au-delà de 45 s de capture : le chemin classique au stop prend le relais.
+
+### Ajouté
+
+- Harnais de fidélité `scripts/_e2e-fidelity.js` (local) : fixtures SAPI de phrases NUMÉROTÉES variées (46,7 s / 150,7 s — générateur `_gen-longform-fixtures.ps1`, piège d'encodage UTF-8 sans BOM corrigé : PowerShell 5.1 lisait « numéro » en mojibake que la voix prononçait littéralement « symbole copyright »), dictées via le vrai build contre le vrai Groq : chaque numéro manquant localise la perte. Constat annexe mesuré : Whisper lui-même effondre des phrases quasi IDENTIQUES répétées (2..5 sur 8 sautées en appel direct) — les fixtures utilisent donc des phrases variées, représentatives d'une vraie dictée.
+
 ## [1.10.4] — 2026-07-19
 
 ### Corrigé

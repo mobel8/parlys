@@ -7,7 +7,7 @@ import { blobToBase64 } from '../lib/blob';
 /**
  * Compact pill widget — Superwhisper-style floating badge.
  *
- * The window is 176x52, transparent, frameless, always-on-top, skipTaskbar.
+ * The window is 176x42, transparent, frameless, always-on-top, skipTaskbar.
  * The whole pill body is a drag handle (`-webkit-app-region: drag`); only
  * the mic button and expand icon are `no-drag` so they can receive clicks.
  *

@@ -206,5 +206,34 @@ check(
   'Voici la longue phrase dictée normalement.',
 );
 
+// ------------------------------------------------ CR CORROBORATION (v1.10.5)
+// compression_ratio alone must not delete CONFIDENT speech: legitimate
+// repetitive dictation (numbered lists) measured live at cr=4.43 with
+// no_speech=0.000 / logprob=-0.31 — kept now.
+check(
+  'high cr but confident speech (real repetitive dictation) → KEPT',
+  applySegmentFilter(
+    { text: 'Un. Deux. Trois. Quatre.', segments: [{ text: ' Un. Deux. Trois. Quatre.', start: 0.0, end: 17.6, no_speech_prob: 0.0, avg_logprob: -0.31, compression_ratio: 4.43 }] },
+    meta([[100, 17000]], 17000),
+  ),
+  'Un. Deux. Trois. Quatre.',
+);
+check(
+  'high cr with DEGRADED confidence (true decoder loop) → dropped',
+  applySegmentFilter(
+    { text: 'la la la la', segments: [{ text: ' la la la la', start: 0.0, end: 4.0, no_speech_prob: 0.35, avg_logprob: -0.9, compression_ratio: 3.2 }] },
+    meta([[100, 3800]], 3800),
+  ),
+  '',
+);
+check(
+  'high cr with missing confidence fields → dropped (conservative, unchanged)',
+  applySegmentFilter(
+    { text: 'boucle boucle boucle', segments: [{ text: ' boucle boucle boucle', start: 0.0, end: 3.0, compression_ratio: 3.5 }] },
+    meta([[100, 2800]], 2800),
+  ),
+  '',
+);
+
 console.log(failures === 0 ? `\nALL ${idx} PASS` : `\n${failures}/${idx} FAILED`);
 process.exit(failures ? 1 : 0);

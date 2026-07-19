@@ -175,6 +175,9 @@ export function MainView() {
         if (res.empty) setLastWarning('Aucune parole détectée — audio inaudible ?');
         else if (res.translateFailed) setLastWarning('Traduction indisponible — texte source affiché.');
         else if (res.postProcessFailed) setLastWarning('Mode non appliqué (erreur LLM) — texte brut affiché.');
+        else if (stats?.truncatedMs && stats.truncatedMs > 0) {
+          setLastWarning(`Dictée très longue : les ${Math.round(stats.truncatedMs / 1000)} premières secondes ont été tronquées (limite 5 min).`);
+        }
         else setLastWarning('');
         loadHistory();
       } catch (err: any) {

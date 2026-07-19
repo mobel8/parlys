@@ -153,7 +153,7 @@ html { background: var(--bg-0, #07070d); }
    grotesquely big at 2000 px, loose enough that the 580 px
    narrow-window case still reads comfortably.
 
-   Compact density (the 176×52 pill) keeps a locked 13 px root
+   Compact density (the 176×42 pill) keeps a locked 13 px root
    so the pill chrome never reflows — it was pixel-tuned.
    ========================================================= */
 html {
@@ -937,7 +937,7 @@ select option:hover {
 
 /* =========================================================
    Pill widget (compact density)
-   Window is 176x52, transparent, frameless. We render a glass pill
+   Window is 176x42, transparent, frameless. We render a glass pill
    centered inside and let the user drag from anywhere on it.
    ========================================================= */
 /* Every descendant of .density-compact is draggable (see note on .drag /
@@ -979,7 +979,7 @@ select option:hover {
 .pill-root {
   width: 100%;
   height: 100%;
-  padding: 4px 6px;
+  padding: 3px 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1001,8 +1001,8 @@ select option:hover {
      is the user's contract: no dimension change while speaking, and
      every button lives INSIDE the dark zone. */
   width: 100%;
-  height: 44px;
-  padding: 3px 6px 3px 4px;
+  height: 36px;
+  padding: 2px 6px 2px 4px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1135,8 +1135,8 @@ select option:hover {
 .pill-mic {
   -webkit-app-region: no-drag;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   border: none;
   cursor: pointer;
@@ -1220,7 +1220,7 @@ select option:hover {
 /* Mini waveform inside the pill */
 .pill-wave {
   width: 100%;
-  height: 22px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1232,7 +1232,7 @@ select option:hover {
   /* Fixed height + scaleY (composited) — animating `height` here relayouts
      the transparent pill and can invalidate its composited layer / flip
      :hover (documented hazard). The JS feeds a 0..1 scaleY. */
-  height: 18px;
+  height: 13px;
   transform-origin: center;
   background: linear-gradient(to top, rgba(251, 113, 133, 0.85), #f43f5e);
   border-radius: 2px;
@@ -1246,8 +1246,8 @@ select option:hover {
 .pill-expand {
   -webkit-app-region: no-drag;
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   border-radius: 7px;
   border: none;
   background: rgba(255, 255, 255, 0.06);

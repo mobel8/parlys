@@ -8,7 +8,7 @@ export type RecState = 'idle' | 'recording' | 'processing' | 'error';
  * Read the density the main process baked into the URL hash when it
  * created this window (`#compact` or `#comfortable`). Returning it here
  * lets the very first React render pick the right layout, so there is no
- * one-frame flash of the comfortable UI inside a 176x52 pill window
+ * one-frame flash of the comfortable UI inside a 176x42 pill window
  * during a comfortable → compact swap.
  */
 function initialDensity(): Settings['density'] {
@@ -20,7 +20,7 @@ function initialDensity(): Settings['density'] {
   // The previous parser only stripped `-sampler` and `;view=…$`, leaving
   // any `;theme=…;fx=…` suffix intact — so the equality check below
   // failed and pill windows fell back to 'comfortable', causing the
-  // CompactView to never mount in a 176×52 pill window.
+  // CompactView to never mount in a 176×42 pill window.
   const head = raw.split(';')[0].replace(/-sampler/, '');
   if (head === 'compact' || head === 'comfortable') return head as Settings['density'];
   return DEFAULT_SETTINGS.density;
