@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { useStore } from './stores/useStore';
+import { useEffect, useRef } from 'react';
+import { useStore, PERF_GATES_OFF } from './stores/useStore';
 import { TitleBar } from './components/TitleBar';
 import { Sidebar } from './components/Sidebar';
 import { MainView } from './components/MainView';
@@ -53,9 +53,19 @@ export default function App() {
   // Apply the active theme + effects at mount and whenever they change.
   // This rewrites CSS variables on :root so every existing component
   // repaints with the new palette, zero reload.
+  //
+  // Signature gate: every settings save round-trip produces a FRESH
+  // themeEffects object identity (IPC echo), so without it this effect
+  // re-ran — rewriting ~30 CSS custom properties and re-toggling the
+  // aura classes — on every keystroke in any Settings input and every
+  // slider tick. Skip when nothing visual actually changed.
+  const themeSigRef = useRef('');
   useEffect(() => {
     const theme = getTheme(settings.themeId);
     const effects = settings.themeEffects || DEFAULT_EFFECTS;
+    const sig = theme.id + JSON.stringify(effects);
+    if (!PERF_GATES_OFF && sig === themeSigRef.current) return;
+    themeSigRef.current = sig;
     applyTheme(theme, effects);
   }, [settings.themeId, settings.themeEffects]);
 
@@ -77,30 +87,36 @@ export default function App() {
     return () => { try { unsub?.(); } catch { /* ignore */ } };
   }, []);
 
+  // Stamp the pill zoom. Uniform proportional model: --pill-scale IS the
+  // slider value, applied to the whole single-face pill. Nothing here (or
+  // anywhere) resizes the window at runtime; only slider changes do.
+  const stampPillScale = (rest: number) => {
+    const r = Math.min(1.5, Math.max(0.3, rest));
+    document.documentElement.style.setProperty('--pill-scale', String(r));
+    document.documentElement.setAttribute('data-window', 'pill');
+  };
+
   // Live-apply the pill scale broadcast by main when the slider moves.
-  // The bootstrap already stamps the initial value from the URL hash;
-  // this hook just keeps it in sync afterward.
+  // The bootstrap already stamps the initial values from the URL hash;
+  // this hook keeps them in sync afterward.
+  const lastMainScaleRef = useRef<number | null>(null);
   useEffect(() => {
-    const unsub = (window.parlys as any)?.onPillScaleChanged?.((scale: number) => {
-      if (Number.isFinite(scale) && scale >= 0.5 && scale <= 1.5) {
-        document.documentElement.style.setProperty('--pill-scale', String(scale));
-        document.documentElement.setAttribute('data-window', 'pill');
+    const unsub = (window.parlys as any)?.onPillScaleChanged?.((rest: number) => {
+      if (Number.isFinite(rest) && rest >= 0.3 && rest <= 1.5) {
+        lastMainScaleRef.current = rest;
+        stampPillScale(rest);
       }
     });
     return () => { try { unsub?.(); } catch { /* ignore */ } };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Single source of truth: keep the rendered --pill-scale in lockstep with
-  // the store value, regardless of which path delivered the change (dedicated
-  // IPC above, settings broadcast, or loadSettings). Without this, a settings
-  // update that doesn't fire the dedicated pillScaleChanged event would leave
-  // the DOM zoom and the store diverged (notably during a density-swap overlap
-  // where main's w<400 heuristic can mis-target the resize).
+  // Keep the rendered vars in lockstep regardless of which path delivered
+  // a change (dedicated IPC above, settings broadcast, or loadSettings).
   useEffect(() => {
     if (document.documentElement.dataset.density !== 'compact') return;
-    const s = Math.min(1.5, Math.max(0.5, settings.pillScale ?? 1));
-    document.documentElement.style.setProperty('--pill-scale', String(s));
-    document.documentElement.setAttribute('data-window', 'pill');
+    stampPillScale(lastMainScaleRef.current ?? (settings.pillScale ?? 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings.pillScale]);
 
   const compact = settings.density === 'compact';

@@ -338,9 +338,10 @@ export function sanitizeSettingsPatch(raw: unknown): Partial<Settings> {
     if (isNumber(p[k])) (out as any)[k] = Math.max(0, Math.min(1, p[k] as number));
   }
   // Clamp pillScale to a safe range — a malformed value mustn't shrink
-  // the BrowserWindow to 0 px or blow it up off-screen.
+  // the BrowserWindow to 0 px or blow it up off-screen. Floor is 0.3
+  // (53×16 px window), the smallest size where the pill stays clickable.
   if (isNumber(p.pillScale)) {
-    out.pillScale = Math.max(0.5, Math.min(1.5, p.pillScale));
+    out.pillScale = Math.max(0.3, Math.min(1.5, p.pillScale));
   }
 
   // Structured fields — re-validate every sub-field. These reach disk and,

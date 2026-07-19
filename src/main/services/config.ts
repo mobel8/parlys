@@ -61,7 +61,59 @@ const TRANSLATE_MODEL_MIGRATION: Record<string, string> = {
   'llama-3.3-70b-versatile': 'llama-3.1-8b-instant',
 };
 
+/**
+ * FR-baseline migration (v1.10.0) — one-shot reset of the language /
+ * translator state to the deterministic baseline the user asked for:
+ *
+ *   - language 'auto' → 'fr'          (no more per-dictation drift)
+ *   - shortcutInterpreter old default → '' (unbound — Ctrl+Shift+I is the
+ *     DevTools shortcut of every browser/editor; as a SYSTEM-WIDE hotkey it
+ *     silently flipped the translator while the user worked elsewhere)
+ *   - translateTo → ''                (no automatic translation)
+ *   - interpreterEnabled → false      (translator off until asked)
+ *
+ * Unlike the value-based migrations above, these target values ('auto', a
+ * bound hotkey, a translate target) remain LEGITIMATE choices the user can
+ * re-pick in Settings afterwards — so this must run exactly ONCE per
+ * install, never on every boot. We record completion under a top-level
+ * `appliedMigrations` store key (outside the `settings` object, so
+ * sanitizeSettingsPatch can never touch it) and skip forever after.
+ * Everything the user selects manually after this point persists untouched.
+ */
+const FR_BASELINE_MIGRATION = '2026-07-19-fr-baseline';
+const LEGACY_INTERPRETER_HOTKEY = 'CommandOrControl+Shift+I';
+let migrationsChecked = false;
+
+function runOneShotMigrations(): void {
+  if (migrationsChecked) return;
+  migrationsChecked = true;
+  try {
+    const st: any = store();
+    const done: string[] = st.get('appliedMigrations', []) || [];
+    if (done.includes(FR_BASELINE_MIGRATION)) return;
+    const s = st.get('settings', DEFAULT_SETTINGS) as Partial<Settings>;
+    const patch: Partial<Settings> = {};
+    if (s.language === 'auto' || s.language === undefined) patch.language = 'fr';
+    if (s.shortcutInterpreter === LEGACY_INTERPRETER_HOTKEY || s.shortcutInterpreter === undefined) {
+      patch.shortcutInterpreter = '';
+    }
+    if (s.translateTo) patch.translateTo = '';
+    if (s.interpreterEnabled) patch.interpreterEnabled = false;
+    if (Object.keys(patch).length > 0) {
+      st.set('settings', { ...s, ...patch });
+      console.log('[migration] fr-baseline applied:', JSON.stringify(patch));
+    }
+    st.set('appliedMigrations', [...done, FR_BASELINE_MIGRATION]);
+  } catch (e) {
+    // Never block settings reads on a migration hiccup — worst case the
+    // legacy behaviour persists until the next boot retries it.
+    migrationsChecked = false;
+    console.warn('[migration] fr-baseline failed:', e);
+  }
+}
+
 export function getSettings(): Settings {
+  runOneShotMigrations();
   const s = (store() as any).get('settings', DEFAULT_SETTINGS) as Settings;
   // Merge defaults (in case of new fields added later)
   const merged: Settings = { ...DEFAULT_SETTINGS, ...s };

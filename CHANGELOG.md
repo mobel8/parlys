@@ -5,6 +5,62 @@ Toutes les modifications notables de Parlys sont documentées ici.
 Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/)
 et le projet adhère au [Versionnement Sémantique](https://semver.org/lang/fr/).
 
+## [1.10.4] — 2026-07-19
+
+### Corrigé
+
+- **Repos passif restauré.** Sur la 1.10.3, la pastille au repos affichait en permanence le micro coloré selon le thème et «&nbsp;Parler&nbsp;». Retour au comportement attendu&nbsp;: au repos, capsule sombre passive avec un simple point central&nbsp;; le micro, le texte et le bouton d'agrandissement n'apparaissent qu'au survol (et pendant l'activité). Implémenté en pur fondu d'OPACITÉ sur une géométrie strictement identique&nbsp;: la capsule noire garde exactement la même taille dans tous les états (le contrat «&nbsp;zéro changement de dimension&nbsp;» tient, sondes à l'appui), les contrôles gardent leurs boîtes de layout (aucun risque d'oscillation du survol), et comme tout clic commence par un survol qui révèle les contrôles, on ne peut jamais cliquer un bouton invisible.
+
+## [1.10.3] — 2026-07-19
+
+### Corrigé
+
+- **Boutons hors de la pastille + « ça change de dimension quand je parle » (retour utilisateur immédiat sur la 1.10.2).** Diagnostic mesuré (sonde `_probe-pill-geometry.js` sur la 1.10.2 à 30 %) : la zone noire visible au repos faisait 42×8 px pendant que le micro (27×27) et le bouton d'agrandissement (19,5×19,5) étaient dessinés EN DEHORS d'elle dans tous les états ; et le passage capsule↔face pleine restait un changement VISUEL de dimension à chaque dictée, même fenêtre fixe. Correction à la racine, contrat final de l'utilisateur :
+  1. **Face unique** : la dualité capsule/face est supprimée. La pastille est UNE capsule sombre constante contenant toujours micro + zone d'état + bouton d'agrandissement. Les états (repos, dictée, transcription, « Injecté », erreur) ne changent que couleurs, halos et textes — jamais la géométrie. Au repos elle est simplement un peu tamisée (opacité).
+  2. **Proportionnel strict** : plancher 75 % et ratio de capsule retirés — la fenêtre mesure exactement (176×52) × réglage, le zoom = le réglage. Le curseur des réglages est l'UNIQUE chemin de redimensionnement.
+  Preuves : la sonde géométrie (contenance bouton ⊆ zone noire ⊆ fenêtre, empreinte identique état par état, en boucle) passe de 6 violations / états instables à zéro ; la sonde motion confirme 0 resize/0 move sur survol + dictée complète.
+
+## [1.10.2] — 2026-07-19
+
+### Corrigé
+
+- **La pastille qui changeait de taille toute seule (régression introduite par la 1.10.1, signalée immédiatement).** Le « plancher d'interaction » dynamique de la 1.10.1 redimensionnait la FENÊTRE au survol et pendant l'activité — vécu à raison comme un énorme bug d'affichage (la pastille sautait de 54×16 à 142×43 à chaque passage de souris, preuve : sonde `_probe-pill-motion.js`, 3 resize + 3 move capturés sur un simple scénario survol/dictée, et un état d'erreur la laissait même bloquée agrandie). Mécanisme entièrement SUPPRIMÉ (IPC `pillEngage`, écouteurs hover, grow/shrink main) et remplacé par le modèle STATIQUE qui aurait dû être la solution dès le départ :
+  la fenêtre mesure `(176, 52) × max(réglage, 75 %)`, calculée UNE fois par valeur du curseur, et ne bouge plus JAMAIS à l'exécution (zéro `setBounds` hors curseur, prouvé par la même sonde : 0 resize, 0 move sur le scénario complet). En dessous de 75 %, la face interactive (micro, agrandir, « Parler »/« Injecté », onde) garde la taille plancher — cliquable et lisible — tandis que la capsule visible au repos continue, elle, de rétrécir avec le curseur (`--pill-idle-ratio`) : à 30 %, on voit au repos une fine capsule ~56×10, dans une enveloppe invisible fixe de 132×39.
+
+## [1.10.1] — 2026-07-19
+
+### Corrigé
+
+- **Pastille à 30 % : cibles de clic minuscules et textes illisibles.** Retour utilisateur immédiat sur la 1.10.0 : à 30 %, le bouton « agrandir » faisait ~7 px physiques (impossible à viser) et « Parler »/« Injecté » ~4 px (illisibles). Plutôt que d'agrandir la pastille en permanence (refusé : elle doit rester discrète), un **plancher d'interaction** : dès que le curseur survole la pastille visible, ou qu'elle est active (enregistrement, transcription, flash « Injecté », erreur), la fenêtre passe temporairement à max(taille choisie, 80 %) — ancrée au centre, clampée à l'écran — puis reprend exactement sa taille de repos. Comme tout clic est nécessairement précédé d'un survol, AUCUN clic ne peut se produire à taille minuscule : micro ≈ 36 px physiques, agrandir ≈ 26 px, labels ≈ 11 px au moment où on interagit. La taille persistée ne change jamais ; les réglages ≥ 80 % sont strictement inchangés ; la position de repos est préservée (drag pendant l'agrandissement inclus, persistance suspendue pendant l'état transitoire).
+- **Bouton « agrandir » : 22 → 26 px** (icône 13 px) et **labels de la pastille plus lisibles** (graisse 600, contraste rehaussé) : « Parler », « Injecté » et les erreurs se lisent d'un coup d'œil même à 80 %.
+- **« Aucune parole détectée » ne reste plus collé.** Les erreurs bénignes de la pastille (pas de parole, clip trop court/inaudible) s'affichent 3 secondes puis reviennent d'elles-mêmes à l'état normal (et la pastille reprend sa taille de repos). Les erreurs actionnables (clé API invalide, réseau, quota) restent affichées jusqu'à la prochaine action : les masquer cacherait un vrai problème.
+- **Rectangle noir autour de la pastille (saturation RAM, reprise de veille).** Cause : une fenêtre transparente Electron perd son canal alpha quand le process GPU meurt (routine sur une machine à 7 Go sous pression) : elle composite alors sur un rectangle noir opaque, et seule une RECRÉATION de la fenêtre la répare (c'était le contournement manuel compact→confortable→compact). L'app le fait désormais toute seule : mort du process GPU ou reprise de veille → reconstruction automatique de la pastille via le swap sans scintillement, visibilité d'origine préservée ; un renderer crashé est rechargé sur place. Kill-switch d'A/B : `PARLYS_TRANSPARENCY_HEAL=0`.
+- **Anti-hallucinations durci (texte jamais prononcé).** Quatre failles fermées dans le filtre serveur :
+  1. *Écho du prompt* : Whisper « continue » parfois le prompt de vocabulaire au lieu de transcrire (d'autant plus visible que la langue forcée `fr` envoie désormais toujours le prompt français) : tout segment quasi identique au prompt (comparaison normalisée sans accents/ponctuation) est supprimé.
+  2. *Queues fabriquées longues* : les mots horodatés au-delà de la fin PHYSIQUE du clip (fin de parole mesurée + 1,2 s, le clip étant tronqué à +0,32 s) sont coupés inconditionnellement. Avant, une queue inventée de plus de 12 mots déclenchait la garde anti-dérive et était gardée EN ENTIER (plus l'hallucination était grosse, mieux elle passait). La protection anti-dérive réelle reste active dans la bande douce (+0,35 s à +1,2 s).
+  3. *Boucles inter-segments* : « Merci. » répété en boucle par un décodeur bloqué est réduit à une seule occurrence (à partir de la 3ᵉ copie consécutive ; un doublé légitime « Oui. Oui. » est intouché).
+  4. *Blips quasi muets* : quand le client n'a mesuré que < 600 ms de parole cumulée (souffle, clic, ambiance qui a passé la porte d'énergie), les segments doivent franchir une barre de confiance no_speech durcie (0,4 au lieu de 0,7) ; les vraies micro-phrases (« OK. ») décodent à ~0,05 et passent sans effort.
+  Limite honnête : une substitution de mots PENDANT une vraie phrase (bruit ambiant par-dessus la voix) reste du ressort du modèle ASR ; les quatre chemins ci-dessus couvrent les cas « je n'ai rien dit / ça a ajouté une phrase entière ».
+
+## [1.10.0] — 2026-07-19
+
+### Corrigé
+
+- **Le mode traducteur qui « s'activait tout seul » (découvert en repassant de la pastille au mode confortable).** Cause unique identifiée : `Ctrl+Shift+I` était enregistré comme raccourci GLOBAL système pour basculer l'interprète vocal — or c'est aussi le raccourci DevTools de Chrome, Edge et VS Code. Chaque appui n'importe où dans Windows basculait silencieusement le traducteur de Parlys, sans aucun retour visuel en mode pastille (la pilule n'affiche pas l'état interprète) ; on ne le découvrait qu'en agrandissant la fenêtre. Le raccourci n'est plus lié par défaut — l'interprète ne peut désormais être activé QUE par un geste explicite (pastille « Interprète vocal », interrupteur des paramètres, ou un raccourci que vous choisissez vous-même dans Paramètres → Raccourcis).
+- **Langue de dictée qui « dérivait » d'une dictée à l'autre.** Le défaut `Détection auto` laissait Whisper choisir la langue à chaque dictée (résultats variables sur audio ambigu). Le défaut devient **Français**, déterministe. Migration one-shot au premier lancement : `auto` → `fr`, traduction automatique désactivée, interprète coupé, ancien raccourci Ctrl+Shift+I délié. La migration ne s'exécute qu'UNE fois (marqueur `appliedMigrations` dans le fichier de réglages) : tout choix manuel effectué ensuite (langue, traduction, interprète) persiste définitivement — plus rien ne peut le modifier automatiquement.
+
+### Modifié
+
+- **Taille de la pastille : minimum abaissé de 60 % à 30 %** (fenêtre 53×16 px au plancher). Curseur, bornes de validation (`validate.ts`, `ipc.ts`, `App.tsx`, `useStore.ts`, `index.ts` main, bootstrap `index.html`) et redimensionnement live alignés sur la nouvelle plage [0.3 – 1.2].
+
+### Performance / fluidité
+
+Mesures A/B sur le MÊME binaire (kill-switch bench `PARLYS_PERF_OFF=1`, harnais `scripts/_bench-fluidity.js`, fenêtre garantie visible) :
+
+- **Curseur de taille de pastille : ~76-78 écritures disque par glissement → 14-22** (×4-5 de moins). Chaque événement `input` faisait un aller-retour IPC + une écriture synchrone du JSON complet + un resize fenêtre + un broadcast — pire frame mesurée pendant un drag : 676 ms gates coupées contre 403 ms gates actives (65 ms en ambiance calme). Le pouce et le pourcentage rendent depuis un état local plein-FPS ; la persistance est throttlée (bord d'attaque immédiat pour le resize live, max ~8 sauvegardes/s, position finale toujours sauvegardée, y compris en quittant la vue).
+- **Frappe dans les champs des réglages : frames longues (>24 ms) divisées par ~2** (28 → 16 sous charge ; 4 → 2 en ambiance calme). Cause : chaque sauvegarde recrée l'identité de `themeEffects` (écho IPC), ce qui re-déclenchait `applyTheme` — ~30 variables CSS réécrites + classes aura re-togglées — à chaque caractère tapé. Une signature (`themeId` + JSON des effets) court-circuite l'effet quand rien de visuel n'a changé.
+- **Niveau micro : mises à jour du store divisées par ~2 pendant la dictée** (callback audio ~43 ms → commit au plus toutes les 70 ms ; les attaques |Δ|≥0.1 et le retour au repos passent toujours). Les waveforms n'échantillonnent le niveau que toutes les 60/70 ms via une ref : zéro différence visuelle, moitié moins de re-renders plein-store. Gain mécanique garanti par la constante du gate ; le delta CPU absolu n'a pas pu être isolé du bruit ambiant de la machine pendant la mesure.
+
 ## [1.9.1] — 2026-07-11
 
 ### Corrigé

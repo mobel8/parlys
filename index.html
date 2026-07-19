@@ -103,13 +103,13 @@
           // Apply the pill scale BEFORE any CSS rule evaluates so the
           // very first frame uses the right size. Pair with the
           // `html[data-window="pill"] { zoom: var(--pill-scale) }` rule
-          // in index.css. The scale is also picked up by useStore from
-          // the hash so the React-side slider reads the same value.
+          // in index.css. Uniform proportional model: the slider value IS
+          // the zoom of the whole single-face pill.
           var pillScaleRaw = pickSegment(segments, 'pillscale');
           if (head === 'compact') {
             doc.setAttribute('data-window', 'pill');
             var ps = parseFloat(pillScaleRaw || '');
-            if (isFinite(ps) && ps >= 0.5 && ps <= 1.5) {
+            if (isFinite(ps) && ps >= 0.3 && ps <= 1.5) {
               doc.style.setProperty('--pill-scale', String(ps));
             }
           }

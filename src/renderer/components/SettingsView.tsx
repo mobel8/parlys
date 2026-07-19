@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeOff, ExternalLink, Check, Layout, Languages, Pin, Keyboard, Power, Volume2, Zap, Palette, Book, Workflow as WorkflowIcon, Brain, Mic, Headphones, Speaker, Globe, Gauge, Sparkles, RotateCcw } from 'lucide-react';
-import { useStore } from '../stores/useStore';
+import { useStore, PERF_GATES_OFF } from '../stores/useStore';
 import { GROQ_STT_MODELS, CEREBRAS_LLM_MODELS, SUPPORTED_LANGUAGES, TRANSLATE_TARGETS, TTS_PROVIDERS, INTERPRETER_LANGUAGES, TTS_COST_HINTS } from '../lib/constants';
 import { Settings, TTSProvider } from '../../shared/types';
 import { AppearanceSection } from './AppearanceSection';
@@ -32,6 +32,53 @@ export function SettingsView() {
     await updateSettings(patch);
     setSavedPulse(true);
     setTimeout(() => setSavedPulse(false), 1200);
+  };
+
+  // Pill-scale slider: local value while dragging + THROTTLED persistence.
+  // Un-throttled, every 'input' event did a full IPC round-trip, a
+  // synchronous electron-store write of the whole settings JSON, a pill
+  // window resize and a broadcast — a single drag produced ~40 events and
+  // ~75 file writes (measured), with frames up to ~96 ms. Leading edge
+  // saves immediately (live resize feel), then at most one save per 120 ms,
+  // with a guaranteed trailing save of the final position. The thumb and
+  // the % readout render from the LOCAL value, so the control itself stays
+  // 60 fps regardless of the persistence cadence.
+  const [pillDrag, setPillDrag] = useState<number | null>(null);
+  const pillSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pillPendingRef = useRef<number | null>(null);
+  const pillShown = pillDrag ?? (settings.pillScale ?? 1.0);
+  // Once the persisted value catches up with the local one, hand the input
+  // back to the store (keeps external updates — reset button, other window —
+  // flowing into the UI again).
+  useEffect(() => {
+    if (pillDrag != null && Math.abs((settings.pillScale ?? 1.0) - pillDrag) < 1e-9) {
+      setPillDrag(null);
+    }
+  }, [settings.pillScale, pillDrag]);
+  // Unmount: flush a still-pending tail save so the last thumb position
+  // is never lost when the user leaves Settings within the throttle window.
+  useEffect(() => () => {
+    if (pillSaveTimer.current) clearTimeout(pillSaveTimer.current);
+    if (pillPendingRef.current != null) void updateSettings({ pillScale: pillPendingRef.current });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const onPillScaleInput = (v: number) => {
+    if (PERF_GATES_OFF) { void save({ pillScale: v }); return; } // bench A/B
+    setPillDrag(v);
+    if (pillSaveTimer.current) { pillPendingRef.current = v; return; }
+    void save({ pillScale: v }); // leading edge — live resize starts now
+    pillSaveTimer.current = setTimeout(() => {
+      pillSaveTimer.current = null;
+      const tail = pillPendingRef.current;
+      pillPendingRef.current = null;
+      if (tail != null) void save({ pillScale: tail });
+    }, 120);
+  };
+  const commitPillScale = (v: number) => {
+    if (pillSaveTimer.current) { clearTimeout(pillSaveTimer.current); pillSaveTimer.current = null; }
+    pillPendingRef.current = null;
+    setPillDrag(null);
+    void save({ pillScale: v });
   };
 
   const setDensity = async (next: 'comfortable' | 'compact') => {
@@ -139,38 +186,42 @@ export function SettingsView() {
             window. Changes apply live: main resizes the BrowserWindow
             to (176*scale, 52*scale) and the renderer stamps
             `--pill-scale` for the CSS `zoom` rule. Icons, text, shadows
-            all scale together. Live setBounds on every onChange is
-            cheap on transparent+frameless windows. */}
+            all scale together. Persistence is throttled (see
+            onPillScaleInput above): the thumb renders from local state
+            at full frame rate while main sees at most ~8 saves/s. */}
         <div className="border-t border-white/5 pt-4">
           <div className="label mb-2 flex items-center justify-between">
             <span>Taille de la pastille (compact)</span>
             <span className="text-[11px] text-white/50 font-mono">
-              {((settings.pillScale ?? 1.0) * 100).toFixed(0)}%
+              {(pillShown * 100).toFixed(0)}%
             </span>
           </div>
           <input
             type="range"
-            min={0.6}
+            min={0.3}
             max={1.2}
             step={0.05}
-            value={settings.pillScale ?? 1.0}
-            onChange={(e) => save({ pillScale: parseFloat(e.target.value) })}
+            value={pillShown}
+            onChange={(e) => onPillScaleInput(parseFloat(e.target.value))}
             className="range-input w-full"
-            style={{ ['--pct' as any]: `${(((settings.pillScale ?? 1.0) - 0.6) / 0.6) * 100}%` }}
+            style={{ ['--pct' as any]: `${((pillShown - 0.3) / 0.9) * 100}%` }}
           />
           <div className="flex items-center justify-between text-[10px] text-white/40 mt-1">
-            <span>60%</span>
+            <span>30%</span>
             <button
               type="button"
               className="text-violet-300 hover:text-violet-200"
-              onClick={() => save({ pillScale: 1.0 })}
+              onClick={() => commitPillScale(1.0)}
             >
               Réinitialiser à 100%
             </button>
             <span>120%</span>
           </div>
           <p className="text-[11px] text-white/40 mt-2">
-            Ajuste la taille de la pilule flottante (mode compact). Tout l'intérieur — icônes, texte, ombres — reste proportionnel.
+            Ajuste la taille de la pilule flottante (mode compact). Tout est strictement proportionnel au réglage
+            (micro, bouton d'agrandissement, textes, tous contenus dans la pastille noire) et la pastille ne change
+            JAMAIS de taille toute seule&nbsp;: ni au survol, ni pendant la dictée. Seul ce curseur la redimensionne.
+            Au repos elle est passive (capsule sombre, point central)&nbsp;; le contenu apparaît au survol et pendant l'activité.
           </p>
         </div>
       </section>
@@ -455,11 +506,13 @@ export function SettingsView() {
           <ShortcutInput
             value={settings.shortcutInterpreter || ''}
             onCommit={(next) => save({ shortcutInterpreter: next })}
-            placeholder="CommandOrControl+Shift+I"
+            placeholder="Aucun raccourci — cliquez puis pressez une combinaison"
           />
           <p className="text-[11px] text-white/40 mt-1">
             Bascule instantanément le traducteur vocal (pastille verte en haut à droite). La prochaine dictée passera
-            par Whisper → traduction → voix IA. Laissez vide pour désactiver le raccourci.
+            par Whisper → traduction → voix IA. Aucun raccourci n'est défini par défaut : l'interprète ne peut plus
+            s'activer tout seul (l'ancien Ctrl+Shift+I entrait en conflit avec les DevTools des navigateurs).
+            Backspace dans le champ pour supprimer un raccourci.
           </p>
         </div>
 

@@ -181,7 +181,10 @@ export function registerIpc(): void {
         // that avoids needing to track densities per HWND here.
         if (w < 400) {
           try {
-            const scale = Math.max(0.5, Math.min(1.5, (next as any).pillScale || 1));
+            // Uniform proportional model: this is the ONLY runtime resize
+            // path (slider changes) — the pill never resizes on
+            // hover/activity/states.
+            const scale = Math.max(0.3, Math.min(1.5, (next as any).pillScale || 1));
             const newW = Math.round(176 * scale);
             const newH = Math.round(52 * scale);
             // Relax min/max BEFORE resize — they were locked at constructor

@@ -183,7 +183,13 @@ export interface Settings {
    * Global accelerator that flips `interpreterEnabled` on/off without
    * having to open Settings. Lets the user enable the voice translator
    * with a single key combo from anywhere on the OS. Empty = unbound.
-   * Default: `CommandOrControl+Shift+I`.
+   *
+   * Default: '' (unbound). It used to ship as `CommandOrControl+Shift+I`,
+   * which collides with the DevTools shortcut of every browser/editor —
+   * being a SYSTEM-WIDE RegisterHotKey, each Ctrl+Shift+I pressed in any
+   * app silently flipped the translator on/off with zero visual feedback
+   * in pill mode ("le mode traducteur s'active tout seul"). The user must
+   * now opt in by recording a combo in Settings → Raccourcis.
    */
   shortcutInterpreter: string;
   /**
@@ -324,11 +330,15 @@ export interface Settings {
   vadSilenceEnd: number;
 
   /**
-   * Proportional resize of the compact pill window. 1.0 = stock 176×52.
-   * The renderer applies `zoom: var(--pill-scale)` and main resizes the
-   * BrowserWindow to (176*scale, 52*scale) atomically — chrome, icons,
-   * text, shadows all scale together. Range clamped to [0.5, 1.5] in
-   * validate.ts (UI exposes 0.6 – 1.2 as the usable band).
+   * Proportional size of the compact pill. 1.0 = stock 176×52. Range
+   * clamped to [0.3, 1.5] in validate.ts (UI exposes 0.3 – 1.2).
+   *
+   * UNIFORM model (v1.10.3, the user's final contract): the window
+   * measures (176, 52) × pillScale — computed once per slider value,
+   * NEVER changed at runtime — and the renderer zooms the whole
+   * single-face pill by the same factor. Every state (idle, recording,
+   * processing, done, error) shares ONE constant footprint; buttons and
+   * labels always sit inside the dark pill.
    */
   pillScale: number;
 }
@@ -336,7 +346,12 @@ export interface Settings {
 export const DEFAULT_SETTINGS: Settings = {
   groqApiKey: '',
   sttModel: 'whisper-large-v3-turbo',
-  language: 'auto',
+  // 'fr', not 'auto': per-dictation auto-detection made the output language
+  // drift on ambiguous audio ("une autre langue par défaut"). The default is
+  // deterministic French; the user picks another language (or Auto) manually
+  // and that choice persists. One-shot migration in services/config.ts moves
+  // existing 'auto' installs to 'fr'.
+  language: 'fr',
   translateTo: '',
   mode: 'raw',
   llmEnabled: false,
@@ -349,7 +364,8 @@ export const DEFAULT_SETTINGS: Settings = {
   injectMode: 'paste',
   shortcutToggle: 'CommandOrControl+Shift+Space',
   shortcutPTT: 'CommandOrControl+Shift+V',
-  shortcutInterpreter: 'CommandOrControl+Shift+I',
+  // Unbound by default — see the field doc above (DevTools collision).
+  shortcutInterpreter: '',
   uiLanguage: 'auto',
   pttEnabled: false,
   themeId: 'midnight',

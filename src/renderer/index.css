@@ -238,7 +238,7 @@ html.is-leaving .bg-aurora .spot-3 {
 }
 
 /* =========================================================
-   Pill window proportional scaling (0.6x – 1.2x).
+   Pill window proportional scaling (0.3x – 1.2x).
    -----------------------------------------------------------
    Main process resizes the BrowserWindow to (176*scale, 52*scale)
    and exposes the factor as `--pill-scale` on <html> via the
@@ -942,7 +942,7 @@ select option:hover {
    ========================================================= */
 /* Every descendant of .density-compact is draggable (see note on .drag /
    .no-drag about -webkit-app-region not being inherited). Buttons
-   (.pill-mic, .pill-expand, .pill-idle-face) carry .no-drag and override
+   (.pill-mic, .pill-expand) carry .no-drag and override
    this with `!important` so they can receive clicks. */
 .density-compact,
 .density-compact * { -webkit-app-region: drag; }
@@ -971,7 +971,7 @@ select option:hover {
   /* And because every pixel is now hit-testable, the whole window can
      be the drag surface — the user can grab the pill from anywhere,
      not only from the 52×20 dot. Buttons inside (.pill-mic,
-     .pill-expand, .pill-idle-face) opt back out via .no-drag. */
+     .pill-expand) opt back out via .no-drag. */
   -webkit-app-region: drag;
 }
 .density-compact:active { cursor: grabbing; }
@@ -992,10 +992,20 @@ select option:hover {
      cursor, which produced the infamous collapse↔expand oscillation
      (the :hover selector flipped mid-animation). By freezing the
      layout and animating only paints (background/opacity/box-shadow),
-     hit-tests are perfectly stable. */
+     hit-tests are perfectly stable.
+
+     SINGLE-FACE layout (v1.10.3): the two-face capsule↔full swap is
+     GONE. This dark rounded rect is the ONE visible pill, always
+     painted, always containing mic + body + expand. States change
+     paints only (colors, glow, labels) — geometry NEVER changes, which
+     is the user's contract: no dimension change while speaking, and
+     every button lives INSIDE the dark zone. */
   width: 100%;
   height: 44px;
   padding: 3px 6px 3px 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
   backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
   -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
@@ -1022,179 +1032,52 @@ select option:hover {
 }
 .pill:active { cursor: grabbing; }
 
-/* Two-face layout: the idle dot and the full UI share the same pill, stacked
-   via absolute positioning. Opacity crossfade while .pill itself resizes. */
-.pill-idle-face,
-.pill-full {
-  position: absolute;
-  inset: 0;
-  transition: opacity 0.18s ease;
-}
-.pill-idle-face {
-  display: grid;
-  place-items: center;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  padding: 0;
-  cursor: grab;
-  opacity: 0;
-  /* pointer-events stays `auto` in every state; we switch faces via
-     z-index instead. Toggling pointer-events would cause Chromium to
-     re-hit-test and synthesise stray mouseover/mouseout events, which
-     leaked into our React hover handler and produced an expand/collapse
-     oscillation on a stationary cursor. */
-  pointer-events: auto;
+/* Single-face content. The body (label / waveform) stretches between the
+   two buttons and stays a drag surface; ellipsis needs min-width: 0. */
+.pill-body {
   -webkit-app-region: drag;
-  z-index: 0;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
-.pill-idle-face:active { cursor: grabbing; }
+
+/* Passive idle indicator — centered dot, absolutely positioned (never in
+   the flex flow, never affects geometry). */
 .pill-idle-dot {
-  display: block;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.55);
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.2);
-  -webkit-app-region: drag;
-}
-.pill-full {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 6px 3px 4px;
-  opacity: 1;
-  transition: opacity 0.18s ease;
-  /* Always hit-testable — z-index decides which face is on top (see
-     comment on .pill-idle-face). */
-  pointer-events: auto;
-  -webkit-app-region: drag;
-  z-index: 0;
-}
-.pill-body {
+  opacity: 0;
+  transition: opacity 0.16s ease;
+  pointer-events: none;
   -webkit-app-region: drag;
 }
 
-/* Small black Superwhisper-style capsule, drawn on .pill-idle-capsule
-   (a small child of .pill-idle-face, centred by its grid parent). We
-   use a real DOM element — NOT a pseudo-element — so it is a true
-   hit-test target in Electron's transparent window. The pseudo-element
-   approach would be invisible to Windows DWM hit-testing because ::before
-   doesn't get its own layer unless `pointer-events` is non-none, and
-   setting pointer-events:auto on ::before would steal clicks from the
-   button underneath. */
-.pill-idle-capsule {
-  position: relative;
-  /* Superwhisper-style wide pill indicator. Spans most of the 176 px
-     window so there is NO invisible "dead margin" in the user's
-     mental model: the thing they see IS the hover target. Hovering
-     any pixel of this 140×26 black pill opens the full UI; the
-     18 px transparent margin on each side + the 14 px top/bottom
-     transparent strips stay inert. Matches the visual footprint of
-     Superwhisper's always-active mini recording window. */
-  width: 140px;
-  height: 26px;
-  border-radius: 999px;
-  background: rgba(10, 10, 12, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 0 3px rgba(255, 255, 255, 0.015),
-    0 3px 10px -2px rgba(0, 0, 0, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  display: grid;
-  place-items: center;
+/* Idle = the same pill, slightly dimmed, PASSIVE content: only the dot.
+   The controls (mic, body, expand) fade to opacity 0 — they keep their
+   exact layout boxes, so the pill's geometry and hit-testing NEVER change
+   (the anti-oscillation contract above holds: pure paint swaps). Any
+   click necessarily starts with the cursor over the pill, which reveals
+   the controls first — you can never click an invisible button.
+   Hover or any non-idle state (recording, processing, done, error)
+   brings the controls back and hides the dot. */
+.pill-root.is-idle .pill { opacity: 0.92; }
+.pill-root.is-idle .pill:hover { opacity: 1; }
+.pill-root.is-idle .pill:not(:hover) .pill-mic,
+.pill-root.is-idle .pill:not(:hover) .pill-body,
+.pill-root.is-idle .pill:not(:hover) .pill-expand {
   opacity: 0;
-  /* Pure opacity fade — NO transform. Scaling the capsule mid-hover
-     would shrink its hit-test box out from under a cursor sitting
-     right at the edge, dropping :hover for a frame and re-triggering
-     the old expand/collapse oscillation. Keeping the box fixed at
-     140×26 makes the entry hit-test rock-solid. */
-  transition: opacity 0.22s ease;
+  transition: opacity 0.16s ease;
 }
-/* Collapsed (idle, not hovered-on-dot): glass body transparent, small
-   black capsule visible. NO size/padding change — pure paint. */
-.pill-root.is-idle .pill {
-  background: transparent;
-  border-color: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  animation: none !important;
-}
-.pill-root.is-idle .pill-idle-capsule {
-  opacity: 1;
-}
-/* Idle + hover on the visible 140×26 Superwhisper-style pill: glass
-   body re-appears, capsule fades out, mic + expand buttons become
-   visible. The capsule has a solid rgba(10,10,12,0.92) background so
-   :hover on it is hit-test-stable in Electron's transparent window —
-   no alpha-0 pixels for DWM to punch through, no mid-animation :hover
-   flip. Entry gate = .pill-idle-capsule:hover. Retention =
-   .pill-full:hover (kicks in once the face/full z-index flip has
-   happened, so the user can move onto the mic / expand buttons inside
-   the expanded pill without it snapping shut). The 18 px transparent
-   strips left/right of the capsule and the 14 px strips above/below
-   stay inert — hovering them does nothing, matching Superwhisper's
-   contract that the visible pill IS the hover target. */
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill,
-.pill-root.is-idle:has(.pill-full:hover) .pill {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-1) 86%, transparent), color-mix(in srgb, var(--bg-0) 90%, transparent));
-  border-color: rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.04),
-    0 0 0 4px rgba(255, 255, 255, 0.015),
-    0 0 0 5px rgba(var(--accent-1-rgb), calc(0.05 + 0.10 * var(--glow-intensity))),
-    0 6px 22px -6px rgba(0, 0, 0, 0.55),
-    0 2px 8px -2px rgba(var(--accent-1-rgb), calc(0.15 + 0.30 * var(--glow-intensity))),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
-  -webkit-backdrop-filter: blur(calc(var(--blur-strength) + 4px)) saturate(180%);
-}
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-capsule,
-.pill-root.is-idle:has(.pill-full:hover) .pill-idle-capsule {
-  opacity: 0;
-}
-/* Idle (default) face visible. */
-.pill-root.is-idle .pill-full {
-  opacity: 0;
-  z-index: 0;
-}
-.pill-root.is-idle .pill-idle-face {
-  opacity: 1;
-  z-index: 1;
-}
-.pill-root.is-idle .pill-idle-face:hover .pill-idle-dot {
-  background: rgba(255, 255, 255, 0.85);
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.35);
-}
-
-/* Forced-expanded (recording, processing, error, done flash) — full UI
-   regardless of hover. */
-.pill-root.is-forced-expanded .pill-idle-face {
-  opacity: 0;
-  z-index: 0;
-}
-.pill-root.is-forced-expanded .pill-full {
-  opacity: 1;
-  z-index: 1;
-}
-
-/* Idle + dot hovered (or, once expanded, pill-full hovered): swap
-   the two faces in pure CSS. React is NOT involved, so we cannot
-   re-enter the hit-test / re-render loop that caused the old hover
-   oscillation. Chromium's :hover updates at paint time and is
-   inherently stable once the hovered target has a solid background. */
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-idle-face,
-.pill-root.is-idle:has(.pill-full:hover) .pill-idle-face {
-  opacity: 0;
-  z-index: 0;
-}
-.pill-root.is-idle:has(.pill-idle-capsule:hover) .pill-full,
-.pill-root.is-idle:has(.pill-full:hover) .pill-full {
-  opacity: 1;
-  z-index: 1;
-}
+.pill-root.is-idle .pill:not(:hover) .pill-idle-dot { opacity: 1; }
+.pill-body { transition: opacity 0.16s ease; }
 
 /* State-driven glow */
 .state-recording .pill {
@@ -1265,7 +1148,7 @@ select option:hover {
     0 2px 6px rgba(var(--accent-1-rgb), calc(0.25 + 0.35 * var(--glow-intensity))),
     inset 0 1px 4px rgba(255, 255, 255, 0.22),
     inset 0 -2px 4px rgba(0, 0, 0, 0.2);
-  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease, opacity 0.16s ease;
 }
 .pill-mic:hover { transform: scale(1.05); }
 .pill-mic:active { transform: scale(0.94); }
@@ -1319,9 +1202,12 @@ select option:hover {
 .pill-label {
   width: 100%;
   font-size: 11px;
-  font-weight: 500;
+  /* 600 + 0.86 alpha (was 500 / 0.72): the labels ("Parler", "Injecté",
+     errors) must stay legible at the interaction floor (11px × 0.8 zoom
+     ≈ 8.8 CSS px) — weight and contrast carry the readability there. */
+  font-weight: 600;
   letter-spacing: 0.01em;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.86);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1329,7 +1215,7 @@ select option:hover {
 .pill-label-cyan   { color: #67e8f9; }
 .pill-label-amber  { color: #fcd34d; }
 .pill-label-green  { color: #6ee7b7; }
-.pill-label-faded  { color: rgba(255, 255, 255, 0.48); font-style: italic; }
+.pill-label-faded  { color: rgba(255, 255, 255, 0.62); font-style: italic; }
 
 /* Mini waveform inside the pill */
 .pill-wave {
@@ -1353,21 +1239,24 @@ select option:hover {
   transition: transform 0.08s ease-out;
 }
 
-/* Expand (maximise) button on the right */
+/* Expand (maximise) button on the right. 26px (was 22): together with the
+   interaction floor (the pill is at ≥0.8 scale whenever a cursor can reach
+   this button), the effective target is ~21 CSS px / ~26 physical px —
+   comfortably clickable without a precision game, still visually modest. */
 .pill-expand {
   -webkit-app-region: no-drag;
   flex-shrink: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   border: none;
-  background: rgba(255, 255, 255, 0.05);
-  color: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
   display: grid;
   place-items: center;
-  transition: background 0.15s ease, color 0.15s ease, opacity 0.2s ease;
-  opacity: 0.55;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.16s ease;
+  opacity: 0.6;
 }
 .pill:hover .pill-expand { opacity: 1; }
 .pill-expand:hover {

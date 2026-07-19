@@ -141,11 +141,16 @@ const WIDGET_BASE = { w: 176, h: 52 };
 // setting lazily (not at module load) means a SET_SETTINGS change can
 // take effect on the next createWindow / buildWindow call without
 // requiring an app restart.
+//
+// UNIFORM proportional model (v1.10.3, the user's final contract): the
+// window measures WIDGET_BASE × pillScale, computed once per slider
+// value. It NEVER resizes at runtime, and the single-face renderer keeps
+// one constant visual footprint across every state.
 function pillDimensions(): { w: number; h: number; scale: number } {
   const s = getSettings();
   const raw = (s as any).pillScale;
   const scale = typeof raw === 'number' && Number.isFinite(raw)
-    ? Math.max(0.5, Math.min(1.5, raw))
+    ? Math.max(0.3, Math.min(1.5, raw))
     : 1.0;
   return {
     w: Math.round(WIDGET_BASE.w * scale),
@@ -345,6 +350,16 @@ function buildWindow(density: Density): WindowCtx {
     console.log(`[renderer ${level}] ${message} (${source}:${line})`);
   });
 
+  // A crashed/OOM-killed renderer leaves a dead (black/blank) window —
+  // reload it in place. 'clean-exit' is the normal teardown, skip it.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    if (details.reason === 'clean-exit') return;
+    console.warn(`[renderer] process gone (${details.reason}) — reloading`);
+    if (!win.isDestroyed()) {
+      try { win.webContents.reload(); } catch { /* ignore */ }
+    }
+  });
+
   return ctx;
 }
 
@@ -406,7 +421,11 @@ async function loadRenderer(ctx: WindowCtx): Promise<void> {
   const audioFlags =
     (process.env.PARLYS_AUDIO_HEAL === '0' ? ';audioheal=0' : '') +
     (process.env.PARLYS_AUDIT === '1' ? ';audit=1' : '') +
-    (process.env.PARLYS_SPECULATIVE === '0' ? ';spec=0' : '');
+    (process.env.PARLYS_SPECULATIVE === '0' ? ';spec=0' : '') +
+    // Bench-only A/B: disables the v1.10 renderer fluidity gates
+    // (audio-level throttle, theme signature gate, slider save throttle)
+    // so both behaviours can be measured on the SAME binary.
+    (process.env.PARLYS_PERF_OFF === '1' ? ';perfoff=1' : '');
   const hash = ctx.density + sampler + viewSuffix + themeSuffix + pillScaleSeg + audioFlags;
   if (isDev) {
     await ctx.win.loadURL(`${DEV_URL}#${hash}`);
@@ -556,11 +575,18 @@ async function createWindow(): Promise<void> {
  *
  * Calls are serialised via `swapInFlight` so repeated clicks can't race.
  */
-async function swapDensity(density: Density): Promise<void> {
+async function swapDensity(density: Density, force = false, assumeVisible?: boolean): Promise<void> {
   if (swapInFlight) { await swapInFlight; }
   swapInFlight = (async () => {
     const prev = current;
-    if (prev && prev.density === density && !prev.win.isDestroyed()) return;
+    // `force` rebuilds even when the density is unchanged — used by the
+    // transparency self-heal to recreate a pill whose alpha channel died
+    // with the GPU process (the manual workaround was compact→comfortable→
+    // compact; this is the same recreation without the detour).
+    // `assumeVisible` overrides the visibility probe: a window whose GPU
+    // process just died can report isVisible()=false even though the user
+    // was looking at it — the heal captures the truth at event time.
+    if (!force && prev && prev.density === density && !prev.win.isDestroyed()) return;
 
     // 1. Persist BEFORE building so the new renderer hydrates with the
     //    correct density on first paint.
@@ -585,7 +611,9 @@ async function swapDensity(density: Density): Promise<void> {
     //    cut short — at the previous 130 ms margin, a ~10 ms IPC stall
     //    would let the old pill at ~4% opacity peek out the moment the
     //    new window appeared, perceived as a visible "step" in the swap.
-    const wasVisible = prev ? prev.win.isVisible() : true;
+    const wasVisible = typeof assumeVisible === 'boolean'
+      ? assumeVisible
+      : (prev ? prev.win.isVisible() : true);
     if (prev && !prev.win.isDestroyed() && wasVisible) {
       try { prev.win.webContents.send('parlys:densitySwapOut'); } catch { /* ignore */ }
       await new Promise<void>((r) => setTimeout(r, 160));
@@ -651,6 +679,56 @@ function showWidgetContextMenu(): void {
     },
   ]);
   menu.popup({ window: w });
+}
+
+/**
+ * Transparency self-heal.
+ *
+ * On Windows, a `transparent: true` frameless window loses its alpha
+ * channel when the GPU process dies (RAM/commit exhaustion is a routine
+ * trigger on this machine) or sometimes across a sleep/resume: the pill
+ * then composites over an opaque BLACK rectangle. The window itself still
+ * works — only the compositing is broken — and the only reliable cure is
+ * to RECREATE the window, which is exactly what the user's manual
+ * workaround did (compact → comfortable → compact). This automates it:
+ * GPU-process death and system resume schedule a debounced same-density
+ * rebuild of the compact pill through the normal flicker-free swap path.
+ *
+ * Bench/A-B kill-switch: PARLYS_TRANSPARENCY_HEAL=0 disables the auto
+ * rebuild (same idiom as PARLYS_AUDIO_HEAL=0) so a harness can prove the
+ * bug exists without the heal and disappears with it.
+ */
+let transparencyHealTimer: NodeJS.Timeout | null = null;
+function scheduleTransparencyHeal(reason: string): void {
+  if (process.env.PARLYS_TRANSPARENCY_HEAL === '0') {
+    console.log(`[transparency-heal] disabled by env — NOT rebuilding (${reason})`);
+    return;
+  }
+  if (transparencyHealTimer) return; // debounce crash storms
+  // Capture visibility AT EVENT TIME: a window whose GPU process died can
+  // start reporting isVisible()=false by the time the delayed rebuild
+  // runs, and the swap would then keep the fresh pill hidden — the user
+  // would see it VANISH instead of healing.
+  const wasVisibleAtEvent = (() => {
+    try {
+      const c = current;
+      return !!(c && !c.disposed && !c.win.isDestroyed() && c.density === 'compact' && c.win.isVisible());
+    } catch { return false; }
+  })();
+  transparencyHealTimer = setTimeout(async () => {
+    transparencyHealTimer = null;
+    try {
+      const ctx = current;
+      if (!ctx || ctx.disposed || ctx.win.isDestroyed()) return;
+      // Only the transparent pill needs it — the comfortable window is
+      // opaque and repaints correctly after a GPU restart.
+      if (ctx.density !== 'compact') return;
+      console.log(`[transparency-heal] rebuilding pill window (${reason}, wasVisible=${wasVisibleAtEvent})`);
+      await swapDensity('compact', true, wasVisibleAtEvent);
+    } catch (e) {
+      console.warn('[transparency-heal] rebuild failed:', e);
+    }
+  }, 1500); // give the fresh GPU process / DWM a moment to settle
 }
 
 /** Reconcile the OS login-item state with our saved `autoStart` setting. */
@@ -807,9 +885,19 @@ app.whenReady().then(async () => {
     }
   };
   try {
-    powerMonitor.on('resume', () => broadcastSystemResumed('resume'));
-    powerMonitor.on('unlock-screen', () => broadcastSystemResumed('unlock-screen'));
+    powerMonitor.on('resume', () => { broadcastSystemResumed('resume'); scheduleTransparencyHeal('resume'); });
+    powerMonitor.on('unlock-screen', () => { broadcastSystemResumed('unlock-screen'); scheduleTransparencyHeal('unlock-screen'); });
   } catch (e) { console.warn('[power]', e); }
+
+  // GPU process death (RAM/commit exhaustion, driver reset…) leaves the
+  // transparent pill compositing over an opaque black rectangle until the
+  // window is recreated — do it automatically.
+  app.on('child-process-gone', (_e, details) => {
+    if (details.type === 'GPU') {
+      console.warn(`[gpu] process gone (${details.reason}) — scheduling transparency heal`);
+      scheduleTransparencyHeal(`gpu-${details.reason}`);
+    }
+  });
 
   await createWindow();
   try { createTray(getWin); } catch (e) { console.warn('[tray]', e); }

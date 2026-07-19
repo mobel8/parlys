@@ -84,6 +84,8 @@ scripts/_msg.txt
 # Session artifacts — never committed
 _audit/
 _audit-mic/
+_audit-modifiers/
+_audit-frbase/
 _screen-*.png
 _swap-*.png
 _flash-*.png

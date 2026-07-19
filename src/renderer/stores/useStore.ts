@@ -88,7 +88,7 @@ function initialPillScale(): number {
   if (!v) return DEFAULT_SETTINGS.pillScale;
   const n = parseFloat(v);
   if (!Number.isFinite(n)) return DEFAULT_SETTINGS.pillScale;
-  return Math.min(1.5, Math.max(0.5, n));
+  return Math.min(1.5, Math.max(0.3, n));
 }
 
 /**
@@ -105,6 +105,18 @@ const INITIAL_SETTINGS: Settings = {
   themeEffects: initialThemeEffects(),
   pillScale: initialPillScale(),
 };
+
+/** Timestamp of the last audioLevel update that was actually committed. */
+let lastLevelTs = 0;
+
+/**
+ * Bench-only kill-switch (PARLYS_PERF_OFF=1 → `;perfoff=1` in the URL hash,
+ * same idiom as `;spec=0`): disables the v1.10 fluidity gates so an A/B
+ * measurement can compare both behaviours on the SAME binary. Inert in
+ * normal launches.
+ */
+export const PERF_GATES_OFF =
+  typeof location !== 'undefined' && /;perfoff=1/.test(location.hash || '');
 
 interface State {
   view: View;
@@ -206,5 +218,24 @@ export const useStore = create<State>()((set, get) => ({
   setLastError: (e) => set({ lastError: e }),
 
   audioLevel: 0,
-  setAudioLevel: (n) => set({ audioLevel: n }),
+  setAudioLevel: (n) => {
+    if (PERF_GATES_OFF) { set({ audioLevel: n }); return; }
+    // Audio callbacks arrive every ~43 ms (2048 frames @ 48 kHz) and every
+    // set() here re-renders EVERY whole-store subscriber (all mounted views)
+    // — ~23 full re-renders/s while recording. The two waveforms only
+    // SAMPLE the level on their own 60/70 ms interval (through a ref), so
+    // store updates faster than that are invisible. Gate: always accept a
+    // reset to rest and genuine attacks (|Δ| ≥ 0.1, keeps the meter snappy),
+    // otherwise commit at most every 70 ms. Halves recording-time renders
+    // with zero visual difference.
+    const prev = get().audioLevel;
+    if (n === 0) {
+      if (prev === 0) return; // already at rest
+    } else {
+      const now = performance.now();
+      if (now - lastLevelTs < 70 && Math.abs(n - prev) < 0.1) return;
+      lastLevelTs = now;
+    }
+    set({ audioLevel: n });
+  },
 }));

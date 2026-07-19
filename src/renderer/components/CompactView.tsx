@@ -47,6 +47,34 @@ export function CompactView() {
   // whose IPC we haven't finished sending — commit would miss, we fall back).
   const dispatchedSpecRef = useRef<string | null>(null);
 
+  // BENIGN errors ("no speech detected", clip too short/inaudible) are
+  // transient information, not actionable failures — they auto-clear back
+  // to the normal idle state after 3 s (which also lets the interaction
+  // floor shrink the pill back). HARD errors (API key, network…) stay
+  // until the user acts, because hiding them would mask a real problem.
+  const BENIGN_ERROR = /aucune parole|trop court|silencieux|inaudible/i;
+  const benignErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearBenignTimer = () => {
+    if (benignErrorTimer.current) { clearTimeout(benignErrorTimer.current); benignErrorTimer.current = null; }
+  };
+  const showError = (msg: string) => {
+    clearBenignTimer();
+    setLastError(msg);
+    setRecState('error');
+    if (BENIGN_ERROR.test(msg)) {
+      benignErrorTimer.current = setTimeout(() => {
+        benignErrorTimer.current = null;
+        // Only clear if we're STILL showing that transient error — a new
+        // recording/processing state must never be yanked back to idle.
+        if (recStateRef.current === 'error') {
+          setLastError('');
+          setRecState('idle');
+        }
+      }, 3000);
+    }
+  };
+  useEffect(() => () => clearBenignTimer(), []);
+
   const recorder = useAudioRecorder({
     onLevel: (rms) => setAudioLevel(rms),
     speculative: settings.speculativeStt !== false,
@@ -79,14 +107,12 @@ export function CompactView() {
       const finish = async (res: import('../../shared/types').TranscribeResponse) => {
         setLastLatencyMs(Date.now() - t0);
         if (!res.ok) {
-          setLastError(res.error || 'Erreur inconnue');
-          setRecState('error');
+          showError(res.error || 'Erreur inconnue');
           return;
         }
         // Empty / inaudible recording — don't flash "Injecté" as if it worked.
         if (res.empty || !res.finalText) {
-          setLastError('Aucune parole détectée');
-          setRecState('error');
+          showError('Aucune parole détectée');
           return;
         }
         // Main already injected directly (no renderer round-trip) — only
@@ -128,20 +154,17 @@ export function CompactView() {
         });
         await finish(res);
       } catch (err: any) {
-        setLastError(err?.message || String(err));
-        setRecState('error');
+        showError(err?.message || String(err));
       }
     },
-    // stop() decided not to ship (no speech / dead mic / too short) — leave
-    // the 'recording' state with an explanatory note instead of hanging red.
+    // stop() decided not to ship (no speech / dead mic / too short) —
+    // explanatory note; the benign ones self-clear after 3 s (showError).
     onDrop: (reason) => {
       setAudioLevel(0);
-      setLastError(reason);
-      setRecState('error');
+      showError(reason);
     },
     onError: (err) => {
-      setLastError(err.message);
-      setRecState('error');
+      showError(err.message);
     },
   });
 
@@ -158,6 +181,7 @@ export function CompactView() {
     const current = recStateRef.current;
     if (current === 'recording') { recorder.stop(); return; }
     if (current === 'processing') return;
+    clearBenignTimer();
     setLastError('');
     setRecState('recording');
     // Fire TLS warm-up for Groq the moment recording begins — by the
@@ -245,12 +269,12 @@ export function CompactView() {
     };
   }, []);
 
-  // Superwhisper-style collapse: tiny dark pill when truly idle. Any
-  // activity (recording / processing / error / done flash) forces the
-  // full UI. Hover-to-expand on top of the idle state is handled in CSS
-  // via `:hover`, not React state — using React here caused a hit-test
-  // re-evaluation loop that oscillated between expand and collapse on a
-  // stationary cursor.
+  // SINGLE-FACE pill (v1.10.3): one constant layout in every state — the
+  // user's contract after the two-face capsule↔full swap read as "the
+  // pill changes size while I speak" and left the buttons visually
+  // outside the tiny idle capsule. States now only recolor the SAME
+  // mic + body + expand row, all contained in the always-painted dark
+  // pill. `is-idle` merely dims it slightly (CSS opacity).
   const isTrueIdle = recState === 'idle' && !justDone;
 
   return (
@@ -259,80 +283,66 @@ export function CompactView() {
       onContextMenu={openContextMenu}
     >
       <div className="pill">
-        {/*
-          Idle (collapsed) face — a small black dot-pill. Clicking it starts
-          recording. The whole area is `no-drag` so the click reaches us.
-        */}
         <button
-          type="button"
-          className="pill-idle-face no-drag"
+          className="pill-mic no-drag"
           onClick={toggle}
           onDoubleClick={expand}
-          aria-hidden={!isTrueIdle}
-          tabIndex={isTrueIdle ? 0 : -1}
+          disabled={recState === 'processing'}
+          title={recState === 'recording' ? 'Arrêter la dictée' : 'Démarrer la dictée'}
         >
-          <span className="pill-idle-capsule">
-            <span className="pill-idle-dot" />
-          </span>
+          {recState === 'processing' ? <Loader2 size={15} className="animate-spin" /> :
+           recState === 'recording'  ? <Square size={11} fill="currentColor" /> :
+           recState === 'error'      ? <AlertCircle size={14} /> :
+           justDone                  ? <Check size={14} /> :
+                                       <Mic size={14} />}
         </button>
 
-        {/* Full face — expanded UI with mic button + body + expand. */}
-        <div className="pill-full" aria-hidden={isTrueIdle}>
-          <button
-            className="pill-mic no-drag"
-            onClick={toggle}
-            onDoubleClick={expand}
-            disabled={recState === 'processing'}
-            tabIndex={isTrueIdle ? -1 : 0}
-          >
-            {recState === 'processing' ? <Loader2 size={15} className="animate-spin" /> :
-             recState === 'recording'  ? <Square size={11} fill="currentColor" /> :
-             recState === 'error'      ? <AlertCircle size={14} /> :
-             justDone                  ? <Check size={14} /> :
-                                         <Mic size={14} />}
-          </button>
-
-          <div className="pill-body">
-            {recState === 'recording' ? (
-              <div className="pill-wave">
-                {bars.map((h, i) => (
-                  // scaleY (GPU-composited) instead of height (relayout) — a
-                  // relayout here can invalidate the transparent pill's
-                  // composited layer and flip :hover (documented elsewhere).
-                  <span key={i} className="pill-wave-bar" style={{ transform: `scaleY(${h})` }} />
-                ))}
-              </div>
-            ) : recState === 'processing' ? (
-              <span className="pill-label pill-label-cyan">Transcription…</span>
-            ) : recState === 'error' ? (
-              // No JS slice — CSS (nowrap + ellipsis) truncates to the real
-              // ~80px body width, so the ellipsis always lands correctly.
-              // Full text stays in the title attribute.
-              <span className="pill-label pill-label-amber" title={lastError}>
-                {lastError || 'Erreur'}
-              </span>
-            ) : justDone ? (
-              // Drop the latency suffix in compact — it overflows the ~80px
-              // body. The full stat lives in the comfortable view.
-              <span className="pill-label pill-label-green">Injecté</span>
-            ) : lastTranscript ? (
-              <span className="pill-label pill-label-faded" title={lastTranscript}>
-                {lastTranscript}
-              </span>
-            ) : (
-              <span className="pill-label">Parler</span>
-            )}
-          </div>
-
-          <button
-            className="pill-expand no-drag"
-            onClick={expand}
-            tabIndex={isTrueIdle ? -1 : 0}
-            title="Mode confortable"
-          >
-            <Maximize2 size={11} />
-          </button>
+        <div className="pill-body" onDoubleClick={expand}>
+          {recState === 'recording' ? (
+            <div className="pill-wave">
+              {bars.map((h, i) => (
+                // scaleY (GPU-composited) instead of height (relayout) — a
+                // relayout here can invalidate the transparent pill's
+                // composited layer and flip :hover (documented elsewhere).
+                <span key={i} className="pill-wave-bar" style={{ transform: `scaleY(${h})` }} />
+              ))}
+            </div>
+          ) : recState === 'processing' ? (
+            <span className="pill-label pill-label-cyan">Transcription…</span>
+          ) : recState === 'error' ? (
+            // No JS slice — CSS (nowrap + ellipsis) truncates to the real
+            // ~80px body width, so the ellipsis always lands correctly.
+            // Full text stays in the title attribute.
+            <span className="pill-label pill-label-amber" title={lastError}>
+              {lastError || 'Erreur'}
+            </span>
+          ) : justDone ? (
+            // Drop the latency suffix in compact — it overflows the ~80px
+            // body. The full stat lives in the comfortable view.
+            <span className="pill-label pill-label-green">Injecté</span>
+          ) : lastTranscript ? (
+            <span className="pill-label pill-label-faded" title={lastTranscript}>
+              {lastTranscript}
+            </span>
+          ) : (
+            <span className="pill-label">Parler</span>
+          )}
         </div>
+
+        <button
+          className="pill-expand no-drag"
+          onClick={expand}
+          title="Mode confortable"
+        >
+          <Maximize2 size={13} />
+        </button>
+
+        {/* Passive idle indicator — a centered dot, absolutely positioned
+            so it never affects the flex layout. Visible ONLY at idle
+            without hover (CSS opacity swap with the controls above); the
+            pill's dark capsule and its geometry stay identical in every
+            state. */}
+        <span className="pill-idle-dot" aria-hidden="true" />
       </div>
     </div>
   );

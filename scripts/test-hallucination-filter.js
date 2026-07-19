@@ -152,10 +152,15 @@ check(
   'Voilà le résumé du projet',
 );
 
-// Word cut guard: if "everything" looks past the end (global timestamp
-// drift), do NOT shred the dictation.
+// Tail-cut guard vs HARD cutoff — CONTRACT UPDATED in v1.10.1.
+// The client TRIMS the clip at speechEnd+~320 ms, so NO real word can be
+// stamped > speechEnd+1200 ms: those samples don't exist in the shipped
+// file, "drift" or not. Words past the HARD cutoff are now cut even when
+// the proportion guard trips ("trois/quatre/cinq" claim 2.2-3.5 s in a
+// ~1.2 s clip → fiction). Genuine drift protection lives in the SOFT band
+// (see test-hallucination-filter-v2.js "soft-band overflow").
 check(
-  'meta+words: >60% tokens past end → tailcut SKIPPED (guard)',
+  'meta+words: tail beyond the PHYSICAL clip end → hard-cut despite guard',
   applySegmentFilter({
     text: 'Un deux trois quatre cinq',
     segments: [
@@ -169,7 +174,7 @@ check(
       { word: 'cinq', start: 3.5, end: 3.7 },
     ],
   }, { intervalsMs: [[200, 900]], endMs: 900, startMs: 200 }),
-  'Un deux trois quatre cinq',
+  'Un deux',
 );
 
 // COMBO confidence rule: moderately-unsure on BOTH axes = hallucination zone.

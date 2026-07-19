@@ -138,6 +138,28 @@ function isLowConfidence(seg: VerboseSegment): boolean {
 const INTERVAL_SLOP_MS = 450;
 const TAIL_SEG_SLOP_MS = 500;
 const WORD_TAIL_SLOP_MS = 350;
+/**
+ * Words whose timestamp starts THIS far after the client-measured end of
+ * speech are beyond the physical end of the shipped clip (trimmed ~320 ms
+ * after the last speech instant): they literally cannot correspond to any
+ * audio sample. They are cut UNCONDITIONALLY — no count/proportion guard —
+ * because a "timestamp drift" can never move a real word past the end of
+ * the file. This closes the perverse hole where a LONG fabricated tail
+ * (> MAX_TAIL_WORDS_CUT words) tripped the safety guard and was kept
+ * whole, i.e. the bigger the hallucination, the safer it was.
+ */
+const HARD_TAIL_MS = 1200;
+/**
+ * When the client gate measured almost no speech in the whole clip
+ * (< SHORT_SPEECH_MS cumulative), the clip is a breath/click/ambient blip
+ * that slipped past the energy gate. Whisper output on such clips is
+ * hallucination-prone, so segments must clear a STRICTER no_speech bar
+ * (NO_SPEECH_PROB_STRICT vs the normal 0.7). Real micro-utterances
+ * ("OK.", "Oui merci") decode with no_speech_prob ≈ 0.0-0.1 and sail
+ * through.
+ */
+const SHORT_SPEECH_MS = 600;
+const NO_SPEECH_PROB_STRICT = 0.4;
 
 function overlapsClientSpeech(
   segStartMs: number,
@@ -184,6 +206,17 @@ export async function transcribeWithGroq(
   const ext = mimeToExt(mimeType);
   const filename = `audio.${ext}`;
 
+  // Resolve the vocabulary-biasing prompt ONCE — it's both sent to Groq
+  // (buildForm below) and handed to applySegmentFilter so a segment that
+  // merely ECHOES the prompt back (a documented Whisper failure mode on
+  // silence/short clips: the model "continues" the prompt instead of
+  // transcribing) can be dropped.
+  const promptLangOuter = (settings.language || '').toLowerCase();
+  const customPromptOuter = (settings as any).sttPrompt as string | undefined;
+  const activePrompt = customPromptOuter && customPromptOuter.trim()
+    ? customPromptOuter.trim()
+    : (promptLangOuter && DEFAULT_PROMPTS[promptLangOuter]) || '';
+
   // A multipart FormData body is consumed when sent, so build a fresh one
   // per attempt (cheap — the audio buffer is just re-wrapped in a Blob).
   const buildForm = (): FormData => {
@@ -213,16 +246,10 @@ export async function transcribeWithGroq(
     if (settings.language && settings.language !== 'auto') {
       form.append('language', settings.language);
     }
-    // Vocabulary biasing — see DEFAULT_PROMPTS above for the why. We pick the
-    // prompt based on the explicit/forced language; for 'auto' we skip it
-    // because guessing wrong-language prompt actively hurts accuracy.
-    // settings.sttPrompt (if set by the user) overrides the built-in default.
-    const promptLang = (settings.language || '').toLowerCase();
-    const customPrompt = (settings as any).sttPrompt as string | undefined;
-    const prompt = customPrompt && customPrompt.trim()
-      ? customPrompt.trim()
-      : (promptLang && DEFAULT_PROMPTS[promptLang]) || '';
-    if (prompt) form.append('prompt', prompt);
+    // Vocabulary biasing — see DEFAULT_PROMPTS above for the why. Resolved
+    // once as `activePrompt` (outer scope) so the segment filter can also
+    // detect prompt ECHOES in the response.
+    if (activePrompt) form.append('prompt', activePrompt);
     return form;
   };
 
@@ -265,7 +292,7 @@ export async function transcribeWithGroq(
         segments?: VerboseSegment[];
         words?: VerboseWord[];
       };
-      const cleanText = applySegmentFilter(data, opts?.speechMeta);
+      const cleanText = applySegmentFilter(data, opts?.speechMeta, activePrompt);
       // Normalise Whisper's language to an ISO-639-1 code at the source.
       // Groq returns the full name ("french", "english"), which then leaked
       // into history badges ("FRENCH"), CSV/MD exports, and byLanguage stats.
@@ -392,6 +419,7 @@ export function applySegmentFilter(
     words?: VerboseWord[];
   },
   meta?: ClientSpeechMeta,
+  promptText?: string,
 ): string {
   const fallback = (data.text || '').trim();
   if (!Array.isArray(data.segments) || data.segments.length === 0) {
@@ -399,8 +427,19 @@ export function applySegmentFilter(
   }
   const hasMeta = !!(meta && Array.isArray(meta.intervalsMs) && meta.intervalsMs.length > 0
     && typeof meta.endMs === 'number' && meta.endMs > 0);
+  // Cumulative client-measured speech — very short = a breath/click/ambient
+  // blip that slipped past the energy gate; hold segments to a stricter
+  // no_speech bar on such clips (see NO_SPEECH_PROB_STRICT).
+  const clientSpeechMs = hasMeta
+    ? meta!.intervalsMs.reduce((a, [s, e]) => a + Math.max(0, e - s), 0)
+    : Number.POSITIVE_INFINITY;
+  const strictNoSpeech = hasMeta && clientSpeechMs < SHORT_SPEECH_MS;
+  const normPrompt = normalizeForEchoCompare(promptText || '');
   const kept: VerboseSegment[] = [];
   let droppedCount = 0;
+  // Run-length tracker for the cross-segment loop collapse.
+  let runNorm = '';
+  let runCount = 0;
   const drop = (seg: VerboseSegment, why: string) => {
     droppedCount += 1;
     console.log(
@@ -415,6 +454,20 @@ export function applySegmentFilter(
   for (const seg of data.segments) {
     if (!seg || typeof seg.text !== 'string') continue;
     if (isLowConfidence(seg)) { drop(seg, 'low-confidence'); continue; }
+    // PROMPT ECHO — on silence/short clips Whisper sometimes "continues"
+    // the biasing prompt instead of transcribing, verbatim or nearly.
+    // A ≥12-char normalized segment contained in the normalized prompt is
+    // an echo, not dictation.
+    if (normPrompt.length >= 12) {
+      const normSeg = normalizeForEchoCompare(seg.text);
+      if (normSeg.length >= 12 && normPrompt.includes(normSeg)) {
+        drop(seg, 'prompt-echo'); continue;
+      }
+    }
+    if (strictNoSpeech && typeof seg.no_speech_prob === 'number'
+      && seg.no_speech_prob > NO_SPEECH_PROB_STRICT) {
+      drop(seg, `no-speech-strict (client speech ${Math.round(clientSpeechMs)}ms)`); continue;
+    }
     if (hasMeta && typeof seg.start === 'number') {
       const segStartMs = seg.start * 1000;
       const segEndMs = typeof seg.end === 'number' ? seg.end * 1000 : segStartMs;
@@ -422,6 +475,28 @@ export function applySegmentFilter(
       if (!overlapsClientSpeech(segStartMs, segEndMs, meta!.intervalsMs)) {
         drop(seg, 'inside-client-silence'); continue;
       }
+    }
+    // LOOP REPEAT — Whisper's classic stuck-decoder failure repeats the
+    // same short segment over and over ("Merci." ×7). compression_ratio
+    // only sees WITHIN-segment loops; this collapses ACROSS segments.
+    // Run-length rule: a legitimate double ("Oui. Oui.") is untouched, but
+    // the moment a 3rd consecutive identical (normalized, ≤60 chars)
+    // segment shows up the run is a stuck loop — the already-kept 2nd copy
+    // is retracted and every further copy is dropped, leaving exactly ONE.
+    const normSegText = normalizeForEchoCompare(seg.text);
+    if (normSegText && normSegText.length <= 60 && normSegText === runNorm) {
+      runCount++;
+    } else {
+      runNorm = normSegText;
+      runCount = 1;
+    }
+    if (runCount >= 3) {
+      if (runCount === 3 && kept.length > 0) {
+        const retracted = kept.pop() as VerboseSegment;
+        droppedCount += 1;
+        console.log(`[whisper] retracted earlier loop copy → "${(retracted.text || '').slice(0, 40).trim()}"`);
+      }
+      drop(seg, 'loop-repeat'); continue;
     }
     kept.push(seg);
   }
@@ -460,6 +535,7 @@ function cutTailWords(
   meta: ClientSpeechMeta,
 ): string {
   const cutoffMs = meta.endMs + WORD_TAIL_SLOP_MS;
+  const hardCutoffMs = meta.endMs + HARD_TAIL_MS;
   // Words inside any kept segment's span (±200 ms tolerance on both ends —
   // Groq word/segment boundaries disagree by a few 10s of ms routinely).
   const spans = keptSegments
@@ -476,34 +552,69 @@ function cutTailWords(
   const keptWords = words.filter(inKept);
   if (keptWords.length === 0) return text;
 
+  // Trailing words past the SOFT cutoff, and among them how many sit past
+  // the HARD cutoff (physically beyond the end of the shipped audio).
   let trailing = 0;
+  let trailingHard = 0;
   for (let i = keptWords.length - 1; i >= 0; i--) {
     const w = keptWords[i];
-    if (typeof w.start === 'number' && w.start * 1000 > cutoffMs) trailing++;
-    else break;
+    if (typeof w.start === 'number' && w.start * 1000 > cutoffMs) {
+      trailing++;
+      if (w.start * 1000 > hardCutoffMs) trailingHard++;
+    } else break;
   }
   if (trailing === 0) return text;
 
   const tokens = text.split(/\s+/).filter(Boolean);
-  // Safety bounds: a GLOBAL timestamp drift (rare, odd audio) must never
-  // shred a real dictation. Cutting HALF the tokens or more means Whisper's
-  // timeline and the client's fundamentally disagree — distrust the cut,
-  // keep the text, let the segment rules / regex scrubber deal with it.
-  if (trailing >= tokens.length || trailing > MAX_TAIL_WORDS_CUT || trailing * 2 >= tokens.length) {
-    console.warn(
-      `[whisper] tailcut SKIPPED (guard): ${trailing} trailing word(s) beyond ` +
-      `speechEnd+${WORD_TAIL_SLOP_MS}ms of ${tokens.length} tokens`,
-    );
-    return text;
+  // Safety bounds for the SOFT band only: a GLOBAL timestamp drift (rare,
+  // odd audio) must never shred a real dictation — cutting half the tokens
+  // means Whisper's timeline and the client's fundamentally disagree.
+  //
+  // The bound does NOT protect words past the HARD cutoff: those claim to
+  // start > HARD_TAIL_MS after the measured end of speech, i.e. beyond the
+  // physical end of the trimmed clip — no real word can live there, however
+  // many of them there are. (Before this, a >MAX_TAIL_WORDS_CUT fabricated
+  // tail tripped the guard and was kept WHOLE — the bigger the
+  // hallucination, the safer it was.)
+  const guardTripped = trailing >= tokens.length || trailing > MAX_TAIL_WORDS_CUT || trailing * 2 >= tokens.length;
+  let toCut = trailing;
+  if (guardTripped) {
+    if (trailingHard > 0 && trailingHard < tokens.length) {
+      toCut = trailingHard;
+      console.warn(
+        `[whisper] tailcut guard tripped (${trailing}/${tokens.length} tokens) — ` +
+        `hard-cutting only the ${trailingHard} word(s) beyond speechEnd+${HARD_TAIL_MS}ms (impossible audio)`,
+      );
+    } else {
+      console.warn(
+        `[whisper] tailcut SKIPPED (guard): ${trailing} trailing word(s) beyond ` +
+        `speechEnd+${WORD_TAIL_SLOP_MS}ms of ${tokens.length} tokens`,
+      );
+      return text;
+    }
   }
-  const cut = tokens.slice(tokens.length - trailing).join(' ');
-  const keptText = tokens.slice(0, tokens.length - trailing).join(' ')
+  const cut = tokens.slice(tokens.length - toCut).join(' ');
+  const keptText = tokens.slice(0, tokens.length - toCut).join(' ')
     .replace(/[\s,;:]+$/, '');
   console.log(
-    `[whisper] tailcut dropped ${trailing} trailing word(s) starting after ` +
-    `speechEnd+${WORD_TAIL_SLOP_MS}ms (client endMs=${meta.endMs}) → cut "${cut.slice(0, 60)}"`,
+    `[whisper] tailcut dropped ${toCut} trailing word(s) starting after ` +
+    `speechEnd+${toCut === trailing ? WORD_TAIL_SLOP_MS : HARD_TAIL_MS}ms (client endMs=${meta.endMs}) → cut "${cut.slice(0, 60)}"`,
   );
   return keptText;
+}
+
+/**
+ * Normalization for the prompt-echo / loop-repeat comparisons: lowercase,
+ * strip diacritics, collapse everything non-alphanumeric. "Voici une
+ * dictée en français…" and "voici une dictee en francais" compare equal.
+ */
+function normalizeForEchoCompare(s: string): string {
+  return (s || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 function mimeToExt(mime: string): string {
